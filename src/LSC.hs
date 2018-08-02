@@ -1,52 +1,37 @@
-{-# LANGUAGE GADTs, DataKinds, TupleSections #-}
+{-# LANGUAGE GADTs, DataKinds, TupleSections, FlexibleContexts #-}
 
-module Main where
+module LSC where
 
+import Control.Monad.Reader
+import Control.Monad.Trans
 import Language.SMTLib2
 import Language.SMTLib2.Pipe
 
-
-data Netlist = Netlist [Gate] [Wire]
-
-data Wire = Wire 
-  { sourceGate :: Index
-  , targetGate :: Index
-  , wireIndex :: Index
-  }
-
-type Index = Int
-
-data Gate = Gate
-  { featureSize :: Integer
-  , gateIndex :: Index
-  }
-  deriving Eq
+import LSC.Types
 
 
-  
-data Technology = Technology
-  { dimensions :: (Integer, Integer)
-  }
-
-
-stage1 :: Backend b => Netlist -> Technology -> SMT b [(Value IntType, Value IntType)]
-stage1 (Netlist gates wires) technology = do
-  nodes <- sequence $ newNode <$> gates
-  edges <- sequence $ newEdge <$> wires
+stage1 :: Backend b => Netlist -> LSC b [(Value IntType, Value IntType)]
+stage1 (Netlist gates wires) = do
+  nodes <- sequence $ lift . newNode <$> gates
+  edges <- sequence $ lift . newEdge <$> wires
 
   distance nodes
-  boundedSpace technology nodes
+  boundedSpace nodes
 
-  connection technology nodes edges
+  connection nodes edges
   
   -- intersections edges
 
-  checkSat
+  lift checkSat
   
-  mapM ( \ (_, x, y) -> (,) <$> getValue x <*> getValue y ) nodes
+  lift $ mapM ( \ (_, x, y) -> (,) <$> getValue x <*> getValue y ) nodes
 
 
-connection technology nodes edges = sequence_
+pipeZ3 = createPipe "z3" ["-smt2", "-in"]
+
+connection nodes edges = do
+  technology <- ask
+  lift $ sequence_
     [ assert $ x1 .>. cint 0
     | ( wire, (x1, y1), (x2, y2), (x3, y3), (x4, y4)
             , (x5, y5), (x6, y6), (x7, y7), (x8, y8)) <- edges
@@ -54,7 +39,9 @@ connection technology nodes edges = sequence_
     , (xTarget, yTarget) <- [ (x, y) | node@(g, x, y) <- nodes, targetGate wire == gateIndex g ]
     ]
 
-boundedSpace technology nodes = sequence_
+boundedSpace nodes = do
+  technology <- ask
+  lift $ sequence_
     [ assert
           $ x .>. cint 0
         .&. y .>. cint 0
@@ -64,7 +51,8 @@ boundedSpace technology nodes = sequence_
     , let (xDim, yDim) = dimensions technology
     ]
 
-distance nodes = sequence_
+distance nodes = do
+  lift $ sequence_
     [ assert
           $ abs' (x1 .-. x2) .>. cint 1
         .|. abs' (y1 .-. y2) .>. cint 1
@@ -81,15 +69,4 @@ newEdge wire = (wire, , , , , , , , )
     <$> newPos <*> newPos <*> newPos <*> newPos
     <*> newPos <*> newPos <*> newPos <*> newPos
     where newPos = (, ) <$> declareVar int <*> declareVar int
-
-
-
-
-pipeZ3 = createPipe "z3" ["-smt2", "-in"]
-
-main = do
-    let netlist = Netlist [Gate 4 1, Gate 4 2, Gate 4 3] [Wire 1 2 1, Wire 1 3 2]
-    let tech = Technology (5, 5)
-    result <- withBackend pipeZ3 $ stage1 netlist tech
-    print result
 
