@@ -18,7 +18,7 @@ data Wire = Wire
 type Index = Int
 
 data Gate = Gate
-  { featureSize :: Integer
+  { featureSize :: (Integer, Integer)
   , gateIndex :: Index
   }
 

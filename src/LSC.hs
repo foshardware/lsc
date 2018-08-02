@@ -10,6 +10,9 @@ import Language.SMTLib2.Pipe
 import LSC.Types
 
 
+pipeZ3 = createPipe "z3" ["-smt2", "-in"]
+
+
 stage1 :: Backend b => Netlist -> LSC b String
 stage1 (Netlist gates wires) = do
   nodes <- sequence $ lift . newNode <$> gates
@@ -28,8 +31,6 @@ stage1 (Netlist gates wires) = do
   edgesResult <- lift $ mapM ( \ (_, path) -> sequence [(,) <$> getValue x <*> getValue y | (x, y) <- path]) edges
   pure $ show nodesResult ++ "\n" ++ show edgesResult
 
-
-pipeZ3 = createPipe "z3" ["-smt2", "-in"]
 
 connection nodes edges = do
   technology <- ask
@@ -75,15 +76,19 @@ boundedSpace nodes = do
     , let (xDim, yDim) = dimensions technology
     ]
 
+
 distance nodes = do
   lift $ sequence_
     [ assert
-          $ abs' (x1 .-. x2) .>. cint 1
-        .|. abs' (y1 .-. y2) .>. cint 1
+          $ abs' (x1 .-. x2) .>. cint (1 + div featX1 2 + div featX2 2)
+        .|. abs' (y1 .-. y2) .>. cint (1 + div featY1 2 + div featY2 2)
     | node1@(gate1, x1, y1) <- nodes
     , node2@(gate2, x2, y2) <- nodes
+    , let (featX1, featY1) = featureSize gate1
+    , let (featX2, featY2) = featureSize gate2
     , gate1 /= gate2
     ]
+
 
 newNode gate = (gate, , )
     <$> declareVar int
