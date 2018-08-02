@@ -38,19 +38,18 @@ pipeZ3 = createPipe "z3" ["-smt2", "-in"]
 connection nodes edges = do
   technology <- ask
   lift $ sequence_
-    [ assert 
+    [ assert
         -- source and target locations
           $ x1 .==. xSource
         .&. y1 .==. ySource
         .&. x4 .==. xTarget
         .&. y4 .==. yTarget
+        -- angles constrained by technology (rectangular)
+        .&. (x1 .==. x2 .|. y1 .==. y2)
+        .&. (x2 .==. x3 .|. y2 .==. y3)
+        .&. (x3 .==. x4 .|. y3 .==. y4)
 
-        -- angles constrained by technology (orthogonal)
-        .&. x1 .==. x2 .|. y1 .==. y2
-        .&. x2 .==. x3 .|. y2 .==. y3
-        .&. x3 .==. x4 .|. y3 .==. y4
-
-    | ( wire, (x1, y1), (x2, y2), (x3, y3), (x4, y4)) <- edges
+    | (wire, (x1, y1), (x2, y2), (x3, y3), (x4, y4)) <- edges
     , (xSource, ySource) <- [ (x, y) | node@(gate, x, y) <- nodes, source wire == gate ]
     , (xTarget, yTarget) <- [ (x, y) | node@(gate, x, y) <- nodes, target wire == gate ]
     ]
