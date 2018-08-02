@@ -22,6 +22,8 @@ data Gate = Gate
   }
   deriving Eq
 
+
+  
 data Technology = Technology
   { dimensions :: (Integer, Integer)
   }
@@ -35,7 +37,7 @@ stage1 (Netlist gates wires) technology = do
   distance nodes
   boundedSpace technology nodes
 
-  connection nodes edges
+  connection technology nodes edges
   
   -- intersections edges
 
@@ -44,7 +46,13 @@ stage1 (Netlist gates wires) technology = do
   mapM ( \ (_, x, y) -> (,) <$> getValue x <*> getValue y ) nodes
 
 
-connection nodes edges = pure ()  
+connection technology nodes edges = sequence_
+    [ assert $ x1 .>. cint 0
+    | ( wire, (x1, y1), (x2, y2), (x3, y3), (x4, y4)
+            , (x5, y5), (x6, y6), (x7, y7), (x8, y8)) <- edges
+    , (xSource, ySource) <- [ (x, y) | node@(g, x, y) <- nodes, sourceGate wire == gateIndex g ]
+    , (xTarget, yTarget) <- [ (x, y) | node@(g, x, y) <- nodes, targetGate wire == gateIndex g ]
+    ]
 
 boundedSpace technology nodes = sequence_
     [ assert
