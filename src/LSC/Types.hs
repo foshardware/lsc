@@ -10,8 +10,8 @@ import Language.SMTLib2.Pipe
 data Netlist = Netlist [Gate] [Wire]
 
 data Wire = Wire 
-  { sourceGate :: Index
-  , targetGate :: Index
+  { source :: Gate
+  , target :: Gate
   , wireIndex :: Index
   }
 

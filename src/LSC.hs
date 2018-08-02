@@ -51,8 +51,8 @@ connection nodes edges = do
         .&. x3 .==. x4 .|. y3 .==. y4
 
     | ( wire, (x1, y1), (x2, y2), (x3, y3), (x4, y4)) <- edges
-    , (xSource, ySource) <- [ (x, y) | node@(g, x, y) <- nodes, sourceGate wire == gateIndex g ]
-    , (xTarget, yTarget) <- [ (x, y) | node@(g, x, y) <- nodes, targetGate wire == gateIndex g ]
+    , (xSource, ySource) <- [ (x, y) | node@(gate, x, y) <- nodes, source wire == gate ]
+    , (xTarget, yTarget) <- [ (x, y) | node@(gate, x, y) <- nodes, target wire == gate ]
     ]
 
 boundedSpace nodes = do
