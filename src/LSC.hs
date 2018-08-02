@@ -34,7 +34,7 @@ stage1 (Netlist gates wires) = do
 
 intersection nodes edges = do
   technology <- ask
-  let cut = 0 -- 1 + wireWidth technology
+  let cut = 1 + wireWidth technology
   lift $ sequence_
     [ assert
            $ (abs' (x1 .-. x2) .>=. cint cut .|. abs' (y1 .-. y2) .>=. cint cut)
