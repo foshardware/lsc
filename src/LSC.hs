@@ -25,11 +25,7 @@ stage1 (Netlist gates wires) = do
   lift checkSat
   
   nodesResult <- lift $ mapM ( \ (_, x, y) -> (,) <$> getValue x <*> getValue y ) nodes
-  edgesResult <- lift $ mapM ( \ (_, (x1, y1), (x2, y2), (x3, y3), (x4, y4)) -> (,,,,,,,)
-            <$> getValue x1 <*> getValue y1
-            <*> getValue x2 <*> getValue y2
-            <*> getValue x3 <*> getValue y3
-            <*> getValue x4 <*> getValue y4) edges
+  edgesResult <- lift $ mapM ( \ (_, path) -> sequence [(,) <$> getValue x <*> getValue y | (x, y) <- path]) edges
   pure $ show nodesResult ++ "\n" ++ show edgesResult
 
 
@@ -39,20 +35,33 @@ connection nodes edges = do
   technology <- ask
   lift $ sequence_
     [ assert
-        -- source and target locations
-          $ x1 .==. xSource
-        .&. y1 .==. ySource
-        .&. x4 .==. xTarget
-        .&. y4 .==. yTarget
-        -- angles constrained by technology (rectangular)
-        .&. (x1 .==. x2 .|. y1 .==. y2)
-        .&. (x2 .==. x3 .|. y2 .==. y3)
-        .&. (x3 .==. x4 .|. y3 .==. y4)
 
-    | (wire, (x1, y1), (x2, y2), (x3, y3), (x4, y4)) <- edges
+        -- source and target locations
+          $ xStart .==. xSource
+        .&. yStart .==. ySource
+        .&. xEnd .==. xTarget
+        .&. yEnd .==. yTarget
+
+        -- angles constrained by technology (rectangular)
+        .&. and' (rectangular <$> neighbours path)
+
+    | (wire, path) <- edges
+
+    , let (xStart, yStart) = head path
+    , let (xEnd, yEnd) = last path
+
     , (xSource, ySource) <- [ (x, y) | node@(gate, x, y) <- nodes, source wire == gate ]
     , (xTarget, yTarget) <- [ (x, y) | node@(gate, x, y) <- nodes, target wire == gate ]
+
     ]
+
+rectangular ((x1, y1), (x2, y2)) = x1 .==. x2 .|. y1 .==. y2
+
+neighbours :: [a] -> [(a, a)]
+neighbours (x : y : xs) = (x, y) : neighbours (y : xs)
+neighbours (x : xs) = neighbours xs
+neighbours [] = []
+
 
 boundedSpace nodes = do
   technology <- ask
@@ -80,7 +89,7 @@ newNode gate = (gate, , )
     <$> declareVar int
     <*> declareVar int
 
-newEdge wire = (wire, , , , )
-    <$> newPos <*> newPos <*> newPos <*> newPos
-    where newPos = (, ) <$> declareVar int <*> declareVar int
+newEdge wire = (wire, )
+    <$> sequence (replicate 8 newPosition)
+    where newPosition = (, ) <$> declareVar int <*> declareVar int
 
