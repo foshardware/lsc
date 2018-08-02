@@ -8,7 +8,11 @@ import Language.SMTLib2.Pipe
 
 data Netlist = Netlist [Gate] [Wire]
 
-data Wire = Wire Index Index
+data Wire = Wire 
+  { sourceGate :: Index
+  , targetGate :: Index
+  , wireIndex :: Index
+  }
 
 type Index = Int
 
@@ -28,9 +32,11 @@ stage1 (Netlist gates wires) technology = do
   nodes <- sequence $ newNode <$> gates
   edges <- sequence $ newEdge <$> wires
 
-  distances nodes
+  distance nodes
   boundedSpace technology nodes
 
+  connection nodes edges
+  
   -- intersections edges
 
   checkSat
@@ -38,22 +44,43 @@ stage1 (Netlist gates wires) technology = do
   mapM ( \ (_, x, y) -> (,) <$> getValue x <*> getValue y ) nodes
 
 
-boundedSpace technology nodes = within (dimensions technology) `mapM_` nodes
-    where within (xd, yd) (_, x, y) = assert $ x .>. cint 0 .&. y .>. cint 0 .&. x .<. cint xd .&. y .<. cint yd
+connection nodes edges = pure ()  
 
-distances nodes = mapM_ overlap [(m, n) | n@(i, _, _) <- nodes , m@(j, _, _) <- nodes, i /= j]
-    where overlap ((_, x1, y1), (_, x2, y2)) = assert $ abs' (x1 .-. x2) .>. cint 1 .|. abs' (y1 .-. y2) .>. cint 1
+boundedSpace technology nodes = sequence_
+    [ assert
+          $ x .>. cint 0
+        .&. y .>. cint 0
+        .&. x .<. cint xDim
+        .&. y .<. cint yDim
+    | (_, x, y) <- nodes
+    , let (xDim, yDim) = dimensions technology
+    ]
 
-newNode gate = (gate, , ) <$> declareVar int <*> declareVar int
+distance nodes = sequence_
+    [ assert
+          $ abs' (x1 .-. x2) .>. cint 1
+        .|. abs' (y1 .-. y2) .>. cint 1
+    | node1@(gate1, x1, y1) <- nodes
+    , node2@(gate2, x2, y2) <- nodes
+    , gate1 /= gate2
+    ]
 
-newEdge wire = (wire, , ) <$> declareVar int <*> declareVar int
+newNode gate = (gate, , )
+    <$> declareVar int
+    <*> declareVar int
+
+newEdge wire = (wire, , , , , , , , )
+    <$> newPos <*> newPos <*> newPos <*> newPos
+    <*> newPos <*> newPos <*> newPos <*> newPos
+    where newPos = (, ) <$> declareVar int <*> declareVar int
+
 
 
 
 pipeZ3 = createPipe "z3" ["-smt2", "-in"]
 
 main = do
-    let netlist = Netlist [Gate 4 1, Gate 4 2, Gate 4 3] [Wire 1 2, Wire 1 3]
+    let netlist = Netlist [Gate 4 1, Gate 4 2, Gate 4 3] [Wire 1 2 1, Wire 1 3 2]
     let tech = Technology (5, 5)
     result <- withBackend pipeZ3 $ stage1 netlist tech
     print result
