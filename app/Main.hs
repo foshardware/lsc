@@ -16,6 +16,6 @@ main = do
         wire1 = Wire gate1 gate2 1
         wire2 = Wire gate1 gate3 2
     let netlist = Netlist [gate1, gate2, gate3] [wire1, wire2]
-    let tech = Technology (12, 20)
+    let tech = Technology (200, 200) 1
     result <- withBackend pipeZ3 $ stage1 netlist `runLSC` tech
     putStrLn result

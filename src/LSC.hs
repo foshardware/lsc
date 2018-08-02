@@ -23,7 +23,7 @@ stage1 (Netlist gates wires) = do
 
   connection nodes edges
   
-  -- intersections edges
+  intersection nodes edges
 
   lift checkSat
   
@@ -32,24 +32,41 @@ stage1 (Netlist gates wires) = do
   pure $ show nodesResult ++ "\n" ++ show edgesResult
 
 
+intersection nodes edges = do
+  technology <- ask
+  let cut = 0 -- 1 + wireWidth technology
+  lift $ sequence_
+    [ assert
+           $ (abs' (x1 .-. x2) .>=. cint cut .|. abs' (y1 .-. y2) .>=. cint cut)
+
+    | edge1@(wire1, path1) <- edges
+    , edge2@(wire2, path2) <- edges
+    , wire1 /= wire2
+    , (x1, y1) <- path1
+    , (x2, y2) <- path2
+    ]
+
 connection nodes edges = do
   technology <- ask
   lift $ sequence_
     [ assert
 
         -- source and target locations
-          $ xStart .==. xSource
-        .&. yStart .==. ySource
-        .&. xEnd .==. xTarget
-        .&. yEnd .==. yTarget
+          $ (xStart .==. xSource .+. cint (div sourceFeatX 2) .|. xStart .==. xSource .-. cint (div sourceFeatX 2))
+        .&. (yStart .==. ySource .+. cint (div sourceFeatY 2) .|. yStart .==. ySource .-. cint (div sourceFeatY 2))
+        .&. (xEnd .==. xEnd.+. cint (div targetFeatX 2) .|. xEnd .==. xTarget .-. cint (div targetFeatX 2))
+        .&. (yEnd .==. yEnd.+. cint (div targetFeatY 2) .|. yEnd .==. yTarget .-. cint (div targetFeatY 2))
 
         -- angles constrained by technology (rectangular)
         .&. and' (rectangular <$> neighbours path)
 
     | (wire, path) <- edges
 
-    , let (xStart, yStart) = head path
+    , let (sourceFeatX, sourceFeatY) = featureSize $ source wire
+    , let (targetFeatX, targetFeatY) = featureSize $ target wire
+
     , let (xEnd, yEnd) = last path
+    , let (xStart, yStart) = head path
 
     , (xSource, ySource) <- [ (x, y) | node@(gate, x, y) <- nodes, source wire == gate ]
     , (xTarget, yTarget) <- [ (x, y) | node@(gate, x, y) <- nodes, target wire == gate ]
@@ -66,6 +83,7 @@ neighbours [] = []
 
 boundedSpace nodes = do
   technology <- ask
+  let (xDim, yDim) = dimensions technology
   lift $ sequence_
     [ assert
           $ x .>. cint 0
@@ -73,7 +91,6 @@ boundedSpace nodes = do
         .&. x .<. cint xDim
         .&. y .<. cint yDim
     | (_, x, y) <- nodes
-    , let (xDim, yDim) = dimensions technology
     ]
 
 

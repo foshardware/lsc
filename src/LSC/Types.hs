@@ -15,6 +15,9 @@ data Wire = Wire
   , wireIndex :: Index
   }
 
+instance Eq Wire where
+  w == v = wireIndex w == wireIndex v
+
 type Index = Int
 
 data Gate = Gate
@@ -33,6 +36,7 @@ runLSC = runReaderT
 
 data Technology = Technology
   { dimensions :: (Integer, Integer)
+  , wireWidth :: Integer
   }
 
 
