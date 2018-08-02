@@ -21,7 +21,9 @@ data Gate = Gate
   { featureSize :: Integer
   , gateIndex :: Index
   }
-  deriving Eq
+
+instance Eq Gate where
+  g == h = gateIndex g == gateIndex h
 
 
 type LSC b = ReaderT Technology (SMT b)
