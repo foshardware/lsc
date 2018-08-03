@@ -37,7 +37,9 @@ intersection nodes edges = do
   let cut = 1 + wireWidth technology
   lift $ sequence_
     [ assert
-           $ (abs' (x1 .-. x2) .>=. cint cut .|. abs' (y1 .-. y2) .>=. cint cut)
+
+          -- forbid intersections of wires
+          $ (abs' (x1 .-. x2) .>=. cint cut .|. abs' (y1 .-. y2) .>=. cint cut)
 
     | edge1@(wire1, path1) <- edges
     , edge2@(wire2, path2) <- edges
@@ -107,6 +109,7 @@ distance nodes = do
     ]
 
 
+-- upper left corner
 newNode gate = (gate, , )
     <$> declareVar int
     <*> declareVar int

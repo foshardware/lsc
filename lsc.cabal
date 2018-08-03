@@ -12,7 +12,7 @@ maintainer:          westerwick@pconas.de
 -- copyright:           
 category:            Math
 build-type:          Simple
-extra-source-files:  ChangeLog.md
+extra-source-files:  ChangeLog.md, src/BLIF/Lexer.x
 cabal-version:       >=1.10
 
 executable lsc
@@ -27,11 +27,18 @@ executable lsc
 
 
 library
+  build-tools: alex
   hs-source-dirs:
       src
   ghc-options: -Wall
   build-depends:  base >=4.2, mtl, smtlib2, smtlib2-pipe
+                , array, parsec, text
   exposed-modules:
+      BLIF.Parser,
+      BLIF.Syntax,
+      BLIF.Tokens,
+      BLIF.Lexer
+
       LSC,
       LSC.Types
   other-modules:
