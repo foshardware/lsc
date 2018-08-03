@@ -53,12 +53,13 @@ $white+       ;
 @preprocessor ;
 
 -- Keywords
-.model          { constTok Tok_Model   }
-.inputs         { constTok Tok_Inputs  }
-.outputs        { constTok Tok_Outputs }
-.clock          { constTok Tok_Clock   }
-.end            { constTok Tok_End     }
+\.model          { constTok Tok_Model   }
+\.inputs         { constTok Tok_Inputs  }
+\.outputs        { constTok Tok_Outputs }
+\.clock          { constTok Tok_Clock   }
+\.end            { constTok Tok_End     }
 
+$ident_start $ident_part*      { textTok Tok_Ident }
 
 
 {

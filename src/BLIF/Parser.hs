@@ -46,7 +46,7 @@ clockList :: Parser ClockList
 clockList = many ident
 
 command :: Parser Command
-command = Command <$> many ident
+command = Command <$> many1 ident
 
 
 -----
