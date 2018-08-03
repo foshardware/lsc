@@ -14,6 +14,13 @@ type Pos = (Int, Int)
 
 data Token
     -- Keywords
-    = Tok_Abstract
-    | Tok_As
+    = Tok_Model
+    | Tok_Inputs
+    | Tok_Outputs
+    | Tok_Clock
+    | Tok_End
+
+    -- Identifiers
+    | Tok_Ident Text
+    
   deriving (Eq, Show)

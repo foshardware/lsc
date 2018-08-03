@@ -53,9 +53,11 @@ $white+       ;
 @preprocessor ;
 
 -- Keywords
-abstract   { constTok Tok_Abstract   }
-as         { constTok Tok_As         }
-
+.model          { constTok Tok_Model   }
+.inputs         { constTok Tok_Inputs  }
+.outputs        { constTok Tok_Outputs }
+.clock          { constTok Tok_Clock   }
+.end            { constTok Tok_End     }
 
 
 
