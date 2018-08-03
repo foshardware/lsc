@@ -23,6 +23,7 @@ data Command
   = LogicGate_Command LogicGate
   | LibraryGate_Command LibraryGate
   | Attribute_Command Attribute
+  | Parameter_Command Parameter
   deriving (Eq, Show)
 
 data LogicGate = LogicGate [Ident] SingleOutputCover
@@ -46,4 +47,7 @@ data Attribute = Attribute Ident StringLiteral
   deriving (Eq, Show)
 
 type StringLiteral = Text
+
+data Parameter = Parameter Ident Plane
+  deriving (Eq, Show)
 

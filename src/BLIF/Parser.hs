@@ -52,6 +52,7 @@ command
   =   LogicGate_Command <$> logicGate
   <|> LibraryGate_Command <$> libraryGate
   <|> Attribute_Command <$> attribute
+  <|> Parameter_Command <$> parameter
   <?> "command"
 
 logicGate :: Parser LogicGate
@@ -81,6 +82,12 @@ attribute = attr_ >> Attribute
   <$> ident
   <*> stringLiteral
   <?> "attribute"
+
+parameter :: Parser Parameter
+parameter = param_ >> Parameter
+  <$> ident
+  <*> (inputPlane <|> outputPlane)
+  <?> "parameter"
 
 
 -----
@@ -128,4 +135,5 @@ names_ = p Tok_Names
 gate_ = p Tok_Gate
 assign_ = p Tok_Assign
 attr_ = p Tok_Attr
+param_ = p Tok_Param
 

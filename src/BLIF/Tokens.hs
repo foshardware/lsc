@@ -20,6 +20,7 @@ data Token
     | Tok_Clock
     | Tok_End
     | Tok_Attr
+    | Tok_Param
 
     -- Logic gates
     | Tok_Names
