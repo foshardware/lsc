@@ -27,7 +27,7 @@ data Token
     | Tok_Ident Text
 
     -- Literals
-    | Tok_False
-    | Tok_True
+    | Tok_InputPlane Text
+    | Tok_OutputPlane Text
 
   deriving (Eq, Show)

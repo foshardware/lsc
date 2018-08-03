@@ -28,22 +28,11 @@ $ident_start = [a-zA-Z_\@\$]
 $ident_part  = [a-zA-Z_0-9]
 $const_part  = [A-Z_]
 
-$digit     = [0-9]
-$hex_digit = [0-9a-fA-F]
-$sign      = [\+\-]
+$bit       = [0-1]
+$dont_care = [\-]
 
-@int_suffix  = [uU][lL]? | [lL][uU]?
-@real_suffix = [fFdDmM]
-@exponent    = [eE] $sign? $digit+
-
-@simple_escape  = \\ [0abfnrtv\'\"\\]
-@hex_escape     = \\x $hex_digit{1,4}
-@unicode_escape = \\u $hex_digit{4} | \\U $hex_digit{8}
-@escapes        = @simple_escape | @hex_escape | @unicode_escape
-
-@character          = [^\'\\] | @escapes
-@string_character   = [^\"\\] | @escapes
-@verbatim_character = $any # \" | \"\"
+@input_char  = $bit | $dont_care
+@output_char = $bit
 
 tokens :-
 
@@ -60,6 +49,9 @@ $white+       ;
 \.end            { constTok Tok_End     }
 
 \.names          { constTok Tok_Names   }
+
+@input_char*     { textTok Tok_InputPlane  }
+@output_char*    { textTok Tok_OutputPlane }
 
 $ident_start $ident_part*      { textTok Tok_Ident }
 

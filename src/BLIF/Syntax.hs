@@ -26,8 +26,10 @@ data Command
 data LogicGate = LogicGate InputList Ident SingleOutputCover
   deriving (Eq, Show)
 
-data SingleOutputCover = SingleOutputCover ()
+newtype SingleOutputCover = SingleOutputCover [(InputPlane, OutputPlane)]
   deriving (Eq, Show)
 
+type InputPlane = Text
 
+type OutputPlane = Text
 

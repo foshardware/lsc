@@ -58,7 +58,9 @@ logicGate = names_ >> LogicGate
   <?> "logic_gate"
 
 singleOutputCover :: Parser SingleOutputCover
-singleOutputCover = SingleOutputCover <$> pure () <?> "single_output_cover"
+singleOutputCover = SingleOutputCover
+  <$> many ((,) <$> inputPlane <*> outputPlane)
+  <?> "single_output_cover"
 
 
 -----
@@ -75,9 +77,19 @@ maybeToken test = token showT posT testT
   testT (L _ t) = test t
   pos2sourcePos (l, c) = newPos "" l c
 
-ident :: Parser Text
+ident :: Parser Ident
 ident = maybeToken q
   where q (Tok_Ident t) = Just t
+        q _ = Nothing
+
+inputPlane :: Parser InputPlane
+inputPlane = maybeToken q
+  where q (Tok_InputPlane t) = Just t
+        q _ = Nothing
+
+outputPlane :: Parser OutputPlane
+outputPlane = maybeToken q
+  where q (Tok_InputPlane t) = Just t
         q _ = Nothing
 
 p :: Token -> Parser ()
