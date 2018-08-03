@@ -26,24 +26,24 @@ blif = BLIF <$> many1 model
 
 model :: Parser Model
 model = Model
-  <$> (model_   *> modelName )
-  <*> (inputs_  *> inputList )
-  <*> (outputs_ *> outputList)
-  <*> (clock_   *> clockList )
+  <$> modelName
+  <*> inputList
+  <*> outputList
+  <*> clockList
   <*> many command
   <*  end_
 
 modelName :: Parser ModelName
-modelName = ident
+modelName = model_ *> ident
 
 inputList :: Parser InputList
-inputList = many ident
+inputList = inputs_ *> many ident <|> pure []
 
 outputList :: Parser OutputList
-outputList = many ident
+outputList = outputs_ *> many ident <|> pure []
 
 clockList :: Parser ClockList
-clockList = many ident
+clockList = clock_ *> many ident <|> pure []
 
 command :: Parser Command
 command = Command <$> many1 ident
