@@ -51,6 +51,7 @@ command :: Parser Command
 command
   =   LogicGate_Command <$> logicGate
   <|> LibraryGate_Command <$> libraryGate
+  <|> Attribute_Command <$> attribute
   <?> "command"
 
 logicGate :: Parser LogicGate
@@ -75,6 +76,11 @@ formalActualList = many1 assignment <?> "formal_actual_list"
 assignment :: Parser Assignment
 assignment = (,) <$> ident <*> (assign_ *> ident) <?> "assignment"
 
+attribute :: Parser Attribute
+attribute = attr_ >> Attribute
+  <$> ident
+  <*> stringLiteral
+  <?> "attribute"
 
 
 -----
@@ -106,6 +112,11 @@ outputPlane = maybeToken q
   where q (Tok_InputPlane t) = Just t
         q _ = Nothing
 
+stringLiteral :: Parser StringLiteral
+stringLiteral = maybeToken q
+  where q (Tok_StringLiteral t) = Just t
+        q _ = Nothing
+
 p :: Token -> Parser ()
 p t = maybeToken $ \r -> if r == t then Just () else Nothing
 model_ = p Tok_Model
@@ -116,4 +127,5 @@ end_ = p Tok_End
 names_ = p Tok_Names
 gate_ = p Tok_Gate
 assign_ = p Tok_Assign
+attr_ = p Tok_Attr
 

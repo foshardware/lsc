@@ -34,5 +34,6 @@ data Token
     -- Literals
     | Tok_InputPlane Text
     | Tok_OutputPlane Text
+    | Tok_StringLiteral Text
 
   deriving (Eq, Show)

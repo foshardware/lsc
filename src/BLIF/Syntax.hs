@@ -22,6 +22,7 @@ type ClockList = [Ident]
 data Command
   = LogicGate_Command LogicGate
   | LibraryGate_Command LibraryGate
+  | Attribute_Command Attribute
   deriving (Eq, Show)
 
 data LogicGate = LogicGate [Ident] SingleOutputCover
@@ -41,4 +42,8 @@ type FormalActualList = [Assignment]
 
 type Assignment = (Ident, Ident)
 
+data Attribute = Attribute Ident StringLiteral
+  deriving (Eq, Show)
+
+type StringLiteral = Text
 

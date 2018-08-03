@@ -34,6 +34,11 @@ $dont_care = [\-]
 @input_char  = $bit | $dont_care
 @output_char = $bit
 
+@simple_escape = \\ [0abfnrtv\'\"\\]
+
+@string_character = [^\"\\] | @simple_escape
+
+
 tokens :-
 
 $white+       ;
@@ -58,6 +63,8 @@ $white+       ;
 
 @input_char*     { textTok Tok_InputPlane  }
 @output_char*    { textTok Tok_OutputPlane }
+
+\" @string_character* \"       { textTok (Tok_StringLiteral . T.drop 1 . T.init) }
 
 $ident_start $ident_part*      { textTok Tok_Ident }
 
