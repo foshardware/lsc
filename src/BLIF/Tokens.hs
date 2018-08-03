@@ -20,7 +20,14 @@ data Token
     | Tok_Clock
     | Tok_End
 
+    -- Logic gates
+    | Tok_Names
+
     -- Identifiers
     | Tok_Ident Text
-    
+
+    -- Literals
+    | Tok_False
+    | Tok_True
+
   deriving (Eq, Show)

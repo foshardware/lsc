@@ -3,21 +3,31 @@ module BLIF.Syntax where
 
 import Data.Text (Text)
 
+type Ident = Text
+
 data BLIF = BLIF [Model]
   deriving (Eq, Show)
 
 data Model = Model ModelName InputList OutputList ClockList [Command]
   deriving (Eq, Show)
 
-type ModelName = Text
+type ModelName = Ident
 
-type InputList = [Text]
+type InputList = [Ident]
 
-type OutputList = [Text]
+type OutputList = [Ident]
 
-type ClockList = [Text]
+type ClockList = [Ident]
 
-data Command = Command [Text]
+data Command
+  = LogicGate_Command LogicGate
   deriving (Eq, Show)
+
+data LogicGate = LogicGate InputList Ident SingleOutputCover
+  deriving (Eq, Show)
+
+data SingleOutputCover = SingleOutputCover ()
+  deriving (Eq, Show)
+
 
 

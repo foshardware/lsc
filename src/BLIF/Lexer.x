@@ -24,7 +24,7 @@ $any     = [.\n\r]
 -- from the Unicode classes Lu, Ll, Lt, Lm, Lo or Nl. Identifiers must
 -- start with a letter or an underscore, but can then also contain
 -- characters from the classes Mn, Mc, Nd, Pc or Cf.
-$ident_start = [a-zA-Z_\@]
+$ident_start = [a-zA-Z_\@\$]
 $ident_part  = [a-zA-Z_0-9]
 $const_part  = [A-Z_]
 
@@ -58,6 +58,8 @@ $white+       ;
 \.outputs        { constTok Tok_Outputs }
 \.clock          { constTok Tok_Clock   }
 \.end            { constTok Tok_End     }
+
+\.names          { constTok Tok_Names   }
 
 $ident_start $ident_part*      { textTok Tok_Ident }
 

@@ -22,7 +22,7 @@ parseBLIF :: Text -> Either ParseError BLIF
 parseBLIF = parse blif [] . lexer []
 
 blif :: Parser BLIF
-blif = BLIF <$> many1 model
+blif = BLIF <$> many1 model <?> "blif"
 
 model :: Parser Model
 model = Model
@@ -32,21 +32,33 @@ model = Model
   <*> clockList
   <*> many command
   <*  end_
+  <?> "model"
 
 modelName :: Parser ModelName
-modelName = model_ *> ident
+modelName = model_ *> ident <?> "model_name"
 
 inputList :: Parser InputList
-inputList = inputs_ *> many ident <|> pure []
+inputList = inputs_ *> many ident <|> pure [] <?> "decl_input_list"
 
 outputList :: Parser OutputList
-outputList = outputs_ *> many ident <|> pure []
+outputList = outputs_ *> many ident <|> pure [] <?> "decl_output_list"
 
 clockList :: Parser ClockList
-clockList = clock_ *> many ident <|> pure []
+clockList = clock_ *> many ident <|> pure [] <?> "decl_clock_list"
 
 command :: Parser Command
-command = Command <$> many1 ident
+command
+  =   LogicGate_Command <$> logicGate
+
+logicGate :: Parser LogicGate
+logicGate = names_ >> LogicGate
+  <$> inputList
+  <*> ident
+  <*> singleOutputCover
+  <?> "logic_gate"
+
+singleOutputCover :: Parser SingleOutputCover
+singleOutputCover = SingleOutputCover <$> pure () <?> "single_output_cover"
 
 
 -----
@@ -75,4 +87,5 @@ inputs_ = p Tok_Inputs
 outputs_ = p Tok_Outputs
 clock_ = p Tok_Clock
 end_ = p Tok_End
+names_ = p Tok_Names
 
