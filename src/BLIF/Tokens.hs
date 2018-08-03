@@ -19,9 +19,14 @@ data Token
     | Tok_Outputs
     | Tok_Clock
     | Tok_End
+    | Tok_Attr
 
     -- Logic gates
     | Tok_Names
+    | Tok_Gate
+
+    -- Operators
+    | Tok_Assign
 
     -- Identifiers
     | Tok_Ident Text

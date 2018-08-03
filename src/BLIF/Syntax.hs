@@ -21,15 +21,24 @@ type ClockList = [Ident]
 
 data Command
   = LogicGate_Command LogicGate
+  | LibraryGate_Command LibraryGate
   deriving (Eq, Show)
 
-data LogicGate = LogicGate InputList Ident SingleOutputCover
+data LogicGate = LogicGate [Ident] SingleOutputCover
   deriving (Eq, Show)
 
-newtype SingleOutputCover = SingleOutputCover [(InputPlane, OutputPlane)]
+newtype SingleOutputCover = SingleOutputCover [Plane]
   deriving (Eq, Show)
 
-type InputPlane = Text
+type Plane = Text
+type InputPlane = Plane
+type OutputPlane = Plane
 
-type OutputPlane = Text
+data LibraryGate = LibraryGate Ident FormalActualList
+  deriving (Eq, Show)
+
+type FormalActualList = [Assignment]
+
+type Assignment = (Ident, Ident)
+
 

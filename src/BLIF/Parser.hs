@@ -2,13 +2,14 @@
 
 module BLIF.Parser where
 
+import Control.Applicative (optional)
 import Control.Monad
 import Data.Char
 import Data.Text (Text)
 import qualified Data.Text as T
-import Text.Parsec
+import Text.Parsec hiding (optional)
 import Text.Parsec.String (GenParser)
-import Text.Parsec.Combinator
+import Text.Parsec.Combinator hiding (optional)
 import Text.Parsec.Pos
 import Prelude hiding (null)
 
@@ -30,7 +31,7 @@ model = Model
   <*> inputList
   <*> outputList
   <*> clockList
-  <*> many command
+  <*> many1 command
   <*  end_
   <?> "model"
 
@@ -38,29 +39,42 @@ modelName :: Parser ModelName
 modelName = model_ *> ident <?> "model_name"
 
 inputList :: Parser InputList
-inputList = inputs_ *> many ident <|> pure [] <?> "decl_input_list"
+inputList = inputs_ *> many1 ident <|> pure [] <?> "decl_input_list"
 
 outputList :: Parser OutputList
-outputList = outputs_ *> many ident <|> pure [] <?> "decl_output_list"
+outputList = outputs_ *> many1 ident <|> pure [] <?> "decl_output_list"
 
 clockList :: Parser ClockList
-clockList = clock_ *> many ident <|> pure [] <?> "decl_clock_list"
+clockList = clock_ *> many1 ident <|> pure [] <?> "decl_clock_list"
 
 command :: Parser Command
 command
   =   LogicGate_Command <$> logicGate
+  <|> LibraryGate_Command <$> libraryGate
+  <?> "command"
 
 logicGate :: Parser LogicGate
 logicGate = names_ >> LogicGate
-  <$> inputList
-  <*> ident
+  <$> many1 ident
   <*> singleOutputCover
   <?> "logic_gate"
 
 singleOutputCover :: Parser SingleOutputCover
-singleOutputCover = SingleOutputCover
-  <$> many ((,) <$> inputPlane <*> outputPlane)
-  <?> "single_output_cover"
+singleOutputCover = SingleOutputCover <$> planes <?> "single_output_cover"
+    where planes = many1 (inputPlane <|> outputPlane) <|> pure [T.pack "0"]
+
+libraryGate :: Parser LibraryGate
+libraryGate = gate_ >> LibraryGate
+  <$> ident
+  <*> formalActualList
+  <?> "library_gate"
+
+formalActualList :: Parser FormalActualList
+formalActualList = many1 assignment <?> "formal_actual_list"
+
+assignment :: Parser Assignment
+assignment = (,) <$> ident <*> (assign_ *> ident) <?> "assignment"
+
 
 
 -----
@@ -100,4 +114,6 @@ outputs_ = p Tok_Outputs
 clock_ = p Tok_Clock
 end_ = p Tok_End
 names_ = p Tok_Names
+gate_ = p Tok_Gate
+assign_ = p Tok_Assign
 

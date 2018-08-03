@@ -25,7 +25,7 @@ $any     = [.\n\r]
 -- start with a letter or an underscore, but can then also contain
 -- characters from the classes Mn, Mc, Nd, Pc or Cf.
 $ident_start = [a-zA-Z_\@\$]
-$ident_part  = [a-zA-Z_0-9]
+$ident_part  = [a-zA-Z_0-9\[\]\$]
 $const_part  = [A-Z_]
 
 $bit       = [0-1]
@@ -41,14 +41,20 @@ $white+       ;
 @nul_eof      ;
 @preprocessor ;
 
+-- Operators
+\=               { constTok Tok_Assign }
+
 -- Keywords
 \.model          { constTok Tok_Model   }
 \.inputs         { constTok Tok_Inputs  }
 \.outputs        { constTok Tok_Outputs }
 \.clock          { constTok Tok_Clock   }
 \.end            { constTok Tok_End     }
+\.attr           { constTok Tok_Attr    }
 
 \.names          { constTok Tok_Names   }
+
+\.gate           { constTok Tok_Gate    }
 
 @input_char*     { textTok Tok_InputPlane  }
 @output_char*    { textTok Tok_OutputPlane }
