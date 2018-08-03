@@ -45,6 +45,7 @@ library
       Liberty.Lexer,
 
       LSC,
+      LSC.BLIF,
       LSC.Types
   other-modules:
       Paths_lsc
