@@ -37,7 +37,12 @@ library
       BLIF.Parser,
       BLIF.Syntax,
       BLIF.Tokens,
-      BLIF.Lexer
+      BLIF.Lexer,
+
+      Liberty.Parser,
+      Liberty.Syntax,
+      Liberty.Tokens,
+      Liberty.Lexer,
 
       LSC,
       LSC.Types
