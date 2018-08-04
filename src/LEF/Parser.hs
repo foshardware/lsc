@@ -7,9 +7,9 @@ import Control.Monad
 import Data.Char
 import Data.Text (Text)
 import qualified Data.Text as T
-import Text.Parsec hiding (option)
+import Text.Parsec hiding (option, optional)
 import Text.Parsec.String (GenParser)
-import Text.Parsec.Combinator hiding (option)
+import Text.Parsec.Combinator hiding (option, optional)
 import Text.Parsec.Pos
 import Text.ParserCombinators.Parsec.Number
 import Prelude hiding (null)
@@ -162,13 +162,25 @@ viaRuleLayerOption
   <|> ViaRuleLayerOptionRect          <$> (rect_ *> double) <*> double <*> double <*> double
   <?> "via_rule_layer_option"
 
+site :: Parser Site
+site = Site
+  <$> siteName
+  <*> many siteOption
+  <*> (end_ *> ident)
+  <?> "site"
 
-  
+siteName :: Parser SiteName
+siteName = site_ *> ident <?> "site_name"
 
+siteOption :: Parser SiteOption
+siteOption
+  =   SiteClass    <$> (class_    *> ident )
+  <|> SiteSymmetry <$> (symmetry_ *> ident ) <*> optional ident
+  <|> SiteSize     <$> (size_     *> double) <*> (by_ *> double)
+  <?> "site_option"
 
 
 macro = undefined
-site = undefined
 
 
 
@@ -229,3 +241,7 @@ to_ = p Tok_To
 viarule_ = p Tok_ViaRule
 manufacturinggrid_ = p Tok_ManufacturingGrid
 clearancemeasure_ = p Tok_ClearanceMeasure
+symmetry_ = p Tok_Symmetry
+class_ = p Tok_Class
+size_ = p Tok_Size
+site_ = p Tok_Site
