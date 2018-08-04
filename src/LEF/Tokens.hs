@@ -63,5 +63,6 @@ data Token
     | Token Text
 
     -- Literals
+    | Tok_Number Text
 
   deriving (Eq, Show)

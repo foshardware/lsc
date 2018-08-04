@@ -98,7 +98,7 @@ data MacroOption
   | MacroOrigin Double Double
   | MacroSize Double Double
   | MacroSymmetry Ident (Maybe Ident) (Maybe Ident)
-  | MacroSite
+  | MacroSite Ident
   | MacroPin [MacroPinOption] Ident
   | MacroObs [MacroObsInfo]
   deriving (Eq, Show)
@@ -122,7 +122,7 @@ data MacroPinPortInfo
 
 data MacroObsInfo
   = MacroObsLayer Ident
-  | MacroObsRect Double Double Double
+  | MacroObsRect Double Double Double Double
   deriving (Eq, Show)
 
 

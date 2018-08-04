@@ -45,6 +45,7 @@ $sign      = [\+\-]
 @string_character   = [^\"\\] | @escapes
 @verbatim_character = $any # \" | \"\"
 
+
 tokens :-
 
 $white+       ;
@@ -56,7 +57,15 @@ $white+       ;
 end         { constTok Tok_End       }
 library     { constTok Tok_Library   }
 
+-- Integer literals
+\-    $digit+     @int_suffix? { textTok Tok_Number}
+      $digit+     @int_suffix? { textTok Tok_Number }
 
+-- Real literals
+$digit+ \. $digit+ @exponent? @real_suffix? { textTok Tok_Number }
+        \. $digit+ @exponent? @real_suffix? { textTok Tok_Number }
+           $digit+ @exponent  @real_suffix? { textTok Tok_Number }
+           $digit+            @real_suffix  { textTok Tok_Number }
 
 
 {

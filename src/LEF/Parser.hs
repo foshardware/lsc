@@ -11,7 +11,7 @@ import Text.Parsec hiding (option, optional)
 import Text.Parsec.String (GenParser)
 import Text.Parsec.Combinator hiding (option, optional)
 import Text.Parsec.Pos
-import Text.ParserCombinators.Parsec.Number
+import Text.ParserCombinators.Parsec.Number hiding (number)
 import Prelude hiding (null)
 
 import LEF.Lexer
@@ -179,11 +179,38 @@ siteOption
   <|> SiteSize     <$> (size_     *> double) <*> (by_ *> double)
   <?> "site_option"
 
+macro :: Parser Macro
+macro = Macro
+  <$> macroName
+  <*> many macroOption
+  <*> (end_ *> ident)
+  <?> "macro"
 
-macro = undefined
+macroName :: Parser MacroName
+macroName = macro_ *> ident <?> "macro_name"
 
+macroOption :: Parser MacroOption
+macroOption
+  =   MacroClass    <$> (class_    *> ident ) <*> optional ident
+  <|> MacroForeign  <$> (foreign_  *> ident ) <*> double <*> double
+  <|> MacroOrigin   <$> (origin_   *> double) <*> double
+  <|> MacroSize     <$> (size_     *> double) <*> (by_ *> double)
+  <|> MacroSymmetry <$> (symmetry_ *> ident ) <*> optional ident <*> optional ident
+  <|> MacroSite     <$> (site_     *> ident )
+  <|> MacroPin      <$> many macroPinOption <*> (end_ *> ident)
+  <|> MacroObs      <$> (obs_ *> many macroObsInfo) <* end_
+  <?> "macro_option"
 
+macroObsInfo :: Parser MacroObsInfo
+macroObsInfo
+  =   MacroObsLayer <$> (layer_ *> ident)
+  <|> MacroObsRect  <$> (rect_ *> double) <*> double <*> double <*> double
+  <?> "macro_obs_info"
 
+macroPinOption :: Parser MacroPinOption
+macroPinOption
+  =   MacroPinName  <$> (pin_ *> ident)
+  <|> MacroPinUse   <$> (use_ *> ident)
 
 
 endLibrary :: Parser ()
@@ -193,10 +220,10 @@ endLibrary = end_ *> library_
 ----
 
 double :: Parser Double
-double = either (fail . show) pure . parse (floating3 False) "double" . T.unpack =<< ident
+double = either (fail . show) pure . parse (floating3 False) "double" . T.unpack =<< number
 
 integer :: Parser Integer
-integer = either (fail . show) pure . parse int "integer" . T.unpack =<< ident
+integer = either (fail . show) pure . parse int "integer" . T.unpack =<< number
 
 maybeToken :: (Token -> Maybe a) -> Parser a
 maybeToken test = token showT posT testT
@@ -208,7 +235,12 @@ maybeToken test = token showT posT testT
 
 ident :: Parser Ident
 ident = maybeToken q
-  where q (Tok_Ident t) = Just t
+  where q (Tok_Ident  t) = Just t
+        q _ = Nothing
+
+number :: Parser Text
+number = maybeToken q
+  where q (Tok_Number t) = Just t
         q _ = Nothing
 
 p :: Token -> Parser ()
@@ -245,3 +277,8 @@ symmetry_ = p Tok_Symmetry
 class_ = p Tok_Class
 size_ = p Tok_Size
 site_ = p Tok_Site
+use_ = p Tok_Use
+origin_ = p Tok_Origin
+foreign_ = p Tok_Foreign
+macro_ = p Tok_Macro
+
