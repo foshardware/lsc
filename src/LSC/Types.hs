@@ -2,18 +2,22 @@
 
 module LSC.Types where
 
+import Data.Text (Text)
+
 import Control.Monad.Reader
 import Language.SMTLib2
 import Language.SMTLib2.Pipe
 
 
 data Netlist = Netlist [Gate] [Wire]
+  deriving (Eq, Show)
 
 data Wire = Wire 
   { source :: Gate
   , target :: Gate
   , wireIndex :: Index
   }
+  deriving (Show)
 
 instance Eq Wire where
   w == v = wireIndex w == wireIndex v
@@ -21,9 +25,10 @@ instance Eq Wire where
 type Index = Int
 
 data Gate = Gate
-  { featureSize :: (Integer, Integer)
+  { gateWires :: [Text]
   , gateIndex :: Index
   }
+  deriving (Show)
 
 instance Eq Gate where
   g == h = gateIndex g == gateIndex h

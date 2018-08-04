@@ -51,28 +51,7 @@ intersection nodes edges = do
 connection nodes edges = do
   technology <- ask
   lift $ sequence_
-    [ assert
-
-        -- source and target locations
-          $ (xStart .==. xSource .+. cint (div sourceFeatX 2) .|. xStart .==. xSource .-. cint (div sourceFeatX 2))
-        .&. (yStart .==. ySource .+. cint (div sourceFeatY 2) .|. yStart .==. ySource .-. cint (div sourceFeatY 2))
-        .&. (xEnd .==. xEnd.+. cint (div targetFeatX 2) .|. xEnd .==. xTarget .-. cint (div targetFeatX 2))
-        .&. (yEnd .==. yEnd.+. cint (div targetFeatY 2) .|. yEnd .==. yTarget .-. cint (div targetFeatY 2))
-
-        -- angles constrained by technology (rectangular)
-        .&. and' (rectangular <$> neighbours path)
-
-    | (wire, path) <- edges
-
-    , let (sourceFeatX, sourceFeatY) = featureSize $ source wire
-    , let (targetFeatX, targetFeatY) = featureSize $ target wire
-
-    , let (xEnd, yEnd) = last path
-    , let (xStart, yStart) = head path
-
-    , (xSource, ySource) <- [ (x, y) | node@(gate, x, y) <- nodes, source wire == gate ]
-    , (xTarget, yTarget) <- [ (x, y) | node@(gate, x, y) <- nodes, target wire == gate ]
-
+    [
     ]
 
 rectangular ((x1, y1), (x2, y2)) = x1 .==. x2 .|. y1 .==. y2
@@ -99,12 +78,10 @@ boundedSpace nodes = do
 distance nodes = do
   lift $ sequence_
     [ assert
-          $ abs' (x1 .-. x2) .>. cint (1 + div featX1 2 + div featX2 2)
-        .|. abs' (y1 .-. y2) .>. cint (1 + div featY1 2 + div featY2 2)
+          $ abs' (x1 .-. x2) .>. cint 1
+        .|. abs' (y1 .-. y2) .>. cint 1
     | node1@(gate1, x1, y1) <- nodes
     , node2@(gate2, x2, y2) <- nodes
-    , let (featX1, featY1) = featureSize gate1
-    , let (featX2, featY2) = featureSize gate2
     , gate1 /= gate2
     ]
 
