@@ -1,3 +1,4 @@
+{-# OPTIONS_GHC -fno-warn-missing-signatures #-}
 {-# LANGUAGE GADTs, DataKinds, TupleSections, FlexibleContexts #-}
 
 module LSC where

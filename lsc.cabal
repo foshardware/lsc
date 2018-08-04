@@ -51,6 +51,7 @@ library
 
       LSC,
       LSC.BLIF,
+      LSC.LEF,
       LSC.Types
   other-modules:
       Paths_lsc

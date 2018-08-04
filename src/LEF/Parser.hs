@@ -19,8 +19,8 @@ import LEF.Syntax
 
 type Parser = GenParser (Lexer Token) ()
 
-parseAST :: Text -> Either ParseError LEF
-parseAST = parse ast [] . lexer []
+parseLEF :: Text -> Either ParseError LEF
+parseLEF = parse lef [] . lexer []
 
-ast :: Parser LEF
-ast = LEF <$> some undefined
+lef :: Parser LEF
+lef = LEF <$> some undefined
