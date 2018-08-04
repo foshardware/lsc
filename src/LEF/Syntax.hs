@@ -37,10 +37,8 @@ data LayerOption
   | OffsetDiscret Integer
   | Width Double
   | WidthDiscrete Integer
-  | Resistance Double
-  | ResistanceDiscrete Integer
-  | Capacitance Double
-  | CapacitanceDiscrete Integer
+  | Resistance Ident Double
+  | Capacitance Ident Double
   | EdgeCapacitance Double
   deriving (Eq, Show)
 

@@ -14,6 +14,53 @@ type Pos = (Int, Int)
 
 data Token
     -- Keywords
-    = Tok_Abstract
-    | Tok_As
+    = Tok_End
+    | Tok_Library
+    | Tok_Version
+
+    | Tok_Namescasesensitive
+    | Tok_BusBitChars
+    | Tok_DividerChar
+    | Tok_Units
+    | Tok_Database
+    | Tok_Microns
+    | Tok_Obs
+    | Tok_Pin
+    | Tok_ClearanceMeasure
+    | Tok_ManufacturingGrid
+    | Tok_Layer
+    | Tok_Type
+    | Tok_Spacing
+    | Tok_Direction
+    | Tok_Pitch
+    | Tok_Offset
+    | Tok_Width
+    | Tok_Resistance
+    | Tok_EdgeCapacitance
+    | Tok_Capacitance
+    | Tok_Via
+    | Tok_Rect
+    | Tok_ViaRule
+    | Tok_To
+    | Tok_By
+    | Tok_Overhang
+    | Tok_MetalOverHang
+    | Tok_Site
+    | Tok_Symmetry
+    | Tok_Class
+    | Tok_Size
+    | Tok_Macro
+    | Tok_Foreign
+    | Tok_Origin
+    | Tok_Use
+    | Tok_Shape
+    | Tok_Port
+    | Tok_Path
+
+    -- Identifiers
+    | Tok_Ident Text
+    | Token Text
+
+    -- Literals
+
   deriving (Eq, Show)

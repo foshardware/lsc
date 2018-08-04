@@ -53,8 +53,8 @@ $white+       ;
 @preprocessor ;
 
 -- Keywords
-abstract   { constTok Tok_Abstract   }
-as         { constTok Tok_As         }
+end         { constTok Tok_End       }
+library     { constTok Tok_Library   }
 
 
 
