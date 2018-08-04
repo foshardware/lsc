@@ -39,6 +39,11 @@ library
       BLIF.Tokens,
       BLIF.Lexer,
 
+      LEF.Parser,
+      LEF.Syntax,
+      LEF.Tokens,
+      LEF.Lexer,
+
       Liberty.Parser,
       Liberty.Syntax,
       Liberty.Tokens,
