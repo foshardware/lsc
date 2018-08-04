@@ -51,9 +51,16 @@ command :: Parser Command
 command
   =   logicGate
   <|> libraryGate
+  <|> subcircuit
   <|> attribute
   <|> parameter
   <?> "command"
+
+subcircuit :: Parser Subcircuit
+subcircuit = subckt_ >> Subcircuit
+  <$> ident
+  <*> formalActualList
+  <?> "subcircuit"
 
 logicGate :: Parser LogicGate
 logicGate = names_ >> LogicGate
@@ -136,4 +143,5 @@ gate_ = p Tok_Gate
 assign_ = p Tok_Assign
 attr_ = p Tok_Attr
 param_ = p Tok_Param
+subckt_ = p Tok_Subckt
 

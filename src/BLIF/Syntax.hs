@@ -22,6 +22,7 @@ type ClockList = [Ident]
 data Command
   = LogicGate [Ident] SingleOutputCover
   | LibraryGate Ident FormalActualList
+  | Subcircuit Ident FormalActualList
   | Attribute Ident StringLiteral
   | Parameter Ident Plane
   deriving (Eq, Show)
@@ -33,6 +34,7 @@ type Plane = Text
 type InputPlane = Plane
 type OutputPlane = Plane
 
+type Subcircuit = Command
 type LibraryGate = Command
 type LogicGate = Command
 type Attribute = Command

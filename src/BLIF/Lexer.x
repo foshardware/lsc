@@ -25,7 +25,7 @@ $any     = [.\n\r]
 -- start with a letter or an underscore, but can then also contain
 -- characters from the classes Mn, Mc, Nd, Pc or Cf.
 $ident_start = [a-zA-Z_\@\$]
-$ident_part  = [a-zA-Z_0-9\[\]\$\.\:]
+$ident_part  = [a-zA-Z_0-9\[\]\$\.\:\\]
 $const_part  = [A-Z_]
 
 $bit       = [0-1]
@@ -61,6 +61,7 @@ $white+       ;
 \.names          { constTok Tok_Names   }
 
 \.gate           { constTok Tok_Gate    }
+\.subckt         { constTok Tok_Subckt  }
 
 \. $ident_part*  { textTok Token }
 

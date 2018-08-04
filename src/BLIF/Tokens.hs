@@ -21,6 +21,7 @@ data Token
     | Tok_End
     | Tok_Attr
     | Tok_Param
+    | Tok_Subckt
 
     -- Logic gates
     | Tok_Names

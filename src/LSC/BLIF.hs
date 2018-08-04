@@ -18,4 +18,8 @@ gates i (LibraryGate _ assignments)
   = [ Gate
         (fmap snd assignments)
         i ]
+gates i (Subcircuit _ assignments)
+  = [ Gate
+        (fmap snd assignments)
+        i ]
 gates i _ = []
