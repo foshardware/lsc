@@ -108,10 +108,11 @@ LIBRARY          { constTok Tok_Library }
       $digit+     @int_suffix? { textTok Tok_Number }
 
 -- Real literals
-$digit+ \. $digit+ @exponent? @real_suffix? { textTok Tok_Number }
-        \. $digit+ @exponent? @real_suffix? { textTok Tok_Number }
-           $digit+ @exponent  @real_suffix? { textTok Tok_Number }
-           $digit+            @real_suffix  { textTok Tok_Number }
+\-  $digit+ \. $digit+ @exponent? @real_suffix? { textTok Tok_Number }
+    $digit+ \. $digit+ @exponent? @real_suffix? { textTok Tok_Number }
+            \. $digit+ @exponent? @real_suffix? { textTok Tok_Number }
+               $digit+ @exponent  @real_suffix? { textTok Tok_Number }
+               $digit+            @real_suffix  { textTok Tok_Number }
 
 -- Character / String literals
 \" @string_character* \"     { textTok (Tok_String . T.drop 1 . T.init)   }

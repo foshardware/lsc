@@ -52,7 +52,7 @@ version = version_ >> Version <$> double
     <?> "version"
 
 cases :: Parser Option
-cases = namescasesensitive_ >> Cases <$> (True <$ on_ <|> False <$ off_)
+cases = namescasesensitive_ >> Cases <$> boolean
     <?> "cases"
 
 bitChars :: Parser Option
@@ -160,6 +160,7 @@ viaRuleLayerOption
   =   ViaRuleLayerOptionDirection     <$> (direction_ *> ident )
   <|> ViaRuleLayerOptionWidth         <$> (width_     *> double) <*> (to_ *> double)
   <|> ViaRuleLayerOptionSpacing       <$> (spacing_   *> double) <*> (by_ *> double)
+  <|> ViaRuleLayerOptionOverhang      <$> (overhang_  *> double)
   <|> ViaRuleLayerOptionMetalOverhang <$> (metaloverhang_ *> double)
   <|> ViaRuleLayerOptionRect          <$> (rect_ *> double) <*> double <*> double <*> double
   <?> "via_rule_layer_option"
@@ -199,7 +200,7 @@ macroOption
   <|> MacroSize     <$> (size_     *> double) <*> (by_ *> double)
   <|> MacroSymmetry <$> (symmetry_ *> ident ) <*> optional ident <*> optional ident
   <|> MacroSite     <$> (site_     *> ident )
-  <|> MacroPin      <$> many macroPinOption <*> (end_ *> ident)
+  <|> MacroPin      <$> (pin_ *> ident) <*> many macroPinOption <*> (end_ *> ident)
   <|> MacroObs      <$> (obs_ *> many macroObsInfo) <* end_
   <?> "macro_option"
 
@@ -211,9 +212,21 @@ macroObsInfo
 
 macroPinOption :: Parser MacroPinOption
 macroPinOption
-  =   MacroPinName  <$> (pin_ *> ident)
-  <|> MacroPinUse   <$> (use_ *> ident)
+  =   MacroPinName      <$> (pin_ *> ident)
+  <|> MacroPinUse       <$> (use_ *> ident)
+  <|> MacroPinDirection <$> (direction_ *> ident) <*> optional ident
+  <|> MacroPinShape     <$> (shape_ *> ident)
+  <|> MacroPinPort      <$> (port_  *> many macroPinPortInfo) <* end_
+  <?> "macro_pin_option"
 
+macroPinPortInfo :: Parser MacroPinPortInfo
+macroPinPortInfo
+  =   MacroPinPortLayer <$> (layer_ *> ident )
+  <|> MacroPinPortRect  <$> (rect_  *> double) <*> double <*> double <*> double
+  <|> MacroPinPortClass <$> (class_ *> ident )
+  <|> MacroPinPortWidth <$> (width_ *> double)
+  <|> MacroPinPortPath  <$> (path_  *> double) <*> double <*> double <*> double
+  <?> "macro_pin_port_info"
 
 endLibrary :: Parser ()
 endLibrary = end_ *> library_
@@ -222,13 +235,12 @@ boolean :: Parser Bool
 boolean = True <$ on_ <|> False <$ off_ <?> "boolean"
 
 double :: Parser Double
-double = either (fail . show) pure . parse (floating3 False) "double" . T.unpack =<< number
+double = either (fail . show) pure . parse floatingSigned "double" . T.unpack =<< number
+  where floatingSigned = sign >>= \ f -> f <$> floating3 False
 
 integer :: Parser Integer
 integer = either (fail . show) pure . parse int "integer" . T.unpack =<< number
 
---------
-----
 maybeToken :: (Token -> Maybe a) -> Parser a
 maybeToken test = token showT posT testT
   where
@@ -251,7 +263,6 @@ stringLiteral :: Parser Text
 stringLiteral = maybeToken q
   where q (Tok_String t) = Just t
         q _ = Nothing
-
 
 p :: Token -> Parser ()
 p t = maybeToken $ \r -> if r == t then Just () else Nothing
@@ -294,3 +305,8 @@ macro_ = p Tok_Macro
 on_ = p Tok_On
 off_ = p Tok_Off
 via_ = p Tok_Via
+overhang_ = p Tok_Overhang
+path_ = p Tok_Path
+port_ = p Tok_Port
+shape_ = p Tok_Shape
+

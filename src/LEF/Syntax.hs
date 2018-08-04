@@ -99,7 +99,7 @@ data MacroOption
   | MacroSize Double Double
   | MacroSymmetry Ident (Maybe Ident) (Maybe Ident)
   | MacroSite Ident
-  | MacroPin [MacroPinOption] Ident
+  | MacroPin Ident [MacroPinOption] Ident
   | MacroObs [MacroObsInfo]
   deriving (Eq, Show)
 
