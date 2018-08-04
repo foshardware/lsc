@@ -5,6 +5,7 @@ module LSC.Types where
 import Data.Text (Text)
 
 import Control.Monad.Reader
+import Control.Monad.State
 import Language.SMTLib2
 import Language.SMTLib2.Pipe
 
@@ -44,4 +45,9 @@ data Technology = Technology
   , wireWidth :: Integer
   }
 
+type BootstrapT m = StateT Technology m
 
+type Bootstrap = State Technology
+
+bootstrap :: (Technology -> Technology) -> Bootstrap ()
+bootstrap = modify

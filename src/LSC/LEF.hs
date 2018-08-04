@@ -5,5 +5,8 @@ import LEF.Syntax
 import LSC.Types
 
 
-fromLEF :: LEF -> ()
-fromLEF (LEF _ _ _ _ _ _) = ()
+fromLEF :: LEF -> Bootstrap ()
+fromLEF (LEF _ _ _ _ _ _) = bootstrap $ \ technology -> technology
+  { dimensions = (20, 20)
+  , wireWidth = 1
+  }
