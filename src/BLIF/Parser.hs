@@ -49,10 +49,10 @@ clockList = clock_ *> many1 ident <|> pure [] <?> "decl_clock_list"
 
 command :: Parser Command
 command
-  =   LogicGate_Command <$> logicGate
-  <|> LibraryGate_Command <$> libraryGate
-  <|> Attribute_Command <$> attribute
-  <|> Parameter_Command <$> parameter
+  =   logicGate
+  <|> libraryGate
+  <|> attribute
+  <|> parameter
   <?> "command"
 
 logicGate :: Parser LogicGate

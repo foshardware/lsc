@@ -7,20 +7,15 @@ import LSC.Types
 
 fromBLIF :: BLIF -> Netlist
 fromBLIF (BLIF models) = Netlist
-  [ result
-  | Model _ _ _ _ commands <- models
+  [ g | Model _ _ _ _ commands <- models
   , (i, command) <- zip [1..] commands
-  , result <- gate i command
+  , g <- gates i command
   ]
   []
 
-gate :: Int -> Command -> [Gate]
-gate i (LibraryGate_Command (LibraryGate _ assignments))
+gates :: Int -> Command -> [Gate]
+gates i (LibraryGate _ assignments)
   = [ Gate
         (fmap snd assignments)
         i ]
-gate i (LogicGate_Command (LogicGate wires _))
-  = [ Gate
-        wires
-        i ]
-gate i _ = []
+gates i _ = []
