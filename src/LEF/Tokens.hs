@@ -17,7 +17,6 @@ data Token
     = Tok_End
     | Tok_Library
     | Tok_Version
-
     | Tok_Namescasesensitive
     | Tok_BusBitChars
     | Tok_DividerChar
@@ -57,6 +56,8 @@ data Token
     | Tok_Shape
     | Tok_Port
     | Tok_Path
+    | Tok_On
+    | Tok_Off
 
     -- Identifiers
     | Tok_Ident Text
@@ -64,5 +65,6 @@ data Token
 
     -- Literals
     | Tok_Number Text
+    | Tok_String Text
 
   deriving (Eq, Show)

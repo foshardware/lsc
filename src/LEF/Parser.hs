@@ -46,20 +46,21 @@ option
   <|> manufacturingGrid
   <?> "option"
 
+
 version :: Parser Option
 version = version_ >> Version <$> double
     <?> "version"
 
 cases :: Parser Option
-cases = namescasesensitive_ >> Cases <$> ident
+cases = namescasesensitive_ >> Cases <$> (True <$ on_ <|> False <$ off_)
     <?> "cases"
 
 bitChars :: Parser Option
-bitChars = busbitchars_ >> BitChars <$> ident
+bitChars = busbitchars_ >> BitChars <$> stringLiteral
     <?> "bit_chars"
 
 divideChars :: Parser Option
-divideChars = dividerchar_ >> DivideChar <$> ident
+divideChars = dividerchar_ >> DivideChar <$> stringLiteral
     <?> "divide_char"
 
 units :: Parser Option
@@ -71,7 +72,7 @@ databaseList = database_ >> microns_ >> DatabaseList <$> integer
     <?> "database_list"
 
 useMinSpacing :: Parser Option
-useMinSpacing = useminspacing_ >> (obs_ <|> pin_) >> UseMinSpacing <$> ident
+useMinSpacing = useminspacing_ >> (obs_ <|> pin_) >> UseMinSpacing <$> boolean
     <?> "use_min_spacing"
 
 clearanceMeasure :: Parser Option
@@ -86,6 +87,7 @@ layer :: Parser Layer
 layer = Layer
   <$> layerName
   <*> many layerOption
+  <*> (end_ *> ident)
   <?> "layer"
 
 layerName :: Parser LayerName
@@ -105,7 +107,7 @@ layerOption
   <?> "layer_option"
 
 via :: Parser Via
-via = Via
+via = via_ >> Via
   <$> viaName
   <*> many viaLayer
   <*> (end_ *> ident)
@@ -216,8 +218,8 @@ macroPinOption
 endLibrary :: Parser ()
 endLibrary = end_ *> library_
 
---------
-----
+boolean :: Parser Bool
+boolean = True <$ on_ <|> False <$ off_ <?> "boolean"
 
 double :: Parser Double
 double = either (fail . show) pure . parse (floating3 False) "double" . T.unpack =<< number
@@ -225,6 +227,8 @@ double = either (fail . show) pure . parse (floating3 False) "double" . T.unpack
 integer :: Parser Integer
 integer = either (fail . show) pure . parse int "integer" . T.unpack =<< number
 
+--------
+----
 maybeToken :: (Token -> Maybe a) -> Parser a
 maybeToken test = token showT posT testT
   where
@@ -242,6 +246,12 @@ number :: Parser Text
 number = maybeToken q
   where q (Tok_Number t) = Just t
         q _ = Nothing
+
+stringLiteral :: Parser Text
+stringLiteral = maybeToken q
+  where q (Tok_String t) = Just t
+        q _ = Nothing
+
 
 p :: Token -> Parser ()
 p t = maybeToken $ \r -> if r == t then Just () else Nothing
@@ -281,4 +291,6 @@ use_ = p Tok_Use
 origin_ = p Tok_Origin
 foreign_ = p Tok_Foreign
 macro_ = p Tok_Macro
-
+on_ = p Tok_On
+off_ = p Tok_Off
+via_ = p Tok_Via

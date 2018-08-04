@@ -10,11 +10,11 @@ data LEF = LEF [Option] [Layer] [Via] [ViaRule] [Site] [Macro]
 
 data Option
   = Version Double
-  | Cases Ident
+  | Cases Bool
   | BitChars Ident
   | DivideChar Ident
   | Units DatabaseList
-  | UseMinSpacing Ident
+  | UseMinSpacing Bool
   | ClearanceMeasure Ident
   | ManufacturingGrid Double
   deriving (Eq, Show)
@@ -22,7 +22,7 @@ data Option
 newtype DatabaseList = DatabaseList Integer
   deriving (Eq, Show)
 
-data Layer = Layer LayerName [LayerOption]
+data Layer = Layer LayerName [LayerOption] Text
   deriving (Eq, Show)
 
 type LayerName = Ident

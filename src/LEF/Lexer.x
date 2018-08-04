@@ -53,12 +53,58 @@ $white+       ;
 @nul_eof      ;
 @preprocessor ;
 
+-- T.T
+\; ;
+
 -- Keywords
-end         { constTok Tok_End       }
-library     { constTok Tok_Library   }
+END                { constTok Tok_End       }
+LIBRARY            { constTok Tok_Library   }
+VERSION            { constTok Tok_Version   }
+NAMESCASESENSITIVE { constTok Tok_Namescasesensitive }
+BUSBITCHARS        { constTok Tok_BusBitChars }
+DIVIDERCHAR        { constTok Tok_DividerChar }
+UNITS              { constTok Tok_Units       }
+DATABASE           { constTok Tok_Database    }
+ON                 { constTok Tok_On          }
+OFF                { constTok Tok_Off         }
+MICRONS	           { constTok Tok_Microns     }
+USEMINSPACING	   { constTok Tok_UseMinSpacing }
+OBS	               { constTok Tok_Obs }
+PIN	               { constTok Tok_Pin }
+CLEARANCEMEASURE   { constTok Tok_ClearanceMeasure }
+MANUFACTURINGGRID  { constTok Tok_ManufacturingGrid }
+LAYER            { constTok Tok_Layer }
+TYPE             { constTok Tok_Type }
+SPACING          { constTok Tok_Spacing }
+DIRECTION        { constTok Tok_Direction }
+PITCH            { constTok Tok_Pitch }
+OFFSET           { constTok Tok_Offset }
+PATH             { constTok Tok_Path }
+WIDTH            { constTok Tok_Width }
+RESISTANCE       { constTok Tok_Resistance }
+EDGECAPACITANCE  { constTok Tok_EdgeCapacitance }
+CAPACITANCE      { constTok Tok_Capacitance }
+VIA	             { constTok Tok_Via }
+RECT             { constTok Tok_Rect }
+VIARULE	         { constTok Tok_ViaRule }
+TO               { constTok Tok_To }
+BY               { constTok Tok_By }
+OVERHANG         { constTok Tok_Overhang }
+METALOVERHANG	 { constTok Tok_MetalOverhang }
+SITE             { constTok Tok_Site }
+SYMMETRY         { constTok Tok_Symmetry }
+CLASS            { constTok Tok_Class }
+SIZE             { constTok Tok_Size }
+MACRO            { constTok Tok_Macro }
+FOREIGN	         { constTok Tok_Foreign }
+ORIGIN           { constTok Tok_Origin }
+USE              { constTok Tok_Use }
+SHAPE            { constTok Tok_Shape }
+PORT             { constTok Tok_Port }
+LIBRARY          { constTok Tok_Library }
 
 -- Integer literals
-\-    $digit+     @int_suffix? { textTok Tok_Number}
+\-    $digit+     @int_suffix? { textTok Tok_Number }
       $digit+     @int_suffix? { textTok Tok_Number }
 
 -- Real literals
@@ -67,6 +113,11 @@ $digit+ \. $digit+ @exponent? @real_suffix? { textTok Tok_Number }
            $digit+ @exponent  @real_suffix? { textTok Tok_Number }
            $digit+            @real_suffix  { textTok Tok_Number }
 
+-- Character / String literals
+\" @string_character* \"     { textTok (Tok_String . T.drop 1 . T.init)   }
+
+-- Identifiers
+$ident_start $ident_part*      { textTok Tok_Ident }
 
 {
 wrap :: (str -> tok) -> AlexPosn -> str -> Lexer tok
