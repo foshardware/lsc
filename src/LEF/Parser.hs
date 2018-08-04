@@ -42,7 +42,7 @@ option
   <|> dividechars
   <|> units
   <|> useMiNamespacing
-  <|> clearensMeasure
+  <|> clearanceMeasure
   <|> manufacturingGrid
   <?> "option"
 
@@ -71,6 +71,17 @@ layerOption
   <|> EdgeCapacitance <$> (capacitance_ *> double)
   <?> "layer_option"
 
+manufacturingGrid = undefined
+clearanceMeasure = undefined
+useMiNamespacing = undefined
+units = undefined
+dividechars = undefined
+bitchars = undefined
+cases = undefined
+macro = undefined
+viaRule = undefined
+via = undefined
+site = undefined
 
 
 
@@ -104,5 +115,14 @@ end_ = p Tok_End
 library_ = p Tok_Library
 version_ = p Tok_Version
 capacitance_ = p Tok_Capacitance
+resistance_ = p Tok_Resistance
+width_ = p Tok_Width
+offset_ = p Tok_Offset
+pitch_ = p Tok_Pitch
+direction_ = p Tok_Direction
+spacing_ = p Tok_Spacing
+type_ = p Tok_Type
+layer_ = p Tok_Layer
+
 
 
