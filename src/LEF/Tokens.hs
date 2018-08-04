@@ -53,6 +53,7 @@ data Token
     | Tok_Foreign
     | Tok_Origin
     | Tok_Use
+    | Tok_UseMinSpacing
     | Tok_Shape
     | Tok_Port
     | Tok_Path

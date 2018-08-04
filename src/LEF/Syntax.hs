@@ -14,7 +14,7 @@ data Option
   | BitChars Ident
   | DivideChar Ident
   | Units DatabaseList
-  | UseMiNamespacing Ident
+  | UseMinSpacing Ident
   | ClearensMeasure Ident
   | ManufacturingGrid Double
   deriving (Eq, Show)
@@ -32,11 +32,8 @@ data LayerOption
   | Spacing Double
   | Direction Ident
   | Pitch Double
-  | PitchDiscrete Integer
   | Offset Double
-  | OffsetDiscret Integer
   | Width Double
-  | WidthDiscrete Integer
   | Resistance Ident Double
   | Capacitance Ident Double
   | EdgeCapacitance Double

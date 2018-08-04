@@ -41,30 +41,46 @@ option
   <|> bitChars
   <|> divideChars
   <|> units
-  <|> useMiNamespacing
+  <|> useMinSpacing
   <|> clearanceMeasure
   <|> manufacturingGrid
   <?> "option"
 
 version :: Parser Option
-version = version_ >> Version <$> double <?> "version"
+version = version_ >> Version <$> double
+    <?> "version"
 
 cases :: Parser Option
-cases = namescasesensitive_ >> Cases <$> ident <?> "cases"
+cases = namescasesensitive_ >> Cases <$> ident
+    <?> "cases"
 
 bitChars :: Parser Option
-bitChars = busbitchars_ >> BitChars <$> ident <?> "bit_chars"
+bitChars = busbitchars_ >> BitChars <$> ident
+    <?> "bit_chars"
 
 divideChars :: Parser Option
-divideChars = dividerchar_ >> DivideChar <$> ident <?> "divide_char"
+divideChars = dividerchar_ >> DivideChar <$> ident
+    <?> "divide_char"
 
 units :: Parser Option
-units = units_ >> Units <$> databaseList <* end_ <* units_ <?> "units"
+units = units_ >> Units <$> databaseList <* end_ <* units_
+    <?> "units"
 
 databaseList :: Parser DatabaseList
-databaseList = database_ >> microns_ >> DatabaseList <$> integer <?> "database_list"
+databaseList = database_ >> microns_ >> DatabaseList <$> integer
+    <?> "database_list"
 
+useMinSpacing :: Parser Option
+useMinSpacing = useminspacing_ >> (obs_ <|> pin_) >> UseMinSpacing <$> ident
+    <?> "use_min_spacing"
 
+clearanceMeasure :: Parser Option
+clearanceMeasure = clearancemeasure_ >> clearanceMeasure <$> ident
+    <?> "clearance_measure"
+
+manufacturingGrid :: Parser Option
+manufacturingGrid = manufacturinggrid_ >> ManufacturingGrid <$> ident
+    <?> "manufacturing_grid"
 
 layer :: Parser Layer
 layer = Layer
@@ -88,12 +104,37 @@ layerOption
   <|> EdgeCapacitance <$> (capacitance_ *> double)
   <?> "layer_option"
 
-manufacturingGrid = undefined
-clearanceMeasure = undefined
-useMiNamespacing = undefined
+via :: Parser Via
+via = Via
+  <$> viaName
+  <*> many viaLayer
+  <*> (end_ *> ident)
+  <?> "via"
+
+viaName :: Parser ViaName
+viaName = ViaName <$> ident <*> ident <?> "via_name"
+
+viaLayer :: Parser ViaLayer
+viaLayer = ViaLayer
+  <$> viaLayerName
+  <*> many viaRect
+  <?> "via_layer"
+
+viaLayerName :: Parser ViaLayerName
+viaLayerName = layer_ *> ident <?> "via_layer_name"
+
+viaRect :: Parser ViaRect
+viaRect = rect_ >> ViaRect
+  <$> double
+  <*> double
+  <*> double
+  <*> double
+  <?> "via_rect"
+
+
+
 macro = undefined
 viaRule = undefined
-via = undefined
 site = undefined
 
 
@@ -145,6 +186,8 @@ microns_ = p Tok_Microns
 database_ = p Tok_Database
 busbitchars_ = p Tok_BusBitChars
 namescasesensitive_ = p Tok_Namescasesensitive
-
+pin_ = p Tok_Pin
+obs_ = p Tok_Obs
+useminspacing_ = p Tok_UseMinSpacing
 
 
