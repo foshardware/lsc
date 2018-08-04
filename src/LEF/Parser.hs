@@ -30,7 +30,7 @@ lef = LEF
   <*> many via
   <*> many viaRule
   <*> many site
-  <*> many macro
+  <*> many1 macro
   <*  endLibrary
   <?> "lef"
 
@@ -38,8 +38,8 @@ option :: Parser Option
 option
   =   version
   <|> cases
-  <|> bitchars
-  <|> dividechars
+  <|> bitChars
+  <|> divideChars
   <|> units
   <|> useMiNamespacing
   <|> clearanceMeasure
@@ -47,7 +47,24 @@ option
   <?> "option"
 
 version :: Parser Option
-version = version_ >> Version <$> double
+version = version_ >> Version <$> double <?> "version"
+
+cases :: Parser Option
+cases = namescasesensitive_ >> Cases <$> ident <?> "cases"
+
+bitChars :: Parser Option
+bitChars = busbitchars_ >> BitChars <$> ident <?> "bit_chars"
+
+divideChars :: Parser Option
+divideChars = dividerchar_ >> DivideChar <$> ident <?> "divide_char"
+
+units :: Parser Option
+units = units_ >> Units <$> databaseList <* end_ <* units_ <?> "units"
+
+databaseList :: Parser DatabaseList
+databaseList = database_ >> microns_ >> DatabaseList <$> integer <?> "database_list"
+
+
 
 layer :: Parser Layer
 layer = Layer
@@ -74,10 +91,6 @@ layerOption
 manufacturingGrid = undefined
 clearanceMeasure = undefined
 useMiNamespacing = undefined
-units = undefined
-dividechars = undefined
-bitchars = undefined
-cases = undefined
 macro = undefined
 viaRule = undefined
 via = undefined
@@ -94,7 +107,10 @@ endLibrary = end_ *> library_
 ----
 
 double :: Parser Double
-double = either (fail . show) pure . parse (floating3 False) [] . T.unpack =<< ident
+double = either (fail . show) pure . parse (floating3 False) "double" . T.unpack =<< ident
+
+integer :: Parser Integer
+integer = either (fail . show) pure . parse int "integer" . T.unpack =<< ident
 
 maybeToken :: (Token -> Maybe a) -> Parser a
 maybeToken test = token showT posT testT
@@ -123,6 +139,12 @@ direction_ = p Tok_Direction
 spacing_ = p Tok_Spacing
 type_ = p Tok_Type
 layer_ = p Tok_Layer
+units_ = p Tok_Units
+dividerchar_ = p Tok_DividerChar
+microns_ = p Tok_Microns
+database_ = p Tok_Database
+busbitchars_ = p Tok_BusBitChars
+namescasesensitive_ = p Tok_Namescasesensitive
 
 
 
