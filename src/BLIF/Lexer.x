@@ -62,6 +62,8 @@ $white+       ;
 
 \.gate           { constTok Tok_Gate    }
 
+\. $ident_part*  { textTok Token }
+
 @input_char*     { textTok Tok_InputPlane  }
 @output_char*    { textTok Tok_OutputPlane }
 

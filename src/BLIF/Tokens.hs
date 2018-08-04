@@ -31,6 +31,7 @@ data Token
 
     -- Identifiers
     | Tok_Ident Text
+    | Token Text
 
     -- Literals
     | Tok_InputPlane Text
