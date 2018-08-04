@@ -15,7 +15,7 @@ data Option
   | DivideChar Ident
   | Units DatabaseList
   | UseMinSpacing Ident
-  | ClearensMeasure Ident
+  | ClearanceMeasure Ident
   | ManufacturingGrid Double
   deriving (Eq, Show)
 

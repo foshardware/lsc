@@ -44,7 +44,7 @@ data Token
     | Tok_To
     | Tok_By
     | Tok_Overhang
-    | Tok_MetalOverHang
+    | Tok_MetalOverhang
     | Tok_Site
     | Tok_Symmetry
     | Tok_Class

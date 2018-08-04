@@ -75,11 +75,11 @@ useMinSpacing = useminspacing_ >> (obs_ <|> pin_) >> UseMinSpacing <$> ident
     <?> "use_min_spacing"
 
 clearanceMeasure :: Parser Option
-clearanceMeasure = clearancemeasure_ >> clearanceMeasure <$> ident
+clearanceMeasure = clearancemeasure_ >> ClearanceMeasure <$> ident
     <?> "clearance_measure"
 
 manufacturingGrid :: Parser Option
-manufacturingGrid = manufacturinggrid_ >> ManufacturingGrid <$> ident
+manufacturingGrid = manufacturinggrid_ >> ManufacturingGrid <$> double
     <?> "manufacturing_grid"
 
 layer :: Parser Layer
@@ -131,10 +131,43 @@ viaRect = rect_ >> ViaRect
   <*> double
   <?> "via_rect"
 
+viaRule :: Parser ViaRule
+viaRule = ViaRule
+  <$> viaRuleName
+  <*> many viaRuleLayer
+  <*> (end_ *> ident)
+  <?> "via_rule"
+
+viaRuleName :: Parser ViaRuleName
+viaRuleName = viarule_ >> ViaRuleName
+  <$> ident
+  <*> ident
+  <?> "via_rule_name"
+
+viaRuleLayer :: Parser ViaRuleLayer
+viaRuleLayer = ViaRuleLayer
+  <$> viaRuleLayerName
+  <*> many viaRuleLayerOption
+  <?> "via_rule_layer"
+
+viaRuleLayerName :: Parser ViaRuleLayerName
+viaRuleLayerName = layer_ *> ident <?> "via_rule_layer_name"
+
+viaRuleLayerOption :: Parser ViaRuleLayerOption
+viaRuleLayerOption
+  =   ViaRuleLayerOptionDirection     <$> (direction_ *> ident )
+  <|> ViaRuleLayerOptionWidth         <$> (width_     *> double) <*> (to_ *> double)
+  <|> ViaRuleLayerOptionSpacing       <$> (spacing_   *> double) <*> (by_ *> double)
+  <|> ViaRuleLayerOptionMetalOverhang <$> (metaloverhang_ *> double)
+  <|> ViaRuleLayerOptionRect          <$> (rect_ *> double) <*> double <*> double <*> double
+  <?> "via_rule_layer_option"
+
+
+  
+
 
 
 macro = undefined
-viaRule = undefined
 site = undefined
 
 
@@ -189,5 +222,10 @@ namescasesensitive_ = p Tok_Namescasesensitive
 pin_ = p Tok_Pin
 obs_ = p Tok_Obs
 useminspacing_ = p Tok_UseMinSpacing
-
-
+rect_ = p Tok_Rect
+metaloverhang_ = p Tok_MetalOverhang
+by_ = p Tok_By
+to_ = p Tok_To
+viarule_ = p Tok_ViaRule
+manufacturinggrid_ = p Tok_ManufacturingGrid
+clearancemeasure_ = p Tok_ClearanceMeasure
