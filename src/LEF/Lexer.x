@@ -102,6 +102,11 @@ USE              { constTok Tok_Use }
 SHAPE            { constTok Tok_Shape }
 PORT             { constTok Tok_Port }
 LIBRARY          { constTok Tok_Library }
+INPUT            { constTok Tok_Input }
+OUTPUT           { constTok Tok_Output }
+INOUT            { constTok Tok_Inout }
+HORIZONTAL       { constTok Tok_Horizontal }
+VERTICAL         { constTok Tok_Vertical }
 
 -- Integer literals
 \-    $digit+     @int_suffix? { textTok Tok_Number }

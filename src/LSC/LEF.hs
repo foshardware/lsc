@@ -38,6 +38,11 @@ databaseUnits (Units (DatabaseList x) : _) = x
 databaseUnits (_ : rest) = databaseUnits rest
 databaseUnits [] = 1
 
-direction = undefined
+direction (MacroPinDirection Input _ : _) = In
+direction (MacroPinDirection Output _ : _) = Out
+direction (MacroPinDirection InputOutput _ : _) = InOut
+direction (_ : rest) = direction rest
+direction [] = InOut
+
 contacts = undefined
 layer = undefined

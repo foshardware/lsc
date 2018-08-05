@@ -97,7 +97,7 @@ layerOption :: Parser LayerOption
 layerOption
   =   Type        <$> (type_        *> ident ) 
   <|> Spacing     <$> (spacing_     *> double)
-  <|> Direction   <$> (direction_   *> ident )
+  <|> Direction   <$> (direction_   *> layerDirection)
   <|> Pitch       <$> (pitch_       *> double)
   <|> Offset      <$> (offset_      *> double)
   <|> Width       <$> (width_       *> double)
@@ -157,7 +157,7 @@ viaRuleLayerName = layer_ *> ident <?> "via_rule_layer_name"
 
 viaRuleLayerOption :: Parser ViaRuleLayerOption
 viaRuleLayerOption
-  =   ViaRuleLayerOptionDirection     <$> (direction_ *> ident )
+  =   ViaRuleLayerOptionDirection     <$> (direction_ *> layerDirection)
   <|> ViaRuleLayerOptionWidth         <$> (width_     *> double) <*> (to_ *> double)
   <|> ViaRuleLayerOptionSpacing       <$> (spacing_   *> double) <*> (by_ *> double)
   <|> ViaRuleLayerOptionOverhang      <$> (overhang_  *> double)
@@ -214,7 +214,7 @@ macroPinOption :: Parser MacroPinOption
 macroPinOption
   =   MacroPinName      <$> (pin_ *> ident)
   <|> MacroPinUse       <$> (use_ *> ident)
-  <|> MacroPinDirection <$> (direction_ *> ident) <*> optional ident
+  <|> MacroPinDirection <$> (direction_ *> portDirection) <*> optional ident
   <|> MacroPinShape     <$> (shape_ *> ident)
   <|> MacroPinPort      <$> (port_  *> many macroPinPortInfo) <* end_
   <?> "macro_pin_option"
@@ -230,6 +230,19 @@ macroPinPortInfo
 
 endLibrary :: Parser ()
 endLibrary = end_ *> library_
+
+portDirection :: Parser PortDirection
+portDirection
+  =   InputOutput <$ inout_
+  <|> Output <$ output_
+  <|> Input  <$ input_
+  <?> "port_direction"
+
+layerDirection :: Parser LayerDirection
+layerDirection
+  =   Horizontal <$ horizontal_
+  <|> Vertical   <$ vertical_
+  <?> "layer_direction"
 
 boolean :: Parser Bool
 boolean = True <$ on_ <|> False <$ off_ <?> "boolean"
@@ -309,4 +322,8 @@ overhang_ = p Tok_Overhang
 path_ = p Tok_Path
 port_ = p Tok_Port
 shape_ = p Tok_Shape
-
+input_ = p Tok_Input
+output_ = p Tok_Output
+inout_ = p Tok_Inout
+horizontal_ = p Tok_Horizontal
+vertical_ = p Tok_Vertical

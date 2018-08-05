@@ -30,13 +30,19 @@ type LayerName = Ident
 data LayerOption
   = Type Ident
   | Spacing Double
-  | Direction Ident
+  | Direction LayerDirection
   | Pitch Double
   | Offset Double
   | Width Double
   | Resistance Ident Double
   | Capacitance Ident Double
   | EdgeCapacitance Double
+  deriving (Eq, Show)
+
+data PortDirection = Input | Output | InputOutput
+  deriving (Eq, Show)
+
+data LayerDirection = Horizontal | Vertical
   deriving (Eq, Show)
 
 data Via = Via ViaName [ViaLayer] Ident
@@ -65,7 +71,7 @@ data ViaRuleLayer = ViaRuleLayer ViaRuleLayerName [ViaRuleLayerOption]
 type ViaRuleLayerName = Ident
 
 data ViaRuleLayerOption
-  = ViaRuleLayerOptionDirection Ident
+  = ViaRuleLayerOptionDirection LayerDirection
   | ViaRuleLayerOptionWidth Double Double
   | ViaRuleLayerOptionWidthDiscrete Double Integer
   | ViaRuleLayerOptionOverhang Double
@@ -106,7 +112,7 @@ data MacroOption
 data MacroPinOption
   = MacroPinName Ident
   | MacroPinUse Ident
-  | MacroPinDirection Ident (Maybe Ident)
+  | MacroPinDirection PortDirection (Maybe Ident)
   | MacroPinShape Ident
   | MacroPinPort [MacroPinPortInfo]
   deriving (Eq, Show)

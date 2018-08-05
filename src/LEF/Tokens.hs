@@ -58,6 +58,11 @@ data Token
     | Tok_Path
     | Tok_On
     | Tok_Off
+    | Tok_Input
+    | Tok_Output
+    | Tok_Inout
+    | Tok_Horizontal
+    | Tok_Vertical
 
     -- Identifiers
     | Tok_Ident Text

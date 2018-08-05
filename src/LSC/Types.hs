@@ -47,14 +47,14 @@ data Component = Component
   }
 
 data Pin = Pin
-  { pinDirection :: Direction
+  { pinDirection :: Dir
   , pinContacts :: [Rectangle]
   , pinLayer :: Text
   }
 
 type Rectangle = (Double, Double, Double, Double)
 
-data Direction = Input | Output | InOut
+data Dir = In | Out | InOut
 
 data Technology = Technology
   { padDimensions :: (Integer, Integer)
