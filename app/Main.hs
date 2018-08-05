@@ -21,7 +21,7 @@ main = do
     -- Prelude.putStrLn . either show (show . fromBLIF) . parseBLIF =<< Text.readFile "test.blif"
     -- Prelude.putStrLn . either show (show . freeze . fromLEF) . parseLEF =<< Text.readFile "test.lef"
     bootstrap <- either (error . show) fromLEF  . parseLEF  <$> Text.readFile "test.lef"
-    netlist   <- either (error . show) (gnostic bootstrap . fromBLIF) . parseBLIF <$> Text.readFile "test.blif"
+    netlist   <- either (error . show) fromBLIF . parseBLIF <$> Text.readFile "test.blif"
 
     result <- withBackend pipeZ3 $ bootstrap `runLSC` stage1 netlist
     Prelude.putStrLn result

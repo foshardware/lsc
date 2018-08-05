@@ -67,28 +67,18 @@ defaultTechnology = Technology (10^15, 10^15) 1 1 mempty
 type BootstrapT m = StateT Technology m
 type Bootstrap = State Technology
 
+type GnosticT m = ReaderT Technology m
+type Gnostic = Reader Technology
+
 bootstrap :: (Technology -> Technology) -> Bootstrap ()
 bootstrap = modify
 
 freeze :: Bootstrap () -> Technology
 freeze bootstrapping = execState bootstrapping defaultTechnology
 
-thaw :: Technology -> Bootstrap ()
-thaw = put
-
-
-type GnosticT m = ReaderT Technology m
-type Gnostic = Reader Technology
-
-runGnosticT :: GnosticT m r -> Technology -> m r
-runGnosticT = runReaderT
-
-gnostic :: Bootstrap () -> Gnostic r -> r
-gnostic b a = a `runReader` freeze b
-
 
 type LSC b = GnosticT (SMT b)
 
 runLSC :: Bootstrap () -> LSC b r -> SMT b r
-runLSC b a = a `runGnosticT` freeze b 
+runLSC b a = a `runReaderT` freeze b 
 

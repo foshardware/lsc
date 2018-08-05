@@ -5,15 +5,13 @@ import BLIF.Syntax
 import LSC.Types
 
 
-fromBLIF :: BLIF -> Gnostic Netlist
-fromBLIF (BLIF models) = do
-
-  pure $ Netlist
-    [ g | Model _ _ _ _ commands <- models
-    , (i, command) <- zip [1..] commands
-    , g <- gates i command
-    ]
-    []
+fromBLIF :: BLIF -> Netlist
+fromBLIF (BLIF models) = Netlist
+  [ g | Model _ _ _ _ commands <- models
+  , (i, command) <- zip [1..] commands
+  , g <- gates i command
+  ]
+  []
 
 gates :: Int -> Command -> [Gate]
 gates i (LibraryGate _ assignments)
