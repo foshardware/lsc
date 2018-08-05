@@ -5,6 +5,9 @@ module LSC where
 
 import Control.Monad.Reader
 import Control.Monad.Trans
+
+import Data.Map as Map
+
 import Language.SMTLib2
 import Language.SMTLib2.Pipe
 
@@ -20,11 +23,11 @@ stage1 (Netlist gates wires) = do
   edges <- sequence $ lift . newEdge <$> wires
 
   distance nodes
-  boundedSpace nodes
+  -- boundedSpace nodes
 
-  connection nodes edges
+  -- connection nodes edges
   
-  intersection nodes edges
+  -- intersection nodes edges
 
   lift checkSat
   
@@ -77,12 +80,18 @@ boundedSpace nodes = do
 
 
 distance nodes = do
+  technology <- ask
+  let lookupDimensions k = maybe (0, 0) id $ componentDimensions <$> Map.lookup k (components technology)
   lift $ sequence_
     [ assert
-          $ abs' (x1 .-. x2) .>. cint 1
-        .|. abs' (y1 .-. y2) .>. cint 1
+          $ x1 .>. x2 .&. x1 .-. x2 .>. cint (1 + dimX2)
+        .|. x2 .>. x1 .&. x2 .-. x1 .>. cint (1 + dimX1)
+        .|. y1 .>. y2 .&. y1 .-. y2 .>. cint (1 + dimY2)
+        .|. y2 .>. y1 .&. y2 .-. y1 .>. cint (1 + dimY1)
     | node1@(gate1, x1, y1) <- nodes
     , node2@(gate2, x2, y2) <- nodes
+    , let (dimX1, dimY1) = lookupDimensions (gateIdent gate1)
+    , let (dimX2, dimY2) = lookupDimensions (gateIdent gate2)
     , gate1 /= gate2
     ]
 

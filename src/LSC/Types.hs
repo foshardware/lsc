@@ -27,7 +27,8 @@ instance Eq Wire where
 type Index = Int
 
 data Gate = Gate
-  { gateWires :: [Text]
+  { gateIdent :: Text
+  , gateWires :: [Text]
   , gateIndex :: Index
   }
   deriving (Show)
