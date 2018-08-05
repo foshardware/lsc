@@ -248,8 +248,7 @@ boolean :: Parser Bool
 boolean = True <$ on_ <|> False <$ off_ <?> "boolean"
 
 double :: Parser Double
-double = either (fail . show) pure . parse floatingSigned "double" . T.unpack =<< number
-  where floatingSigned = sign >>= \ f -> f <$> floating3 False
+double = either (fail . show) pure . parse (sign <*> floating3 False) "double" . T.unpack =<< number
 
 integer :: Parser Integer
 integer = either (fail . show) pure . parse int "integer" . T.unpack =<< number

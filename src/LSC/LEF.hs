@@ -8,31 +8,39 @@ import LSC.Types
 
 
 fromLEF :: LEF -> Bootstrap ()
-fromLEF (LEF options _ _ _ _ macros) = bootstrap $ \ technology ->
+fromLEF (LEF options _ _ _ _ macros) = do
 
-  let units = fromIntegral $ databaseUnits options
+  bootstrap $ \ technology -> technology
+    { scaleFactor = fromIntegral $ databaseUnits options
+    }
 
-  in technology
+  bootstrap $ \ technology ->
 
-  { components = Map.fromList
-      [ (name, Component
-          (Map.fromList $ pins macroOptions)
-          (let (x, y) = dims macroOptions in (ceiling $ x * units, ceiling $ y * units)))
-      | Macro name macroOptions _ <- macros
-      ]
-  }
+    let tech = technology
+    in technology
+    { components = Map.fromList
+        [ (name, Component
+            (Map.fromList $ pins tech macroOptions)
+            (dims tech macroOptions))
+        | Macro name macroOptions _ <- macros
+        ]
+    }
 
-pins (MacroPin ident options _ : rest) = (ident, Pin
-  (direction options)
-  (contacts options)
-  (layer options))
-  : pins rest
-pins (_ : rest) = pins rest
-pins [] = []
+pins t (MacroPin ident options _ : rest) = (ident, Pin (direction options) (port t options)) : pins t rest
+pins t (_ : rest) = pins t rest
+pins _ [] = []
 
-dims (MacroSize x y : _) = (x, y)
-dims (_ : rest) = dims rest
-dims [] = (0, 0)
+port t (MacroPinPort (MacroPinPortLayer ident : rest) : _) = Port ident (portRectangles t rest)
+port t (_ : rest) = port t rest
+port _ [] = Port mempty mempty
+
+portRectangles t (MacroPinPortRect a b c d : rest) = (a, b, c, d) : portRectangles t rest
+portRectangles t (_ : rest) = portRectangles t rest
+portRectangles _ [] = []
+
+dims t (MacroSize x y : _) = (x, y)
+dims t (_ : rest) = dims t rest
+dims _ [] = (0, 0)
 
 databaseUnits (Units (DatabaseList x) : _) = x
 databaseUnits (_ : rest) = databaseUnits rest
@@ -43,6 +51,3 @@ direction (MacroPinDirection Output _ : _) = Out
 direction (MacroPinDirection InputOutput _ : _) = InOut
 direction (_ : rest) = direction rest
 direction [] = InOut
-
-contacts _ = mempty
-layer _ = mempty

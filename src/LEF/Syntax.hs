@@ -122,7 +122,6 @@ data MacroPinPortInfo
   | MacroPinPortRect Double Double Double Double
   | MacroPinPortClass Ident
   | MacroPinPortWidth Double
-  | MacroPinPortWidthDiscrete Integer
   | MacroPinPortPath Double Double Double Double
   deriving (Eq, Show)
 

@@ -43,13 +43,15 @@ runLSC = runReaderT
 
 data Component = Component
   { componentPins :: Map Text Pin
-  , componentDimensions :: (Integer, Integer)
+  , componentDimensions :: (Double, Double)
   } deriving Show
 
-data Pin = Pin
-  { pinDirection :: Dir
-  , pinContacts :: [Rectangle]
-  , pinLayer :: Text
+data Pin = Pin Dir Port
+  deriving Show
+
+data Port = Port
+  { portLayer :: Text
+  , portRects :: [Rectangle]
   } deriving Show
 
 type Rectangle = (Double, Double, Double, Double)
@@ -58,8 +60,9 @@ data Dir = In | Out | InOut
   deriving Show
 
 data Technology = Technology
-  { padDimensions :: (Integer, Integer)
+  { padDimensions :: (Double, Double)
   , wireWidth :: Integer
+  , scaleFactor :: Integer
   , components :: Map Text Component
   } deriving Show
 
@@ -70,4 +73,4 @@ bootstrap :: (Technology -> Technology) -> Bootstrap ()
 bootstrap = modify
 
 compileTechnology :: Bootstrap () -> Technology
-compileTechnology boot = boot `execState` Technology (10^15, 10^15) 1 mempty
+compileTechnology boot = boot `execState` Technology (10^15, 10^15) 1 1 mempty
