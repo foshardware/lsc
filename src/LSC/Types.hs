@@ -79,6 +79,6 @@ freeze bootstrapping = execState bootstrapping defaultTechnology
 
 type LSC b = GnosticT (SMT b)
 
-runLSC :: LSC b r -> Bootstrap () -> SMT b r
-runLSC a b = a `runReaderT` freeze b
+runLSC :: Bootstrap () -> LSC b r -> SMT b r
+runLSC b a = a `runReaderT` freeze b 
 
