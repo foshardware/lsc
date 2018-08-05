@@ -65,7 +65,7 @@ neighbours [] = []
 
 boundedSpace nodes = do
   technology <- ask
-  let (xDim, yDim) = dimensions technology
+  let (xDim, yDim) = padDimensions technology
   lift $ sequence_
     [ assert
           $ x .>. cint 0

@@ -1,7 +1,8 @@
-{-# LANGUAGE GADTs, DataKinds, TupleSections #-}
+{-# LANGUAGE GADTs, DataKinds #-}
 
 module LSC.Types where
 
+import Data.Map (Map)
 import Data.Text (Text)
 
 import Control.Monad.Reader
@@ -38,15 +39,30 @@ instance Eq Gate where
 type LSC b = ReaderT Technology (SMT b)
 
 runLSC = runReaderT
- 
+
+
+data Component = Component
+  { componentPins :: Map Text Pin
+  , componentDimensions :: (Integer, Integer)
+  }
+
+data Pin = Pin
+  { pinDirection :: Direction
+  , pinContacts :: [Rectangle]
+  , pinLayer :: Text
+  }
+
+type Rectangle = (Double, Double, Double, Double)
+
+data Direction = Input | Output | InOut
 
 data Technology = Technology
-  { dimensions :: (Integer, Integer)
+  { padDimensions :: (Integer, Integer)
   , wireWidth :: Integer
+  , components :: Map Text Component
   }
 
 type BootstrapT m = StateT Technology m
-
 type Bootstrap = State Technology
 
 bootstrap :: (Technology -> Technology) -> Bootstrap ()

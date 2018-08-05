@@ -32,7 +32,7 @@ library
       src
   ghc-options: -Wall
   build-depends:  base >=4.2, mtl, smtlib2, smtlib2-pipe
-                , array, parsec, parsec-numbers, text
+                , array, parsec, parsec-numbers, text, containers
   exposed-modules:
       BLIF.Parser,
       BLIF.Syntax,
