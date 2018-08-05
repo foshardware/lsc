@@ -13,8 +13,11 @@ plot :: Text
 plot = renderSvg svgDoc
 
 svgDoc :: S.Svg
-svgDoc = S.docTypeSvg ! A.version "1.1" ! A.width "150" ! A.height "100" $ do
-  rect (10, 20, 20, 70)
+svgDoc = S.docTypeSvg
+  ! A.version "1.1"
+  ! A.width "150"
+  ! A.height "100" $ do
+    rect (10, 20, 20, 70)
 
 rect :: (Integer, Integer, Integer, Integer) -> S.Svg
 rect (x, y, width, height) = S.path
