@@ -44,26 +44,30 @@ runLSC = runReaderT
 data Component = Component
   { componentPins :: Map Text Pin
   , componentDimensions :: (Integer, Integer)
-  }
+  } deriving Show
 
 data Pin = Pin
   { pinDirection :: Dir
   , pinContacts :: [Rectangle]
   , pinLayer :: Text
-  }
+  } deriving Show
 
 type Rectangle = (Double, Double, Double, Double)
 
 data Dir = In | Out | InOut
+  deriving Show
 
 data Technology = Technology
   { padDimensions :: (Integer, Integer)
   , wireWidth :: Integer
   , components :: Map Text Component
-  }
+  } deriving Show
 
 type BootstrapT m = StateT Technology m
 type Bootstrap = State Technology
 
 bootstrap :: (Technology -> Technology) -> Bootstrap ()
 bootstrap = modify
+
+compileTechnology :: Bootstrap () -> Technology
+compileTechnology boot = boot `execState` Technology (10^15, 10^15) 1 mempty

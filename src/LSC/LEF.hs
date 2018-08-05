@@ -44,5 +44,5 @@ direction (MacroPinDirection InputOutput _ : _) = InOut
 direction (_ : rest) = direction rest
 direction [] = InOut
 
-contacts = undefined
-layer = undefined
+contacts _ = mempty
+layer _ = mempty
