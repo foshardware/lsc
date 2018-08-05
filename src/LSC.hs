@@ -71,7 +71,7 @@ boundedSpace nodes = do
   let (xDim, yDim) = padDimensions technology
   lift $ sequence_
     [ assert
-          $ x .>. cint 0
+        $   x .>. cint 0
         .&. y .>. cint 0
         .&. x .<. cint xDim
         .&. y .<. cint yDim
@@ -84,10 +84,10 @@ distance nodes = do
   let lookupDimensions k = maybe (0, 0) id $ componentDimensions <$> Map.lookup k (components technology)
   lift $ sequence_
     [ assert
-          $ x1 .>. x2 .&. x1 .-. x2 .>. cint (1 + dimX2)
-        .|. x2 .>. x1 .&. x2 .-. x1 .>. cint (1 + dimX1)
-        .|. y1 .>. y2 .&. y1 .-. y2 .>. cint (1 + dimY2)
-        .|. y2 .>. y1 .&. y2 .-. y1 .>. cint (1 + dimY1)
+        $   x1 .>. x2 .&. x1 .-. x2 .>. cint dimX2
+        .|. x2 .>. x1 .&. x2 .-. x1 .>. cint dimX1
+        .|. y1 .>. y2 .&. y1 .-. y2 .>. cint dimY2
+        .|. y2 .>. y1 .&. y2 .-. y1 .>. cint dimY1
     | node1@(gate1, x1, y1) <- nodes
     , node2@(gate2, x2, y2) <- nodes
     , let (dimX1, dimY1) = lookupDimensions (gateIdent gate1)
