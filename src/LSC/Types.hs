@@ -36,11 +36,6 @@ instance Eq Gate where
   g == h = gateIndex g == gateIndex h
 
 
-type LSC b = ReaderT Technology (SMT b)
-
-runLSC = runReaderT
-
-
 data Component = Component
   { componentPins :: Map Text Pin
   , componentDimensions :: (Integer, Integer)
@@ -66,11 +61,24 @@ data Technology = Technology
   , components :: Map Text Component
   } deriving Show
 
+defaultTechnology :: Technology
+defaultTechnology = Technology (10^15, 10^15) 1 1 mempty
+
 type BootstrapT m = StateT Technology m
 type Bootstrap = State Technology
+
+type GnosticT m = ReaderT Technology m
+type Gnostic = Reader Technology
 
 bootstrap :: (Technology -> Technology) -> Bootstrap ()
 bootstrap = modify
 
-compileTechnology :: Bootstrap () -> Technology
-compileTechnology boot = boot `execState` Technology (10^15, 10^15) 1 1 mempty
+freeze :: Bootstrap () -> Technology
+freeze bootstrapping = execState bootstrapping defaultTechnology
+
+
+type LSC b = GnosticT (SMT b)
+
+runLSC :: LSC b r -> Bootstrap () -> SMT b r
+runLSC a b = a `runReaderT` freeze b
+
