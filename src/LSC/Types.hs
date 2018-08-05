@@ -43,7 +43,7 @@ runLSC = runReaderT
 
 data Component = Component
   { componentPins :: Map Text Pin
-  , componentDimensions :: (Double, Double)
+  , componentDimensions :: (Integer, Integer)
   } deriving Show
 
 data Pin = Pin Dir Port
@@ -54,15 +54,15 @@ data Port = Port
   , portRects :: [Rectangle]
   } deriving Show
 
-type Rectangle = (Double, Double, Double, Double)
+type Rectangle = (Integer, Integer, Integer, Integer)
 
 data Dir = In | Out | InOut
   deriving Show
 
 data Technology = Technology
-  { padDimensions :: (Double, Double)
+  { padDimensions :: (Integer, Integer)
   , wireWidth :: Integer
-  , scaleFactor :: Integer
+  , scaleFactor :: Double
   , components :: Map Text Component
   } deriving Show
 

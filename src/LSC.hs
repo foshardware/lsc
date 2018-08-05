@@ -70,8 +70,8 @@ boundedSpace nodes = do
     [ assert
           $ x .>. cint 0
         .&. y .>. cint 0
-        .&. x .<. cint (ceiling xDim)
-        .&. y .<. cint (ceiling yDim)
+        .&. x .<. cint xDim
+        .&. y .<. cint yDim
     | (_, x, y) <- nodes
     ]
 
