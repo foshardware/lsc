@@ -19,8 +19,9 @@ import LSC.Types
 main = do
 
     -- Prelude.putStrLn . either show (show . fromBLIF) . parseBLIF =<< Text.readFile "test.blif"
-    Prelude.putStrLn . either show (show . freeze . fromLEF) . parseLEF =<< Text.readFile "test.lef"
+    -- Prelude.putStrLn . either show (show . freeze . fromLEF) . parseLEF =<< Text.readFile "test.lef"
+    bootstrap <- either (error . show) fromLEF  . parseLEF  <$> Text.readFile "test.lef"
+    netlist   <- either (error . show) fromBLIF . parseBLIF <$> Text.readFile "test.blif"
 
-
-    -- result <- withBackend pipeZ3 $ stage1 netlist `runLSC` tech
-
+    result <- withBackend pipeZ3 $ bootstrap `runLSC` stage1 netlist
+    Prelude.putStrLn result
