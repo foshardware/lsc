@@ -8,7 +8,6 @@ import Control.Monad.Trans
 
 import Data.Map as Map
 
-
 import Data.SBV
 import Data.SBV.Tools.CodeGen
 import Data.SBV.Internals (Timing(PrintTiming))
@@ -16,78 +15,61 @@ import Data.SBV.Internals (Timing(PrintTiming))
 import LSC.Types
 
 
-type Stage1 = Circuit2D
+type Stage1 = SBool
 
 stage1 :: Netlist -> LSC Stage1
 stage1 (Netlist gates wires) = do
-  nodes <- sequence $ lift . newNode <$> gates
-  edges <- sequence $ newEdge <$> wires
+  nodes <- sequence $ newNode <$> gates
+  -- edges <- sequence $ newEdge <$> wires
 
   distance nodes
   boundedSpace nodes
 
-  -- connection nodes edges
-  
-  -- intersection nodes edges
-
-  technology <- ask
-
-  -- minimize component locations
-  lift $ forM_ nodes $ \ (_, x, y) ->
-      minimize "stage1" x *> minimize "stage1" y
-
-  let nodesResult =
-        [ ( maybe 0 id $ unliteral x
-          , maybe 0 id $ unliteral y
-          , fst $ lookupDimensions technology g
-          , snd $ lookupDimensions technology g
-          ) | (g, x, y) <- nodes ]
-
-  pure nodesResult
-
-
-neighbours :: [a] -> [(a, a)]
-neighbours (x : y : xs) = (x, y) : neighbours (y : xs)
-neighbours (x : xs) = neighbours xs
-neighbours [] = []
+  lift $ sBool "satisfiable"
 
 
 boundedSpace nodes = do
-  technology <- ask
-  let (xDim, yDim) = padDimensions technology
+  (xDim, yDim) <- padDimensions <$> ask
   lift $ sequence_
     [ constrain
         $   x .> literal 0
         &&& y .> literal 0
         &&& x .< literal xDim
         &&& y .< literal yDim
-    | (_, x, y) <- nodes
+    | (_, x, y, _, _) <- nodes
     ]
 
 
 distance nodes = do
-  technology <- ask
   lift $ sequence_
     [ constrain
-        $   x1 .> x2 &&& x1 - x2 .> literal dimX2
-        ||| x2 .> x1 &&& x2 - x1 .> literal dimX1
-        ||| y1 .> y2 &&& y1 - y2 .> literal dimY2
-        ||| y2 .> y1 &&& y2 - y1 .> literal dimY1
-    | node1@(gate1, x1, y1) <- nodes
-    , node2@(gate2, x2, y2) <- nodes
-    , let (dimX1, dimY1) = lookupDimensions technology gate1
-    , let (dimX2, dimY2) = lookupDimensions technology gate2
+        $   x1 .> x2 &&& x1 - x2 .> w2
+        ||| x2 .> x1 &&& x2 - x1 .> w1
+        ||| y1 .> y2 &&& y1 - y2 .> h2
+        ||| y2 .> y1 &&& y2 - y1 .> h1
+    | node1@(gate1, x1, y1, w1, h1) <- nodes
+    , node2@(gate2, x2, y2, w2, h2) <- nodes
     , gate1 /= gate2
     ]
 
 
 -- upper left corner
-newNode gate = (gate, , )
-    <$> free_
-    <*> free_
+newNode :: Gate -> LSC (Gate, SInteger, SInteger, SInteger, SInteger)
+newNode g = do
 
-newEdge :: Wire -> LSC (Wire, [(SInteger, SInteger)])
-newEdge wire = (wire, )
-    <$> sequence (replicate 8 newPosition)
-    where newPosition = (, ) <$> lift free_ <*> lift free_
+  technology <- ask
+
+  let suffix = show $ gateIndex g
+      (xDim, yDim) = lookupDimensions technology g
+
+  lift $ do
+    x <- free $ 'x' : suffix
+    y <- free $ 'y' : suffix
+    w <- free $ 'w' : suffix
+    h <- free $ 'h' : suffix
+
+    constrain $ w .== literal xDim
+    constrain $ h .== literal yDim
+
+    pure (g, x, y, w, h)
 
