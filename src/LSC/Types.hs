@@ -3,6 +3,7 @@
 module LSC.Types where
 
 import Data.Map (Map)
+import qualified Data.Map as Map
 import Data.Text (Text)
 
 import Control.Monad.Reader
@@ -64,6 +65,9 @@ data Technology = Technology
 
 defaultTechnology :: Technology
 defaultTechnology = Technology (10^15, 10^15) 1 1 mempty
+
+lookupDimensions :: Technology -> Gate -> (Integer, Integer)
+lookupDimensions tech g = maybe (0, 0) id $ componentDimensions <$> Map.lookup (gateIdent g) (components tech)
 
 type BootstrapT m = StateT Technology m
 type Bootstrap = State Technology

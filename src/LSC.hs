@@ -17,7 +17,9 @@ import LSC.Types
 pipeZ3 = createPipe "z3" ["-smt2", "-in"]
 
 
-stage1 :: Backend b => Netlist -> LSC b String
+type Stage1 = [(Integer, Integer, Integer, Integer)]
+
+stage1 :: Backend b => Netlist -> LSC b Stage1
 stage1 (Netlist gates wires) = do
   nodes <- sequence $ lift . newNode <$> gates
   edges <- sequence $ lift . newEdge <$> wires
@@ -31,9 +33,16 @@ stage1 (Netlist gates wires) = do
 
   lift checkSat
   
-  nodesResult <- lift $ mapM ( \ (_, x, y) -> (,) <$> getValue x <*> getValue y ) nodes
+  technology <- ask
+  nodesResult <- lift $ forM nodes $ \ (g, x, y) -> do
+    (, , , )
+      <$> (fromIntegral <$> getValue x)
+      <*> (fromIntegral <$> getValue y)
+      <*> (pure $ fst $ lookupDimensions technology g)
+      <*> (pure $ snd $ lookupDimensions technology g)
   edgesResult <- lift $ mapM ( \ (_, path) -> sequence [(,) <$> getValue x <*> getValue y | (x, y) <- path]) edges
-  pure $ show nodesResult ++ "\n" ++ show edgesResult
+
+  pure nodesResult
 
 
 intersection nodes edges = do
@@ -81,7 +90,6 @@ boundedSpace nodes = do
 
 distance nodes = do
   technology <- ask
-  let lookupDimensions k = maybe (0, 0) id $ componentDimensions <$> Map.lookup k (components technology)
   lift $ sequence_
     [ assert
         $   x1 .>. x2 .&. x1 .-. x2 .>. cint dimX2
@@ -90,8 +98,8 @@ distance nodes = do
         .|. y2 .>. y1 .&. y2 .-. y1 .>. cint dimY1
     | node1@(gate1, x1, y1) <- nodes
     , node2@(gate2, x2, y2) <- nodes
-    , let (dimX1, dimY1) = lookupDimensions (gateIdent gate1)
-    , let (dimX2, dimY2) = lookupDimensions (gateIdent gate2)
+    , let (dimX1, dimY1) = lookupDimensions technology gate1
+    , let (dimX2, dimY2) = lookupDimensions technology gate2
     , gate1 /= gate2
     ]
 

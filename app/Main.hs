@@ -13,6 +13,7 @@ import LEF.Parser
 import LSC
 import LSC.BLIF
 import LSC.LEF
+import LSC.SVG
 import LSC.Types
 
 
@@ -24,4 +25,4 @@ main = do
     netlist   <- either (error . show) (gnostic bootstrap . fromBLIF) . parseBLIF <$> Text.readFile "test.blif"
 
     result <- withBackend pipeZ3 $ bootstrap `runLSC` stage1 netlist
-    Prelude.putStrLn result
+    Prelude.putStrLn $ show result
