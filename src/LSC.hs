@@ -25,7 +25,7 @@ stage1 (Netlist gates wires) = do
   edges <- sequence $ lift . newEdge <$> wires
 
   distance nodes
-  -- boundedSpace nodes
+  boundedSpace nodes
 
   -- connection nodes edges
   

@@ -16,23 +16,25 @@ plotStdout :: Circuit2D -> IO ()
 plotStdout = Text.putStr . plot
 
 plot :: Circuit2D -> Text
-plot = renderSvg . svgDoc
+plot = renderSvg . svgDoc . scaleDown 100
 
 svgDoc :: Circuit2D -> S.Svg
 svgDoc cs = S.docTypeSvg
   ! A.version "1.1"
-  ! A.width "1500"
+  ! A.width "10000"
   ! A.height "10000"
   $ do
     mapM_ rect cs
 
 rect :: Rectangle -> S.Svg
-rect (x', y', width', height') = S.path
+rect (x, y, width, height) = S.path
   ! A.d (mkPath $ m x y *> h (x + width) *> v (y + height) *> h x *> z)
   ! A.stroke "black"
   ! A.fill "transparent"
-  ! A.strokeWidth "2"
-  where x = div x' 1000
-        y = div y' 1000
-        width = div width' 1000
-        height = div height' 1000
+  ! A.strokeWidth "4"
+
+scaleDown :: Integer -> Circuit2D -> Circuit2D
+scaleDown n circuit =
+  [ (div a n, div b n, div c n, div d n)
+  | (a, b, c, d) <- circuit
+  ]

@@ -64,7 +64,7 @@ data Technology = Technology
   } deriving Show
 
 defaultTechnology :: Technology
-defaultTechnology = Technology (10^15, 10^15) 1 1 mempty
+defaultTechnology = Technology (10^6, 10^6) 1 1 mempty
 
 lookupDimensions :: Technology -> Gate -> (Integer, Integer)
 lookupDimensions tech g = maybe (0, 0) id $ componentDimensions <$> Map.lookup (gateIdent g) (components tech)
