@@ -8,8 +8,10 @@ import Data.Text (Text)
 
 import Control.Monad.Reader
 import Control.Monad.State
-import Language.SMTLib2
-import Language.SMTLib2.Pipe
+
+import Data.SBV
+import Data.SBV.Tools.CodeGen
+import Data.SBV.Internals (Timing(PrintTiming), Result)
 
 
 data Netlist = Netlist [Gate] [Wire]
@@ -92,10 +94,11 @@ gnostic :: Bootstrap () -> Gnostic r -> r
 gnostic b a = a `runReader` freeze b
 
 
-type LSC b = GnosticT (SMT b)
+type LSC = GnosticT Symbolic
 
-runLSC :: Bootstrap () -> LSC b r -> SMT b r
-runLSC b a = a `runGnosticT` freeze b 
+runLSC :: Bootstrap () -> LSC r -> Symbolic r
+runLSC b a = a `runGnosticT` freeze b
 
 
 type Circuit2D = [Rectangle]
+

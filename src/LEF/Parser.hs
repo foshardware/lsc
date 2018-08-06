@@ -11,8 +11,9 @@ import Text.Parsec hiding (option, optional)
 import Text.Parsec.String (GenParser)
 import Text.Parsec.Combinator hiding (option, optional)
 import Text.Parsec.Pos
-import Text.ParserCombinators.Parsec.Number hiding (number)
 import Prelude hiding (null)
+
+import LSC.Parser.Numbers (floating3, int, sign)
 
 import LEF.Lexer
 import LEF.Syntax

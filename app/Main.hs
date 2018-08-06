@@ -4,11 +4,10 @@ module Main where
 
 import Data.Text.IO as Text
 
-import Language.SMTLib2
-import Language.SMTLib2.Pipe
-
 import BLIF.Parser
 import LEF.Parser
+
+import Data.SBV
 
 import LSC
 import LSC.BLIF
@@ -24,6 +23,6 @@ main = do
     bootstrap <- either (error . show) fromLEF  . parseLEF  <$> Text.readFile "test.lef"
     netlist   <- either (error . show) (gnostic bootstrap . fromBLIF) . parseBLIF <$> Text.readFile "test.blif"
 
-    result <- withBackend pipeZ3 $ bootstrap `runLSC` stage1 netlist
+    result <- runSMT $ bootstrap `runLSC` stage1 netlist
     plotStdout result
 

@@ -19,8 +19,7 @@ executable lsc
   -- other-extensions:    
   build-depends:       base >=4.2
                      , lsc
-                     , smtlib2
-                     , smtlib2-pipe
+                     , sbv
                      , text
   hs-source-dirs:      app
   ghc-options:         -Wall
@@ -35,11 +34,9 @@ library
   ghc-options: -Wall
   build-depends:  base >=4.2
                 , mtl
-                , smtlib2
-                , smtlib2-pipe
+                , sbv
                 , array
                 , parsec
-                , parsec-numbers
                 , text
                 , containers
                 , blaze-svg
@@ -58,6 +55,8 @@ library
       Liberty.Syntax,
       Liberty.Tokens,
       Liberty.Lexer,
+
+      LSC.Parser.Numbers,
 
       LSC,
       LSC.BLIF,
