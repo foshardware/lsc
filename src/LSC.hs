@@ -17,7 +17,7 @@ import LSC.Types
 pipeZ3 = createPipe "z3" ["-smt2", "-in"]
 
 
-type Stage1 = [(Integer, Integer, Integer, Integer)]
+type Stage1 = Circuit2D
 
 stage1 :: Backend b => Netlist -> LSC b Stage1
 stage1 (Netlist gates wires) = do

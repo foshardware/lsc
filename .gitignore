@@ -2,3 +2,6 @@ dist/
 
 *.blif
 *.lef
+
+*.svg
+

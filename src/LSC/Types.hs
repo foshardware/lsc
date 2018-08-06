@@ -97,3 +97,5 @@ type LSC b = GnosticT (SMT b)
 runLSC :: Bootstrap () -> LSC b r -> SMT b r
 runLSC b a = a `runGnosticT` freeze b 
 
+
+type Circuit2D = [Rectangle]
