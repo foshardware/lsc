@@ -3,7 +3,7 @@ name:                lsc
 version:             0.1.0.0
 -- synopsis:            
 -- description:         
-license:             ISC
+license:             GPL-3
 license-file:        LICENSE
 author:              Andreas Westerwick
 maintainer:          westerwick@pconas.de
