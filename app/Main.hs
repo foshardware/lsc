@@ -23,6 +23,7 @@ main = do
     bootstrap <- either (error . show) fromLEF  . parseLEF  <$> Text.readFile "test.lef"
     netlist   <- either (error . show) (gnostic bootstrap . fromBLIF) . parseBLIF <$> Text.readFile "test.blif"
 
-    result <- bootstrap `runLSC` stage1 netlist
-    plotStdout $ lexNodes result
+    Prelude.putStrLn $ show netlist
+    -- result <- bootstrap `runLSC` stage1 netlist
+    -- plotStdout $ lexNodes result
 

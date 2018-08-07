@@ -18,8 +18,8 @@ data Netlist = Netlist [Gate] [Wire]
   deriving (Eq, Show)
 
 data Wire = Wire 
-  { source :: Gate
-  , target :: Gate
+  { source :: (Gate, Pin)
+  , target :: (Gate, Pin)
   , wireIndex :: Index
   }
   deriving (Show)

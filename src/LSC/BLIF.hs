@@ -23,7 +23,9 @@ fromBLIF (BLIF models) = do
         ]
 
   let pins = 
-        [ if pinDir pin == In then Right (gate, wire, pin) else Left (gate, wire, pin)
+        [ if pinDir pin == In
+            then Right (gate, wire, pin)
+            else Left (gate, wire, pin)
         | gate@(Gate ident assignments _) <- nodes
         , (contact, wire) <- assignments
         , com <- maybeToList $ Map.lookup ident $ components technology
@@ -31,9 +33,9 @@ fromBLIF (BLIF models) = do
         ]
 
   let edges =
-        [ Wire sourceGate targetGate 0
-        | (sourceGate, input, pinIn) <- rights pins
-        , (targetGate, output, pinOut) <- lefts pins
+        [ Wire (sourceGate, pinOut) (targetGate, pinIn) 0
+        | (sourceGate, input, pinOut) <- lefts pins
+        , (targetGate, output, pinIn) <- rights pins
         , input == output
         ]
 
