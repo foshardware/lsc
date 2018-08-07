@@ -19,7 +19,7 @@ type Stage1 = SBool
 
 stage1 :: Netlist -> LSC Stage1
 stage1 (Netlist gates wires) = do
-  nodes <- sequence $ newNode <$> gates
+  nodes <- sequence $ freeNode <$> gates
   -- edges <- sequence $ newEdge <$> wires
 
   distance nodes
@@ -54,8 +54,8 @@ distance nodes = do
 
 
 -- upper left corner
-newNode :: Gate -> LSC (Gate, SInteger, SInteger, SInteger, SInteger)
-newNode g = do
+freeNode :: Gate -> LSC (Gate, SInteger, SInteger, SInteger, SInteger)
+freeNode g = do
 
   technology <- ask
 

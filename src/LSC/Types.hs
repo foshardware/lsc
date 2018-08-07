@@ -31,7 +31,7 @@ type Index = Int
 
 data Gate = Gate
   { gateIdent :: Text
-  , gateWires :: [Text]
+  , gateWires :: [(Text, Text)]
   , gateIndex :: Index
   }
   deriving (Show)
@@ -45,8 +45,10 @@ data Component = Component
   , componentDimensions :: (Integer, Integer)
   } deriving Show
 
-data Pin = Pin Dir Port
-  deriving Show
+data Pin = Pin
+  { pinDir  :: Dir
+  , pinPort :: Port
+  } deriving Show
 
 data Port = Port
   { portLayer :: Text
@@ -56,7 +58,7 @@ data Port = Port
 type Rectangle = (Integer, Integer, Integer, Integer)
 
 data Dir = In | Out | InOut
-  deriving Show
+  deriving (Eq, Show)
 
 data Technology = Technology
   { padDimensions :: (Integer, Integer)
