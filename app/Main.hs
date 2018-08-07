@@ -24,6 +24,5 @@ main = do
     netlist   <- either (error . show) (gnostic bootstrap . fromBLIF) . parseBLIF <$> Text.readFile "test.blif"
 
     result <- bootstrap `runLSC` stage1 netlist
-    Prelude.putStrLn $ show result
-    -- plotStdout result
+    plotStdout $ lexNodes result
 
