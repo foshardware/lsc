@@ -55,4 +55,4 @@ gates i (Subcircuit ident assignments)
         ident
         assignments
         i ]
-gates i _ = []
+gates _ _ = []

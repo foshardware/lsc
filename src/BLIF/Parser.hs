@@ -2,14 +2,11 @@
 
 module BLIF.Parser where
 
-import Control.Applicative (optional)
 import Control.Monad
-import Data.Char
 import Data.Text (Text)
 import qualified Data.Text as T
 import Text.Parsec hiding (optional)
 import Text.Parsec.String (GenParser)
-import Text.Parsec.Combinator hiding (optional)
 import Text.Parsec.Pos
 import Prelude hiding (null)
 

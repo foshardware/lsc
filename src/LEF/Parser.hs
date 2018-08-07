@@ -4,12 +4,10 @@ module LEF.Parser where
 
 import Control.Applicative (optional)
 import Control.Monad
-import Data.Char
 import Data.Text (Text)
 import qualified Data.Text as T
 import Text.Parsec hiding (option, optional)
 import Text.Parsec.String (GenParser)
-import Text.Parsec.Combinator hiding (option, optional)
 import Text.Parsec.Pos
 import Prelude hiding (null)
 

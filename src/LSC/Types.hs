@@ -1,3 +1,4 @@
+{-# OPTIONS_GHC -fno-warn-type-defaults #-}
 {-# LANGUAGE GADTs, DataKinds #-}
 
 module LSC.Types where
@@ -10,8 +11,6 @@ import Control.Monad.Reader
 import Control.Monad.State
 
 import Data.SBV
-import Data.SBV.Tools.CodeGen
-import Data.SBV.Internals (Timing(PrintTiming), Result)
 
 
 data Netlist = Netlist [Gate] [Wire]
@@ -68,7 +67,7 @@ data Technology = Technology
   } deriving Show
 
 defaultTechnology :: Technology
-defaultTechnology = Technology (10^6, 10^6) 1 1 mempty
+defaultTechnology = Technology (10^6 :: Integer, 10^6 :: Integer) 1 1 mempty
 
 lookupDimensions :: Technology -> Gate -> (Integer, Integer)
 lookupDimensions tech g = maybe (0, 0) id $ componentDimensions <$> Map.lookup (gateIdent g) (components tech)

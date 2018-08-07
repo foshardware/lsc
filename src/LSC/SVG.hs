@@ -5,7 +5,7 @@ module LSC.SVG where
 import Data.Text.Lazy
 import qualified Data.Text.Lazy.IO as Text
 
-import Text.Blaze.Svg11 ((!), mkPath, rotate, l, m, h, v, z)
+import Text.Blaze.Svg11 ((!), mkPath, m, h, v, z)
 import qualified Text.Blaze.Svg11 as S
 import qualified Text.Blaze.Svg11.Attributes as A
 import Text.Blaze.Svg.Renderer.Text (renderSvg)

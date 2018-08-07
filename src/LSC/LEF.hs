@@ -1,4 +1,6 @@
 
+{-# OPTIONS_GHC -fno-warn-missing-signatures #-}
+
 module LSC.LEF where
 
 import Data.Map as Map

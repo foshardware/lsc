@@ -4,13 +4,9 @@
 module LSC where
 
 import Control.Monad.Reader
-import Control.Monad.Trans
-
-import qualified Data.Map as Map
 
 import Data.SBV
-import Data.SBV.Tools.CodeGen
-import Data.SBV.Internals (Timing(PrintTiming), modelAssocs)
+import Data.SBV.Internals (modelAssocs)
 
 import LSC.Types
 
@@ -47,8 +43,8 @@ distance nodes = do
         ||| x2 .> x1 &&& x2 - x1 .> w1
         ||| y1 .> y2 &&& y1 - y2 .> h2
         ||| y2 .> y1 &&& y2 - y1 .> h1
-    | node1@(gate1, x1, y1, w1, h1) <- nodes
-    , node2@(gate2, x2, y2, w2, h2) <- nodes
+    | (gate1, x1, y1, w1, h1) <- nodes
+    , (gate2, x2, y2, w2, h2) <- nodes
     , gate1 /= gate2
     ]
 
@@ -75,13 +71,15 @@ freeNode g = do
 
 
 lexNodes :: SatResult -> [Rectangle]
-lexNodes (SatResult (Satisfiable _ prop)) = lex $ modelAssocs prop
+lexNodes (SatResult (Satisfiable _ prop)) = go $ modelAssocs prop
 
   where
 
-    lex xs@(('x' : _ : index, _) : _) = path as ++ lex bs
+    go xs@(('x' : _ : _, _) : _) = path as ++ go bs
           where (as, bs) = splitAt 4 xs
-    lex _ = []
+    go _ = []
 
     path ((_, x) : (_, y) : (_, w) : (_, h) : _) = [(fromCW x, fromCW y, fromCW w, fromCW h)]
     path _ = []
+
+lexNodes _ = []

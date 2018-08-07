@@ -9,7 +9,6 @@ import Control.Monad.Trans.Maybe
 import Data.Foldable
 
 import qualified Data.Text.IO as Text
-import qualified Data.Text.Lazy.IO as Lazy
 
 import System.Console.GetOpt
 import System.Environment
@@ -28,7 +27,8 @@ versionString :: String
 versionString = "lsc 0.1.0.0"
 
 type App = MaybeT IO
-main = runMaybeT program
+main :: IO ()
+main = void $ runMaybeT program
 
 program :: App ()
 program = do
@@ -47,10 +47,10 @@ program = do
         blifFiles  = [v | (k, v) <- opts, k == Blif]
 
     result <- lift $ do
-        bootstrap <- either (error . show) fromLEF . parseLEF <$> Text.readFile (head lefFiles)
-        netlist   <- either (error . show) (gnostic bootstrap . fromBLIF) . parseBLIF <$> Text.readFile (head blifFiles)
+        bootstr <- either (error . show) fromLEF . parseLEF <$> Text.readFile (head lefFiles)
+        netlist <- either (error . show) (gnostic bootstr . fromBLIF) . parseBLIF <$> Text.readFile (head blifFiles)
 
-        bootstrap `runLSC` stage1 netlist
+        bootstr `runLSC` stage1 netlist
 
     -- svg output
     when (any ( \ (k, v) -> k == Compile && v == "svg") opts)
