@@ -6,7 +6,7 @@ module LSC where
 import Control.Monad.Reader
 import Control.Monad.Trans
 
-import Data.Map as Map
+import qualified Data.Map as Map
 
 import Data.SBV
 import Data.SBV.Tools.CodeGen
