@@ -19,7 +19,8 @@ executable lsc
   -- other-extensions:    
   build-depends:       base >=4.2
                      , lsc
-                     , sbv
+                     , transformers
+                     , mtl
                      , text
   hs-source-dirs:      app
   ghc-options:         -Wall
