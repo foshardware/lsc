@@ -79,7 +79,7 @@ options =
     , Option ['V', '?'] ["version"] (NoArg  (Version, []))  "show version number"
     , Option ['b']      ["blif"]    (ReqArg (Blif, ) "FILE") "BLIF file"
     , Option ['l']      ["lef"]     (ReqArg (Lef,  ) "FILE") "LEF file"
-    , Option ['c']      ["compile"]  (OptArg ((Compile,  ) . maybe "svg" id) "svg, magic") "output format"
+    , Option ['c']      ["compile"] (OptArg ((Compile,  ) . maybe "svg" id) "svg,magic") "output format"
     ]
 
 compilerOpts :: [String] -> IO ([Flag], [String])
