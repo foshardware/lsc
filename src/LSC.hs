@@ -10,7 +10,7 @@ import Data.Map as Map
 
 import Data.SBV
 import Data.SBV.Tools.CodeGen
-import Data.SBV.Internals (Timing(PrintTiming))
+import Data.SBV.Internals (Timing(PrintTiming), modelAssocs)
 
 import LSC.Types
 
@@ -63,13 +63,25 @@ newNode g = do
       (xDim, yDim) = lookupDimensions technology g
 
   lift $ do
-    x <- free $ 'x' : suffix
-    y <- free $ 'y' : suffix
-    w <- free $ 'w' : suffix
-    h <- free $ 'h' : suffix
+    x <- free $ "x_" ++ suffix
+    y <- free $ "y_" ++ suffix
+    w <- free $ "w_" ++ suffix
+    h <- free $ "h_" ++ suffix
 
     constrain $ w .== literal xDim
     constrain $ h .== literal yDim
 
     pure (g, x, y, w, h)
 
+
+lexNodes :: SatResult -> [Rectangle]
+lexNodes (SatResult (Satisfiable _ prop)) = lex $ modelAssocs prop
+
+  where
+
+    lex xs@(('x' : _ : index, _) : _) = path as ++ lex bs
+          where (as, bs) = splitAt 4 xs
+    lex _ = []
+
+    path ((_, x) : (_, y) : (_, w) : (_, h) : _) = [(fromCW x, fromCW y, fromCW w, fromCW h)]
+    path _ = []
