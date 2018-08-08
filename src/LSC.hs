@@ -55,17 +55,18 @@ distance nodes = do
     ]
 
 connect nodes edges = do
+  res <- wireResolution <$> ask
   lift $ sequence_
     [ do
       constrain
         $   x1 + literal sx .== pathX ! 1
         &&& y1 + literal sy .== pathY ! 1
-        &&& x2 + literal tx .== pathX ! r
-        &&& y2 + literal ty .== pathY ! r
+        &&& x2 + literal tx .== pathX ! res
+        &&& y2 + literal ty .== pathY ! res
 
-      rectangular r pathX pathY
+      rectangular res pathX pathY
 
-    | (wire, (r, pathX, pathY)) <- Map.assocs edges
+    | (wire, (pathX, pathY)) <- Map.assocs edges
     , let (sourceGate, sourcePin) = source wire
     , let (targetGate, targetPin) = target wire
     , (sx, sy, _, _) <- take 1 $ portRects $ pinPort sourcePin
@@ -120,12 +121,11 @@ lexNodes (SatResult (Satisfiable _ prop)) = go $ modelAssocs prop
 lexNodes _ = []
 
 
-freeEdge :: Wire -> LSC (Wire, (Integer, SArray Integer Integer, SArray Integer Integer))
+freeEdge :: Wire -> LSC (Wire, (SArray Integer Integer, SArray Integer Integer))
 freeEdge wire = do
 
-  let resolution = 16
   pathX <- lift $ newArray_
   pathY <- lift $ newArray_
 
-  pure (wire, (resolution, pathX, pathY))
+  pure (wire, (pathX, pathY))
 

@@ -66,13 +66,14 @@ data Dir = In | Out | InOut
 
 data Technology = Technology
   { padDimensions :: (Integer, Integer)
+  , wireResolution :: Integer
   , wireWidth :: Integer
   , scaleFactor :: Double
   , components :: Map Text Component
   } deriving Show
 
 defaultTechnology :: Technology
-defaultTechnology = Technology (10^6 :: Integer, 10^6 :: Integer) 1 1 mempty
+defaultTechnology = Technology (10^6 :: Integer, 10^6 :: Integer) 16 1 1 mempty
 
 lookupDimensions :: Technology -> Gate -> (Integer, Integer)
 lookupDimensions tech g = maybe (0, 0) id $ componentDimensions <$> Map.lookup (gateIdent g) (components tech)
