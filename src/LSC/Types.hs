@@ -20,11 +20,14 @@ data Wire = Wire
   { source :: (Gate, Pin)
   , target :: (Gate, Pin)
   , wireIndex :: Index
-  }
-  deriving (Show)
+  } deriving Show
 
 instance Eq Wire where
   w == v = wireIndex w == wireIndex v
+
+instance Ord Wire where
+  w `compare` v = wireIndex w `compare` wireIndex v
+
 
 type Index = Int
 
@@ -32,11 +35,13 @@ data Gate = Gate
   { gateIdent :: Text
   , gateWires :: [(Text, Text)]
   , gateIndex :: Index
-  }
-  deriving (Show)
+  } deriving Show
 
 instance Eq Gate where
   g == h = gateIndex g == gateIndex h
+
+instance Ord Gate where
+  g `compare` h = gateIndex g `compare` gateIndex h
 
 
 data Component = Component

@@ -5,6 +5,8 @@ module LSC where
 
 import Control.Monad.Reader
 
+import qualified Data.Map as Map
+
 import Data.SBV
 import Data.SBV.Internals (modelAssocs)
 
@@ -15,8 +17,8 @@ type Stage1 = SBool
 
 stage1 :: Netlist -> LSC Stage1
 stage1 (Netlist gates wires) = do
-  nodes <- sequence $ freeNode <$> gates
-  edges <- sequence $ freeEdge <$> wires
+  nodes <- Map.fromList <$> sequence (freeNode <$> gates)
+  edges <- Map.fromList <$> sequence (freeEdge <$> wires)
 
   distance nodes
   boundedSpace nodes
@@ -34,7 +36,7 @@ boundedSpace nodes = do
         &&& y .> literal 0
         &&& x .< literal xDim
         &&& y .< literal yDim
-    | (_, x, y, _, _) <- nodes
+    | (x, y, _, _) <- Map.elems nodes
     ]
 
 
@@ -45,26 +47,19 @@ distance nodes = do
         ||| x2 .> x1 &&& x2 - x1 .> w1
         ||| y1 .> y2 &&& y1 - y2 .> h2
         ||| y2 .> y1 &&& y2 - y1 .> h1
-    | (i, (gate1, x1, y1, w1, h1)) <- zip [1..] nodes
-    , (gate2, x2, y2, w2, h2) <- drop i nodes
-    , gate1 /= gate2
+    | (i, (x1, y1, w1, h1)) <- zip [1..] $ Map.elems nodes
+    ,     (x2, y2, w2, h2)  <- drop i $ Map.elems nodes
     ]
 
 connect nodes edges = do
   lift $ sequence_
     [ pure ()
-    | (wire, resolution, path) <- edges
+    | (wire, resolution, path) <- Map.elems edges
     , let (sourceGate, sourcePin) = source wire
     , let (targetGate, targetPin) = target wire
-    , let x = portRects $ pinPort sourcePin
-    , let y = portRects $ pinPort targetPin
-    , (gateOut, x1, y1, w1, h1) <- nodes
-    , (gateIn,  x2, y2, w2, h2) <- nodes
-    , sourceGate == gateOut
-    , targetGate == gateIn
     ]
 
-freeNode :: Gate -> LSC (Gate, SInteger, SInteger, SInteger, SInteger)
+freeNode :: Gate -> LSC (Gate, (SInteger, SInteger, SInteger, SInteger))
 freeNode gate = do
 
   technology <- ask
@@ -81,7 +76,7 @@ freeNode gate = do
     constrain $ w .== literal xDim
     constrain $ h .== literal yDim
 
-    pure (gate, x, y, w, h)
+    pure (gate, (x, y, w, h))
 
 
 lexNodes :: SatResult -> [Rectangle]
@@ -99,7 +94,7 @@ lexNodes (SatResult (Satisfiable _ prop)) = go $ modelAssocs prop
 lexNodes _ = []
 
 
-freeEdge :: Wire -> LSC (Wire, Integer, SArray Integer Integer)
+freeEdge :: Wire -> LSC (Wire, (Integer, SArray Integer Integer))
 freeEdge wire = do
 
   let resolution = 16
@@ -110,5 +105,5 @@ freeEdge wire = do
         pathArray
         [0 .. resolution - 1]
 
-  pure (wire, resolution, path)
+  pure (wire, (resolution, path))
 
