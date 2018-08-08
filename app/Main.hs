@@ -30,36 +30,47 @@ type App = MaybeT IO
 main :: IO ()
 main = void $ runMaybeT program
 
+exit :: App ()
+exit = guard False
+
 program :: App ()
 program = do
 
     (opts, _) <- liftIO $ compilerOpts =<< getArgs
 
     -- print version string
-    when (any ( \ (k, _) -> k == Version) opts)
-      $ liftIO $ hPutStrLn stderr $ versionString
+    when (Version `elem` fmap fst opts)
+      $ do
+        liftIO $ hPutStrLn stderr $ versionString
+        exit
 
-    -- escape hatches
-    guard $ any ( \ (k, _) -> k == Compile) opts
-    guard $ not $ any ( \ (k, _) -> k == Version) opts
-
-    let lefFiles   = [v | (k, v) <- opts, k == Lef]
+    let lefFiles   = [v | (k, v) <- opts, k == Lef ]
         blifFiles  = [v | (k, v) <- opts, k == Blif]
 
-    result <- lift $ do
-        bootstr <- either (error . show) fromLEF . parseLEF <$> Text.readFile (head lefFiles)
-        netlist <- either (error . show) (gnostic bootstr . fromBLIF) . parseBLIF <$> Text.readFile (head blifFiles)
+    lef_ <- liftIO $ Text.readFile $ head lefFiles
+    net_ <- liftIO $ Text.readFile $ head blifFiles
 
-        bootstr `runLSC` stage1 netlist
+    let bootstr = either (error . show) (fromLEF) (parseLEF lef_)
+        netlist = either (error . show) (gnostic bootstr . fromBLIF) (parseBLIF net_)
+
+    -- print debug info
+    when (Debug `elem` fmap fst opts)
+      $ do
+        liftIO $ hPutStrLn stderr $ show netlist
+        exit
 
     -- svg output
-    when (any ( \ (k, v) -> k == Compile && v == "svg") opts)
-      $ liftIO $ plotStdout $ lexNodes result
+    result <- lift $ bootstr `runLSC` stage1 netlist
+
+    when (Compile `elem` fmap fst opts)
+      $ do
+        liftIO $ plotStdout $ lexNodes result
 
     -- sat output
-    when (any ( \ (k, _) -> k == Verbose) opts)
-      $ liftIO $ hPutStrLn stderr $ show result
-    
+    when (Verbose `elem` fmap fst opts)
+      $ do
+        liftIO $ hPutStrLn stderr $ show result
+
 
 type Flag = (FlagKey, FlagValue)
 
@@ -69,6 +80,7 @@ data FlagKey
   | Blif
   | Lef
   | Compile
+  | Debug
   deriving (Eq, Show)
 
 type FlagValue = String
@@ -80,6 +92,7 @@ options =
     , Option ['b']      ["blif"]    (ReqArg (Blif, ) "FILE") "BLIF file"
     , Option ['l']      ["lef"]     (ReqArg (Lef,  ) "FILE") "LEF file"
     , Option ['c']      ["compile"] (OptArg ((Compile,  ) . maybe "svg" id) "svg,magic") "output format"
+    , Option ['d']      ["debug"]   (NoArg  (Debug, []))    "output format"
     ]
 
 compilerOpts :: [String] -> IO ([Flag], [String])
