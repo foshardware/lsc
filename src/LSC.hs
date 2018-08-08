@@ -56,11 +56,15 @@ distance nodes = do
 
 connect nodes edges = do
   lift $ sequence_
-    [ constrain
+    [ do
+      constrain
         $   x1 + literal sx .== pathX ! 1
         &&& y1 + literal sy .== pathY ! 1
         &&& x2 + literal tx .== pathX ! r
         &&& y2 + literal ty .== pathY ! r
+
+      rectangular r pathX pathY
+
     | (wire, (r, pathX, pathY)) <- Map.assocs edges
     , let (sourceGate, sourcePin) = source wire
     , let (targetGate, targetPin) = target wire
@@ -69,6 +73,17 @@ connect nodes edges = do
     , (x1, y1, _, _) <- maybeToList $ Map.lookup sourceGate nodes
     , (x2, y2, _, _) <- maybeToList $ Map.lookup targetGate nodes
     ]
+
+rectangular r x y
+  | r > 1
+  = do
+    constrain
+      $   x ! r .== x ! (r - 1)
+      ||| y ! r .== y ! (r - 1)
+    rectangular (r - 1) x y
+rectangular _ _ _
+  = pure ()
+
 
 freeNode :: Gate -> LSC (Gate, (SInteger, SInteger, SInteger, SInteger))
 freeNode gate = do
@@ -109,13 +124,8 @@ freeEdge :: Wire -> LSC (Wire, (Integer, SArray Integer Integer, SArray Integer 
 freeEdge wire = do
 
   let resolution = 16
-  pathX <- lift $ newArray "wire"
-  pathY <- lift $ newArray "wire"
+  pathX <- lift $ newArray_
+  pathY <- lift $ newArray_
 
-  let initialize path = foldr
-        ( \ i p -> writeArray p (literal i :: SInteger) (literal 0 :: SInteger))
-        path
-        [1 .. resolution]
-
-  pure (wire, (resolution, initialize pathX, initialize pathY))
+  pure (wire, (resolution, pathX, pathY))
 
