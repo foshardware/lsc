@@ -16,10 +16,12 @@ type Stage1 = SBool
 stage1 :: Netlist -> LSC Stage1
 stage1 (Netlist gates wires) = do
   nodes <- sequence $ freeNode <$> gates
-  -- edges <- sequence $ newEdge <$> wires
+  edges <- sequence $ freeEdge <$> wires
 
   distance nodes
   boundedSpace nodes
+
+  -- connect nodes edges
 
   lift $ sBool "satisfiable"
 
@@ -43,20 +45,32 @@ distance nodes = do
         ||| x2 .> x1 &&& x2 - x1 .> w1
         ||| y1 .> y2 &&& y1 - y2 .> h2
         ||| y2 .> y1 &&& y2 - y1 .> h1
-    | (gate1, x1, y1, w1, h1) <- nodes
-    , (gate2, x2, y2, w2, h2) <- nodes
+    | (i, (gate1, x1, y1, w1, h1)) <- zip [1..] nodes
+    , (gate2, x2, y2, w2, h2) <- drop i nodes
     , gate1 /= gate2
     ]
 
+connect nodes edges = do
+  lift $ sequence_
+    [ pure ()
+    | (wire, resolution, path) <- edges
+    , let (sourceGate, sourcePin) = source wire
+    , let (targetGate, targetPin) = target wire
+    , let x = portRects $ pinPort sourcePin
+    , let y = portRects $ pinPort targetPin
+    , (gateOut, x1, y1, w1, h1) <- nodes
+    , (gateIn,  x2, y2, w2, h2) <- nodes
+    , sourceGate == gateOut
+    , targetGate == gateIn
+    ]
 
--- upper left corner
 freeNode :: Gate -> LSC (Gate, SInteger, SInteger, SInteger, SInteger)
-freeNode g = do
+freeNode gate = do
 
   technology <- ask
 
-  let suffix = show $ gateIndex g
-      (xDim, yDim) = lookupDimensions technology g
+  let suffix = show $ gateIndex gate
+      (xDim, yDim) = lookupDimensions technology gate
 
   lift $ do
     x <- free $ "x_" ++ suffix
@@ -67,7 +81,7 @@ freeNode g = do
     constrain $ w .== literal xDim
     constrain $ h .== literal yDim
 
-    pure (g, x, y, w, h)
+    pure (gate, x, y, w, h)
 
 
 lexNodes :: SatResult -> [Rectangle]
@@ -83,3 +97,18 @@ lexNodes (SatResult (Satisfiable _ prop)) = go $ modelAssocs prop
     path _ = []
 
 lexNodes _ = []
+
+
+freeEdge :: Wire -> LSC (Wire, Integer, SArray Integer Integer)
+freeEdge wire = do
+
+  let resolution = 16
+  pathArray <- lift $ newArray "wire"
+
+  let path = foldr
+        ( \ i p -> writeArray p (literal i :: SInteger) (literal 0 :: SInteger))
+        pathArray
+        [0 .. resolution - 1]
+
+  pure (wire, resolution, path)
+
