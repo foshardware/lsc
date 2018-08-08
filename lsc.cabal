@@ -63,6 +63,7 @@ library
       LSC.BLIF,
       LSC.LEF,
       LSC.SVG,
+      LSC.Operator,
       LSC.Types
   other-modules:
       Paths_lsc

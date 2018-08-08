@@ -7,9 +7,12 @@ import Control.Monad.Reader
 
 import qualified Data.Map as Map
 
+import Data.Maybe
+
 import Data.SBV
 import Data.SBV.Internals (modelAssocs)
 
+import LSC.Operator
 import LSC.Types
 
 
@@ -23,7 +26,7 @@ stage1 (Netlist gates wires) = do
   distance nodes
   boundedSpace nodes
 
-  -- connect nodes edges
+  connect nodes edges
 
   lift $ sBool "satisfiable"
 
@@ -53,10 +56,18 @@ distance nodes = do
 
 connect nodes edges = do
   lift $ sequence_
-    [ pure ()
-    | (wire, resolution, path) <- Map.elems edges
+    [ constrain
+        $   x1 + literal sx .== pathX ! 1
+        &&& y1 + literal sy .== pathY ! 1
+        &&& x2 + literal tx .== pathX ! r
+        &&& y2 + literal ty .== pathY ! r
+    | (wire, (r, pathX, pathY)) <- Map.assocs edges
     , let (sourceGate, sourcePin) = source wire
     , let (targetGate, targetPin) = target wire
+    , (sx, sy, _, _) <- take 1 $ portRects $ pinPort sourcePin
+    , (tx, ty, _, _) <- take 1 $ portRects $ pinPort targetPin
+    , (x1, y1, _, _) <- maybeToList $ Map.lookup sourceGate nodes
+    , (x2, y2, _, _) <- maybeToList $ Map.lookup targetGate nodes
     ]
 
 freeNode :: Gate -> LSC (Gate, (SInteger, SInteger, SInteger, SInteger))
@@ -94,16 +105,17 @@ lexNodes (SatResult (Satisfiable _ prop)) = go $ modelAssocs prop
 lexNodes _ = []
 
 
-freeEdge :: Wire -> LSC (Wire, (Integer, SArray Integer Integer))
+freeEdge :: Wire -> LSC (Wire, (Integer, SArray Integer Integer, SArray Integer Integer))
 freeEdge wire = do
 
   let resolution = 16
-  pathArray <- lift $ newArray "wire"
+  pathX <- lift $ newArray "wire"
+  pathY <- lift $ newArray "wire"
 
-  let path = foldr
+  let initialize path = foldr
         ( \ i p -> writeArray p (literal i :: SInteger) (literal 0 :: SInteger))
-        pathArray
-        [0 .. resolution - 1]
+        path
+        [1 .. resolution]
 
-  pure (wire, (resolution, path))
+  pure (wire, (resolution, initialize pathX, initialize pathY))
 
