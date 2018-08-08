@@ -50,8 +50,15 @@ program = do
     lef_ <- liftIO $ Text.readFile $ head lefFiles
     net_ <- liftIO $ Text.readFile $ head blifFiles
 
-    let bootstr = either (error . show) (fromLEF) (parseLEF lef_)
-        netlist = either (error . show) (gnostic bootstr . fromBLIF) (parseBLIF net_)
+    bootstr <- lift $ either
+        (ioError . userError . show)
+        (pure . fromLEF)
+        (parseLEF lef_)
+
+    netlist <- lift $ either
+        (ioError . userError . show)
+        (pure . gnostic bootstr . fromBLIF)
+        (parseBLIF net_)
 
     -- print debug info
     when (Debug `elem` fmap fst opts)
