@@ -19,12 +19,12 @@ plot :: Circuit2D -> Text
 plot = renderSvg . svgDoc . scaleDown 100
 
 svgDoc :: Circuit2D -> S.Svg
-svgDoc cs = S.docTypeSvg
+svgDoc (Circuit2D nodes edges) = S.docTypeSvg
   ! A.version "1.1"
   ! A.width "10000"
   ! A.height "10000"
   $ do
-    mapM_ rect cs
+    mapM_ rect nodes
 
 rect :: Rectangle -> S.Svg
 rect (x, y, width, height) = S.path
@@ -34,7 +34,8 @@ rect (x, y, width, height) = S.path
   ! A.strokeWidth "4"
 
 scaleDown :: Integer -> Circuit2D -> Circuit2D
-scaleDown n circuit =
+scaleDown n (Circuit2D nodes edges) = Circuit2D
   [ (div a n, div b n, div c n, div d n)
-  | (a, b, c, d) <- circuit
+  | (a, b, c, d) <- nodes
   ]
+  edges

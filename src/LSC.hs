@@ -21,6 +21,7 @@ type Stage1 = Circuit2D
 
 stage1 :: Netlist -> LSC Stage1
 stage1 (Netlist gates wires) = do
+
   nodes <- Map.fromList <$> sequence (freeNode <$> gates)
   edges <- Map.fromList <$> sequence (freeEdge <$> wires)
 
@@ -29,14 +30,21 @@ stage1 (Netlist gates wires) = do
 
   connect nodes edges
 
+  res <- wireResolution <$> ask
+
   lift $ query $ do
     result <- checkSat
     case result of
-      Sat -> sequence
-        [ (, , , ) <$> getValue x <*> getValue y <*> getValue w <*> getValue h
-        | (x, y, w, h) <- Map.elems nodes
-        ]
-      _   -> pure []
+
+      Sat -> Circuit2D
+
+        <$> sequence
+            [ (, , , ) <$> getValue x <*> getValue y <*> getValue w <*> getValue h
+            | (x, y, w, h) <- Map.elems nodes
+            ]
+        <*> pure []
+
+      _   -> pure $ Circuit2D [] []
 
 
 boundedSpace nodes = do
