@@ -38,6 +38,8 @@ program = do
 
     (opts, _) <- liftIO $ compilerOpts =<< getArgs
 
+    when (null opts) exit
+
     -- print version string
     when (Version `elem` fmap fst opts)
       $ do
@@ -94,18 +96,18 @@ type FlagValue = String
 
 options :: [OptDescr Flag]
 options =
-    [ Option ['v']      ["verbose"] (NoArg  (Verbose, []))  "chatty output on stderr"
-    , Option ['V', '?'] ["version"] (NoArg  (Version, []))  "show version number"
-    , Option ['b']      ["blif"]    (ReqArg (Blif, ) "FILE") "BLIF file"
-    , Option ['l']      ["lef"]     (ReqArg (Lef,  ) "FILE") "LEF file"
-    , Option ['c']      ["compile"] (OptArg ((Compile,  ) . maybe "svg" id) "svg,magic") "output format"
-    , Option ['d']      ["debug"]   (NoArg  (Debug, []))    "output format"
+    [ Option ['v']      ["verbose"]    (NoArg  (Verbose, []))      "chatty output on stderr"
+    , Option ['V', '?'] ["version"]    (NoArg  (Version, []))      "show version number"
+    , Option ['b']      ["blif"]       (ReqArg (Blif, ) "FILE")    "BLIF file"
+    , Option ['l']      ["lef"]        (ReqArg (Lef,  ) "FILE")    "LEF file"
+    , Option ['d']      ["debug"]      (NoArg  (Debug, []))        "print some debug info"
+    , Option ['c']      ["compile"]    (OptArg ((Compile,  ) . maybe "svg" id) "svg,magic") "output format"
     ]
 
 compilerOpts :: [String] -> IO ([Flag], [String])
 compilerOpts argv =
     case getOpt Permute options argv of
         (o, n, []  ) -> pure (o, n)
-        (_, _, errs) -> ioError $ userError $ concat errs ++ usageInfo header options
+        (_, _, errs) -> mempty <$ hPutStrLn stderr (concat errs ++ usageInfo header options)
      where header = "Usage: lsc [OPTION...] files..."
 
