@@ -30,7 +30,7 @@ stage1 (Netlist gates wires) = do
 
   connect nodes edges
 
-  res <- wireResolution <$> ask
+  resolution <- wireResolution <$> ask
 
   lift $ query $ do
     result <- checkSat
@@ -46,7 +46,7 @@ stage1 (Netlist gates wires) = do
         <*> sequence
             [ Path <$> sequence
                 [ (, ) <$> getValue (pathX ! i) <*> getValue (pathY ! i)
-                | i <- [1 .. res]
+                | i <- [1 .. resolution]
                 ]
             | (pathX, pathY) <- Map.elems edges
             ]
@@ -77,17 +77,20 @@ distance nodes = do
     ,     (x2, y2, w2, h2)  <- drop i $ Map.elems nodes
     ]
 
+
 connect nodes edges = do
-  res <- wireResolution <$> ask
-  lift $ sequence_
+  resolution <- wireResolution <$> ask
+  sequence_
     [ do
-      constrain
+      lift $ constrain
         $   x1 + literal sx .== pathX ! 1
         &&& y1 + literal sy .== pathY ! 1
-        &&& x2 + literal tx .== pathX ! res
-        &&& y2 + literal ty .== pathY ! res
+        &&& x2 + literal tx .== pathX ! resolution
+        &&& y2 + literal ty .== pathY ! resolution
 
-      rectangular res pathX pathY
+      rectangular resolution pathX pathY
+
+      short (wireIndex wire) resolution pathX pathY
 
     | (wire, (pathX, pathY)) <- Map.assocs edges
     , let (sourceGate, sourcePin) = source wire
@@ -98,15 +101,35 @@ connect nodes edges = do
     , (x2, y2, _, _) <- maybeToList $ Map.lookup targetGate nodes
     ]
 
+
 rectangular r x y
   | r > 1
   = do
-    constrain
+    lift $ constrain
       $   x ! r .== x ! (r - 1)
       ||| y ! r .== y ! (r - 1)
     rectangular (r - 1) x y
 rectangular _ _ _
   = pure ()
+
+
+short ix resolution pathX pathY = do
+
+  lift $ minimize ("minimize_px_" ++ show ix)
+    $ sum
+      [ abs $ x1 - x2
+      | ((x1, _), (x2, _)) <- neighbours
+      ]
+
+  lift $ minimize ("minimize_py_" ++ show ix)
+    $ sum
+      [ abs $ y1 - y2
+      | ((y1, _), (y2, _)) <- neighbours
+      ]
+ 
+  where
+    neighbours = foldr accumulate [] [1 .. resolution] `zip` foldr accumulate [] [2 .. resolution]
+    accumulate i a = (pathX ! i, pathY ! i) : a
 
 
 freeNode :: Gate -> LSC (Gate, (SInteger, SInteger, SInteger, SInteger))
