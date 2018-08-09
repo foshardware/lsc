@@ -24,10 +24,14 @@ stage1 (Netlist gates wires) = do
   nodes <- Map.fromList <$> sequence (freeNode <$> gates)
   edges <- Map.fromList <$> sequence (freeEdge <$> wires)
 
-  distance nodes
+  collision nodes
   boundedSpace nodes
 
   connect nodes edges
+
+  intersections edges
+  -- penetrations nodes edges
+
 
   resolution <- wireResolution <$> ask
 
@@ -65,7 +69,7 @@ boundedSpace nodes = do
     ]
 
 
-distance nodes = do
+collision nodes = do
   lift $ sequence_
     [ constrain
         $   x1 .> x2 &&& x1 - x2 .> w2
@@ -121,6 +125,31 @@ shorten wire resolution pathX pathY = do
               <-  foldr accumulate [] [1 .. resolution]
             `zip` foldr accumulate [] [2 .. resolution]
       ] where accumulate i a = (pathX ! i, pathY ! i) : a
+
+
+intersections edges = pure ()
+
+intersect wire1 wire2 _ _
+  | source wire1 == source wire2
+  = pure ()
+intersect _ _ line1@((x1, y1), (x2, y2)) line2@((x3, y3), (x4, y4))
+  = constrain
+
+  $   point line1 &&& point line2
+
+  ||| point line1 &&& vertical   line2 &&& x1 ./= x3
+  ||| point line1 &&& horizontal line2 &&& y1 ./= y3
+
+  ||| vertical line1 &&& vertical   line2 &&& x1 ./= x3
+  ||| vertical line1 &&& horizontal line2 &&& y1 ./= y3
+
+  ||| horizontal line1 &&& vertical   line2 &&& x1 ./= x3 -- complex
+  ||| horizontal line1 &&& horizontal line2 &&& x1 ./= x3 
+
+  where
+    point      ((x1, y1), (x2, y2)) = x1 .== x2 &&& y1 .== y2
+    vertical   ((x1, y1), (x2, y2)) = x1 .== x2 &&& y1 ./= y2
+    horizontal ((x1, y1), (x2, y2)) = x1 ./= x2 &&& y1 .== y2
 
 
 freeNode :: Gate -> LSC (Gate, (SInteger, SInteger, SInteger, SInteger))

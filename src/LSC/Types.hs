@@ -50,9 +50,14 @@ data Component = Component
   } deriving Show
 
 data Pin = Pin
-  { pinDir  :: Dir
-  , pinPort :: Port
+  { pinIdent :: Text
+  , pinDir   :: Dir
+  , pinPort  :: Port
   } deriving Show
+
+instance Eq Pin where
+  p == q = pinIdent p == pinIdent q
+
 
 data Port = Port
   { portLayer :: Text

@@ -1,4 +1,3 @@
-
 {-# OPTIONS_GHC -fno-warn-missing-signatures #-}
 
 module LSC.LEF where
@@ -28,7 +27,7 @@ fromLEF (LEF options _ _ _ _ macros) = do
         ]
     }
 
-pins t (MacroPin ident options _ : rest) = (ident, Pin (direction options) (port t options)) : pins t rest
+pins t (MacroPin ident options _ : rest) = (ident, Pin ident (direction options) (port t options)) : pins t rest
 pins t (_ : rest) = pins t rest
 pins _ [] = []
 
