@@ -113,20 +113,6 @@ freeNode gate = do
 
     pure (gate, (x, y, w, h))
 
-lexNodes :: SatResult -> [Rectangle]
-lexNodes (SatResult (Satisfiable _ prop)) = go $ modelAssocs prop
-
-  where
-
-    go xs@(('x' : _ : _, _) : _) = path as ++ go bs
-          where (as, bs) = splitAt 4 xs
-    go _ = []
-
-    path ((_, x) : (_, y) : (_, w) : (_, h) : _) = [(fromCW x, fromCW y, fromCW w, fromCW h)]
-    path _ = []
-
-lexNodes _ = []
-
 
 freeEdge :: Wire -> LSC (Wire, (SArray Integer Integer, SArray Integer Integer))
 freeEdge wire = do
@@ -138,18 +124,5 @@ freeEdge wire = do
 
   pure (wire, (pathX, pathY))
 
-lexEdges :: SatResult -> [Rectangle]
-lexEdges (SatResult (Satisfiable _ prop)) = go $ modelAssocs prop
-
-  where
-
-    go xs@(('x' : _ : _, _) : _) = path as ++ go bs
-          where (as, bs) = splitAt 4 xs
-    go _ = []
-
-    path ((_, x) : (_, y) : (_, w) : (_, h) : _) = [(fromCW x, fromCW y, fromCW w, fromCW h)]
-    path _ = []
-
-lexEdges _ = []
 
 
