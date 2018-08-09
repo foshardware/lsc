@@ -11,7 +11,6 @@ import Data.Maybe
 
 import Data.SBV
 import Data.SBV.Control
-import Data.SBV.Internals (modelAssocs)
 
 import LSC.Operator
 import LSC.Types
@@ -119,7 +118,7 @@ shorten wire resolution pathX pathY = do
     $ sum
       [ abs (x1 - x2) + abs (y1 - y2)
       | ((x1, y1), (x2, y2))
-            <-    foldr accumulate [] [1 .. resolution]
+              <-  foldr accumulate [] [1 .. resolution]
             `zip` foldr accumulate [] [2 .. resolution]
       ] where accumulate i a = (pathX ! i, pathY ! i) : a
 
