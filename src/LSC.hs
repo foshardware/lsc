@@ -42,7 +42,14 @@ stage1 (Netlist gates wires) = do
             [ (, , , ) <$> getValue x <*> getValue y <*> getValue w <*> getValue h
             | (x, y, w, h) <- Map.elems nodes
             ]
-        <*> pure []
+
+        <*> sequence
+            [ Path <$> sequence
+                [ (, ) <$> getValue (pathX ! i) <*> getValue (pathY ! i)
+                | i <- [1 .. res]
+                ]
+            | (pathX, pathY) <- Map.elems edges
+            ]
 
       _   -> pure $ Circuit2D [] []
 

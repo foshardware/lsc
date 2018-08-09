@@ -21,10 +21,11 @@ plot = renderSvg . svgDoc . scaleDown 100
 svgDoc :: Circuit2D -> S.Svg
 svgDoc (Circuit2D nodes edges) = S.docTypeSvg
   ! A.version "1.1"
-  ! A.width "10000"
-  ! A.height "10000"
+  ! A.width "100000"
+  ! A.height "100000"
   $ do
     mapM_ rect nodes
+    mapM_ path edges
 
 rect :: Rectangle -> S.Svg
 rect (x, y, width, height) = S.path
@@ -33,9 +34,25 @@ rect (x, y, width, height) = S.path
   ! A.fill "transparent"
   ! A.strokeWidth "4"
 
+path :: Path -> S.Svg
+path (Path ((x1, y1) : (x2, y2) : xs)) = S.line
+  ! A.x1 (S.toValue x1)
+  ! A.y1 (S.toValue y1)
+  ! A.x2 (S.toValue x2)
+  ! A.y2 (S.toValue y2)
+  ! A.stroke "black"
+  ! A.fill "transparent"
+  ! A.strokeWidth "3"
+path _ = pure ()
+
+
 scaleDown :: Integer -> Circuit2D -> Circuit2D
 scaleDown n (Circuit2D nodes edges) = Circuit2D
-  [ (div a n, div b n, div c n, div d n)
-  | (a, b, c, d) <- nodes
+
+  [ (div x n, div y n, div w n, div h n)
+  | (x, y, w, h) <- nodes
   ]
-  edges
+
+  [ Path [ (div x n, div y n) | (x, y) <- pos ]
+  | Path pos <- edges
+  ]

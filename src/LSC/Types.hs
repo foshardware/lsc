@@ -107,6 +107,8 @@ runLSC :: Bootstrap () -> LSC a -> IO a
 runLSC b a = runSMT $ a `runGnosticT` freeze b
 
 
-data Circuit2D = Circuit2D [Rectangle] [Rectangle]
+data Circuit2D = Circuit2D [Rectangle] [Path]
   deriving (Eq, Show)
 
+newtype Path = Path [(Integer, Integer)]
+  deriving (Eq, Show)
