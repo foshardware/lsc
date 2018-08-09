@@ -103,8 +103,8 @@ gnostic b a = a `runReader` freeze b
 
 type LSC = GnosticT Symbolic
 
-runLSC :: Bootstrap () -> LSC SBool -> IO SatResult
-runLSC b a = sat $ a `runGnosticT` freeze b
+runLSC :: Bootstrap () -> LSC a -> IO a
+runLSC b a = runSMT $ a `runGnosticT` freeze b
 
 
 type Circuit2D = [Rectangle]

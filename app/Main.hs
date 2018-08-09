@@ -67,16 +67,16 @@ program = do
         exit
 
     -- svg output
-    result <- lift $ bootstr `runLSC` stage1 netlist
+    circuit2d <- lift $ bootstr `runLSC` stage1 netlist
 
     when (Compile `elem` fmap fst opts)
       $ do
-        liftIO $ plotStdout $ lexNodes result
+        liftIO $ plotStdout circuit2d
 
     -- sat output
     when (Verbose `elem` fmap fst opts)
       $ do
-        liftIO $ hPutStrLn stderr $ show result
+        liftIO $ hPutStrLn stderr $ show circuit2d
 
 
 type Flag = (FlagKey, FlagValue)

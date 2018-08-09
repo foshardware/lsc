@@ -10,13 +10,14 @@ import qualified Data.Map as Map
 import Data.Maybe
 
 import Data.SBV
+import Data.SBV.Control
 import Data.SBV.Internals (modelAssocs)
 
 import LSC.Operator
 import LSC.Types
 
 
-type Stage1 = SBool
+type Stage1 = Circuit2D
 
 stage1 :: Netlist -> LSC Stage1
 stage1 (Netlist gates wires) = do
@@ -28,7 +29,14 @@ stage1 (Netlist gates wires) = do
 
   connect nodes edges
 
-  lift $ sBool "satisfiable"
+  lift $ query $ do
+    result <- checkSat
+    case result of
+      Sat -> sequence
+        [ (, , , ) <$> getValue x <*> getValue y <*> getValue w <*> getValue h
+        | (x, y, w, h) <- Map.elems nodes
+        ]
+      _   -> pure []
 
 
 boundedSpace nodes = do
@@ -105,7 +113,6 @@ freeNode gate = do
 
     pure (gate, (x, y, w, h))
 
-
 lexNodes :: SatResult -> [Rectangle]
 lexNodes (SatResult (Satisfiable _ prop)) = go $ modelAssocs prop
 
@@ -124,8 +131,25 @@ lexNodes _ = []
 freeEdge :: Wire -> LSC (Wire, (SArray Integer Integer, SArray Integer Integer))
 freeEdge wire = do
 
-  pathX <- lift $ newArray_
-  pathY <- lift $ newArray_
+  let suffix = show $ wireIndex $ wire
+
+  pathX <- lift $ newArray $ "px_" ++ suffix
+  pathY <- lift $ newArray $ "py_" ++ suffix
 
   pure (wire, (pathX, pathY))
+
+lexEdges :: SatResult -> [Rectangle]
+lexEdges (SatResult (Satisfiable _ prop)) = go $ modelAssocs prop
+
+  where
+
+    go xs@(('x' : _ : _, _) : _) = path as ++ go bs
+          where (as, bs) = splitAt 4 xs
+    go _ = []
+
+    path ((_, x) : (_, y) : (_, w) : (_, h) : _) = [(fromCW x, fromCW y, fromCW w, fromCW h)]
+    path _ = []
+
+lexEdges _ = []
+
 

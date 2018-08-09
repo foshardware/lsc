@@ -32,13 +32,13 @@ fromBLIF (BLIF models) = do
         , pin <- maybeToList $ Map.lookup contact $ componentPins com
         ]
 
-  let edges =
-        [ Wire (sourceGate, pinOut) (targetGate, pinIn) 0
+  let packWire (i, (a, b, c, d)) = Wire (a, b) (c, d) i
+  let edges = packWire <$> zip [1..]
+        [ (sourceGate, pinOut, targetGate, pinIn)
         | (sourceGate, input, pinOut) <- lefts pins
         , (targetGate, output, pinIn) <- rights pins
         , input == output
         ]
-
 
   pure $ Netlist nodes edges
     
