@@ -90,7 +90,7 @@ connect nodes edges = do
 
       rectangular resolution pathX pathY
 
-      short (wireIndex wire) resolution pathX pathY
+      shorten wire resolution pathX pathY
 
     | (wire, (pathX, pathY)) <- Map.assocs edges
     , let (sourceGate, sourcePin) = source wire
@@ -113,23 +113,15 @@ rectangular _ _ _
   = pure ()
 
 
-short ix resolution pathX pathY = do
+shorten wire resolution pathX pathY = do
 
-  lift $ minimize ("minimize_px_" ++ show ix)
+  lift $ minimize ("min_p_" ++ show (wireIndex wire))
     $ sum
-      [ abs $ x1 - x2
-      | ((x1, _), (x2, _)) <- neighbours
-      ]
-
-  lift $ minimize ("minimize_py_" ++ show ix)
-    $ sum
-      [ abs $ y1 - y2
-      | ((y1, _), (y2, _)) <- neighbours
-      ]
- 
-  where
-    neighbours = foldr accumulate [] [1 .. resolution] `zip` foldr accumulate [] [2 .. resolution]
-    accumulate i a = (pathX ! i, pathY ! i) : a
+      [ abs (x1 - x2) + abs (y1 - y2)
+      | ((x1, y1), (x2, y2))
+            <-    foldr accumulate [] [1 .. resolution]
+            `zip` foldr accumulate [] [2 .. resolution]
+      ] where accumulate i a = (pathX ! i, pathY ! i) : a
 
 
 freeNode :: Gate -> LSC (Gate, (SInteger, SInteger, SInteger, SInteger))
@@ -161,6 +153,4 @@ freeEdge wire = do
   pathY <- lift $ newArray $ "py_" ++ suffix
 
   pure (wire, (pathX, pathY))
-
-
 
