@@ -7,8 +7,11 @@ import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Text (Text)
 
-import Control.Monad.Reader
+import Control.Monad.Codensity
+import Control.Monad.Reader (ReaderT(..), Reader, runReader)
+import qualified Control.Monad.Reader as Reader
 import Control.Monad.State
+import Control.Monad.Trans
 
 import Data.SBV
 
@@ -106,10 +109,16 @@ gnostic :: Bootstrap () -> Gnostic r -> r
 gnostic b a = a `runReader` freeze b
 
 
-type LSC = GnosticT Symbolic
+type LSC = Codensity (GnosticT Symbolic)
 
 runLSC :: Bootstrap () -> LSC a -> IO a
-runLSC b a = runSMT $ a `runGnosticT` freeze b
+runLSC b a = runSMT $ lowerCodensity a `runGnosticT` freeze b
+
+liftSMT :: Symbolic a -> LSC a
+liftSMT = lift . lift
+
+ask :: LSC Technology
+ask = lift Reader.ask
 
 
 data Circuit2D = Circuit2D [Rectangle] [Path]

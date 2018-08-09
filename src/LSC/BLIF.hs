@@ -8,7 +8,7 @@ import qualified Data.Map as Map
 import Data.Maybe
 
 import BLIF.Syntax
-import LSC.Types
+import LSC.Types hiding (ask)
 
 
 fromBLIF :: BLIF -> Gnostic Netlist

@@ -3,8 +3,6 @@
 
 module LSC where
 
-import Control.Monad.Reader
-
 import qualified Data.Map as Map
 
 import Data.Maybe
@@ -29,13 +27,11 @@ stage1 (Netlist gates wires) = do
 
   connect nodes edges
 
-  intersections edges
-  -- penetrations nodes edges
-
+  -- intersections edges
 
   resolution <- wireResolution <$> ask
 
-  lift $ query $ do
+  liftSMT $ query $ do
     result <- checkSat
     case result of
 
@@ -59,8 +55,8 @@ stage1 (Netlist gates wires) = do
 
 boundedSpace nodes = do
   (xDim, yDim) <- padDimensions <$> ask
-  lift $ sequence_
-    [ constrain
+  sequence_
+    [ liftSMT $ constrain
         $   x .> literal 0
         &&& y .> literal 0
         &&& x .< literal xDim
@@ -70,8 +66,8 @@ boundedSpace nodes = do
 
 
 collision nodes = do
-  lift $ sequence_
-    [ constrain
+  sequence_
+    [ liftSMT $ constrain
         $   x1 .> x2 &&& x1 - x2 .> w2
         ||| x2 .> x1 &&& x2 - x1 .> w1
         ||| y1 .> y2 &&& y1 - y2 .> h2
@@ -85,7 +81,7 @@ connect nodes edges = do
   resolution <- wireResolution <$> ask
   sequence_
     [ do
-      lift $ constrain
+      liftSMT $ constrain
         $   x1 + literal sx .== pathX ! 1
         &&& y1 + literal sy .== pathY ! 1
         &&& x2 + literal tx .== pathX ! resolution
@@ -108,7 +104,7 @@ connect nodes edges = do
 rectangular r x y
   | r > 1
   = do
-    lift $ constrain
+    liftSMT $ constrain
       $   x ! r .== x ! (r - 1)
       ||| y ! r .== y ! (r - 1)
     rectangular (r - 1) x y
@@ -118,7 +114,7 @@ rectangular _ _ _
 
 shorten wire resolution pathX pathY = do
 
-  lift $ minimize ("min_p_" ++ show (wireIndex wire))
+  liftSMT $ minimize ("min_p_" ++ show (wireIndex wire))
     $ sum
       [ abs (x1 - x2) + abs (y1 - y2)
       | ((x1, y1), (x2, y2))
@@ -127,23 +123,32 @@ shorten wire resolution pathX pathY = do
       ] where accumulate i a = (pathX ! i, pathY ! i) : a
 
 
-intersections edges = pure ()
+intersections edges = do
+  resolution <- wireResolution <$> ask
+  sequence_
+    [ do
+      liftSMT $ constrain $ intersect line1 line2
 
-intersect wire1 wire2 _ _
-  | source wire1 == source wire2
-  = pure ()
-intersect _ _ line1@((x1, y1), (x2, y2)) line2@((x3, y3), (x4, y4))
-  = constrain
+    | (i, (wire1, (path1X, path1Y))) <- zip [1..] $ Map.assocs edges
+    ,     (wire2, (path2X, path2Y))  <- drop i $ Map.assocs edges
 
-  $   point line1 &&& point line2
+    , source wire1 /= source wire2
 
+    , let accum1 i a = (path1X ! i, path1Y ! i) : a
+    , let accum2 i a = (path2X ! i, path2Y ! i) : a
+    , line1 <- foldr accum1 [] [1 .. resolution] `zip` foldr accum1 [] [2 .. resolution]
+    , line2 <- foldr accum2 [] [1 .. resolution] `zip` foldr accum2 [] [2 .. resolution]
+    ] 
+
+intersect line1@((x1, y1), (x2, y2)) line2@((x3, y3), (x4, y4))
+  =   point line1 &&& point line2
   ||| point line1 &&& vertical   line2 &&& x1 ./= x3
   ||| point line1 &&& horizontal line2 &&& y1 ./= y3
 
   ||| vertical line1 &&& vertical   line2 &&& x1 ./= x3
   ||| vertical line1 &&& horizontal line2 &&& y1 ./= y3
 
-  ||| horizontal line1 &&& vertical   line2 &&& x1 ./= x3 -- complex
+  ||| horizontal line1 &&& vertical   line2 &&& x1 ./= x3
   ||| horizontal line1 &&& horizontal line2 &&& x1 ./= x3 
 
   where
@@ -160,7 +165,7 @@ freeNode gate = do
   let suffix = show $ gateIndex gate
       (xDim, yDim) = lookupDimensions technology gate
 
-  lift $ do
+  liftSMT $ do
     x <- free $ "x_" ++ suffix
     y <- free $ "y_" ++ suffix
     w <- free $ "w_" ++ suffix
@@ -177,8 +182,8 @@ freeEdge wire = do
 
   let suffix = show $ wireIndex $ wire
 
-  pathX <- lift $ newArray $ "px_" ++ suffix
-  pathY <- lift $ newArray $ "py_" ++ suffix
+  pathX <- liftSMT $ newArray $ "px_" ++ suffix
+  pathY <- liftSMT $ newArray $ "py_" ++ suffix
 
   pure (wire, (pathX, pathY))
 
