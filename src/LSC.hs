@@ -25,7 +25,7 @@ stage1 (Netlist gates wires) = do
   collision nodes
   boundedSpace nodes
 
-  connect nodes edges
+  connect edges
 
   -- intersections edges
 
@@ -77,27 +77,11 @@ collision nodes = do
     ]
 
 
-connect nodes edges = do
+connect edges = do
   resolution <- wireResolution <$> ask
   sequence_
     [ do
-      liftSMT $ constrain
-        $   x1 + literal sx .== pathX ! 1
-        &&& y1 + literal sy .== pathY ! 1
-        &&& x2 + literal tx .== pathX ! resolution
-        &&& y2 + literal ty .== pathY ! resolution
-
-      rectangular resolution pathX pathY
-
-      shorten wire resolution pathX pathY
-
-    | (wire, (pathX, pathY)) <- Map.assocs edges
-    , let (sourceGate, sourcePin) = source wire
-    , let (targetGate, targetPin) = target wire
-    , (sx, sy, _, _) <- take 1 $ portRects $ pinPort sourcePin
-    , (tx, ty, _, _) <- take 1 $ portRects $ pinPort targetPin
-    , (x1, y1, _, _) <- maybeToList $ Map.lookup sourceGate nodes
-    , (x2, y2, _, _) <- maybeToList $ Map.lookup targetGate nodes
+      pure ()
     ]
 
 
@@ -112,49 +96,17 @@ rectangular _ _ _
   = pure ()
 
 
-shorten wire resolution pathX pathY = do
+shorten net resolution pathX pathY = do
 
-  liftSMT $ minimize ("min_p_" ++ show (wireIndex wire))
+  let goal = "min_p_" ++ show (netIndex net)
+
+  liftSMT $ minimize goal
     $ sum
       [ abs (x1 - x2) + abs (y1 - y2)
       | ((x1, y1), (x2, y2))
               <-  foldr accumulate [] [1 .. resolution]
             `zip` foldr accumulate [] [2 .. resolution]
       ] where accumulate i a = (pathX ! i, pathY ! i) : a
-
-
-intersections edges = do
-  resolution <- wireResolution <$> ask
-  sequence_
-    [ do
-      liftSMT $ constrain $ intersect line1 line2
-
-    | (i, (wire1, (path1X, path1Y))) <- zip [1..] $ Map.assocs edges
-    ,     (wire2, (path2X, path2Y))  <- drop i $ Map.assocs edges
-
-    , source wire1 /= source wire2
-
-    , let accum1 i a = (path1X ! i, path1Y ! i) : a
-    , let accum2 i a = (path2X ! i, path2Y ! i) : a
-    , line1 <- foldr accum1 [] [1 .. resolution] `zip` foldr accum1 [] [2 .. resolution]
-    , line2 <- foldr accum2 [] [1 .. resolution] `zip` foldr accum2 [] [2 .. resolution]
-    ] 
-
-intersect line1@((x1, y1), (x2, y2)) line2@((x3, y3), (x4, y4))
-  =   point line1 &&& point line2
-  ||| point line1 &&& vertical   line2 &&& x1 ./= x3
-  ||| point line1 &&& horizontal line2 &&& y1 ./= y3
-
-  ||| vertical line1 &&& vertical   line2 &&& x1 ./= x3
-  ||| vertical line1 &&& horizontal line2 &&& y1 ./= y3
-
-  ||| horizontal line1 &&& vertical   line2 &&& x1 ./= x3
-  ||| horizontal line1 &&& horizontal line2 &&& x1 ./= x3 
-
-  where
-    point      ((x1, y1), (x2, y2)) = x1 .== x2 &&& y1 .== y2
-    vertical   ((x1, y1), (x2, y2)) = x1 .== x2 &&& y1 ./= y2
-    horizontal ((x1, y1), (x2, y2)) = x1 ./= x2 &&& y1 .== y2
 
 
 freeNode :: Gate -> LSC (Gate, (SInteger, SInteger, SInteger, SInteger))
@@ -177,13 +129,13 @@ freeNode gate = do
     pure (gate, (x, y, w, h))
 
 
-freeEdge :: Wire -> LSC (Wire, (SArray Integer Integer, SArray Integer Integer))
-freeEdge wire = do
+freeEdge :: Net -> LSC (Net, (SArray Integer Integer, SArray Integer Integer))
+freeEdge net = do
 
-  let suffix = show $ wireIndex $ wire
+  let suffix = show $ netIndex net
 
   pathX <- liftSMT $ newArray $ "px_" ++ suffix
   pathY <- liftSMT $ newArray $ "py_" ++ suffix
 
-  pure (wire, (pathX, pathY))
+  pure (net, (pathX, pathY))
 

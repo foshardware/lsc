@@ -11,25 +11,23 @@ import Control.Monad.Codensity
 import Control.Monad.Reader (ReaderT(..), Reader, runReader)
 import qualified Control.Monad.Reader as Reader
 import Control.Monad.State
-import Control.Monad.Trans
 
 import Data.SBV
 
 
-data Netlist = Netlist [Gate] [Wire]
+data Netlist = Netlist [Gate] [Net]
   deriving (Eq, Show)
 
-data Wire = Wire 
-  { source :: (Gate, Pin)
-  , target :: (Gate, Pin)
-  , wireIndex :: Index
+data Net = Net
+  { contacts :: [(Gate, Pin)]
+  , netIndex :: Index
   } deriving Show
 
-instance Eq Wire where
-  w == v = wireIndex w == wireIndex v
+instance Eq Net where
+  w == v = netIndex w == netIndex v
 
-instance Ord Wire where
-  w `compare` v = wireIndex w `compare` wireIndex v
+instance Ord Net where
+  w `compare` v = netIndex w `compare` netIndex v
 
 
 type Index = Int

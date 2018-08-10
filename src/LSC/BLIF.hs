@@ -22,28 +22,21 @@ fromBLIF (BLIF models) = do
         , g <- gates i command
         ]
 
-  let pins = 
-        [ if pinDir pin == In
-            then Right (gate, wire, pin)
-            else Left (gate, wire, pin)
+  let nets = Map.fromListWith (++)
+        [ (net, [(gate, pin)])
         | gate@(Gate ident assignments _) <- nodes
-        , (contact, wire) <- assignments
+        , (contact, net) <- assignments
         , com <- maybeToList $ Map.lookup ident $ components technology
         , pin <- maybeToList $ Map.lookup contact $ componentPins com
         ]
 
-  
-  let edges = indexed <$> zip [1..]
-        [ Wire (sourceGate, pinOut) (targetGate, pinIn) 0
-        | (sourceGate, input, pinOut) <- lefts pins
-        , (targetGate, output, pinIn) <- rights pins
-        , input == output
-        ] where indexed (i, wire) = wire { wireIndex = i }
-
+  let edges =
+        [ Net pins i
+        | (i, pins) <- [1..] `zip` Map.elems nets
+        ]
 
   pure $ Netlist nodes edges
     
-
 
 gates :: Int -> Command -> [Gate]
 gates i (LibraryGate ident assignments)
