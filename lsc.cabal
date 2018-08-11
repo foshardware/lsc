@@ -16,7 +16,8 @@ cabal-version:       >=1.10
 executable lsc
   main-is:             Main.hs
   -- other-modules:       
-  -- other-extensions:    
+  -- other-extensions:   
+  build-tools:         happy, alex 
   build-depends:       base >=4.2
                      , lsc
                      , transformers
@@ -28,7 +29,7 @@ executable lsc
   other-modules:       Paths_lsc
 
 library
-  build-tools: alex
+  build-tools:   happy, alex
   hs-source-dirs:
       src
   ghc-options: -Wall
@@ -57,12 +58,15 @@ library
       Liberty.Tokens,
       Liberty.Lexer,
 
-      LSC.Parser.Numbers,
+      SystemVerilog.Parser,
+      SystemVerilog.Lexer,
+      SystemVerilog.Language,
 
       LSC,
       LSC.BLIF,
       LSC.LEF,
       LSC.SVG,
+      LSC.Numbers,
       LSC.Operator,
       LSC.Types
   other-modules:
