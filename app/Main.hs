@@ -21,6 +21,7 @@ import LSC
 import LSC.BLIF
 import LSC.LEF
 import LSC.SVG
+import LSC.Exlining
 import LSC.Types
 
 versionString :: String
@@ -65,7 +66,7 @@ program = do
     -- print debug info
     when (Debug `elem` fmap fst opts)
       $ do
-        liftIO $ hPutStrLn stderr $ show netlist
+        liftIO $ hPutStrLn stderr $ show $ gateIdent <$> hierarchical netlist
         exit
 
     -- svg output
@@ -90,6 +91,7 @@ data FlagKey
   | Lef
   | Compile
   | Debug
+  | Rtl
   deriving (Eq, Show)
 
 type FlagValue = String

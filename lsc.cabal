@@ -58,14 +58,11 @@ library
       Liberty.Tokens,
       Liberty.Lexer,
 
-      SystemVerilog.Parser,
-      SystemVerilog.Lexer,
-      SystemVerilog.Language,
-
       LSC,
       LSC.BLIF,
       LSC.LEF,
       LSC.SVG,
+      LSC.Exlining,
       LSC.Numbers,
       LSC.Operator,
       LSC.Types
