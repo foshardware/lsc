@@ -39,6 +39,7 @@ library
                 , kan-extensions
                 , array
                 , parsec
+                , vector
                 , text
                 , containers
                 , blaze-svg
@@ -62,6 +63,7 @@ library
       LSC.BLIF,
       LSC.LEF,
       LSC.SVG,
+      LSC.SuffixTree,
       LSC.Exlining,
       LSC.Numbers,
       LSC.Operator,

@@ -66,7 +66,7 @@ program = do
     -- print debug info
     when (Debug `elem` fmap fst opts)
       $ do
-        liftIO $ hPutStrLn stderr $ show $ gateIdent <$> hierarchical netlist
+        liftIO $ hPutStrLn stderr $ show $ hierarchical netlist
         exit
 
     -- svg output
