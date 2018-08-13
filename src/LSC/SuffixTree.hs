@@ -7,7 +7,7 @@ import Data.Ord
 import Data.List (tails)
 import Data.IntMap (IntMap)
 import qualified Data.IntMap as Map
-import Data.Vector (Vector)
+import Data.Vector (Vector, (!))
 import qualified Data.Vector as Vector
 import qualified Data.Vector.Algorithms.Intro as Intro
 import qualified Data.Vector.Algorithms.Radix as Radix
@@ -29,19 +29,35 @@ type Length = Int
 
 
 constructSuffixTree :: Foldable f => (a -> Int) -> f a -> SuffixTree a
-constructSuffixTree goedel xs = SuffixTree (dictionary, suffixArray, lcp)
+constructSuffixTree goedel xs = SuffixTree (dictionary, SuffixArray suffixVector, LCP lcp)
   where
-    lcp = undefined
     dictionary = Map.fromList [(goedel x, x) | x <- Fold.toList xs]
-    suffixArray = SuffixArray $ sort $ Vector.fromList
+    suffixVector = radixSort $ Vector.fromList
       [ (i, Vector.fromList ys)
-      | (i, ys) <- zip [0..] $ tails $ fmap goedel $ Fold.toList xs
+      | (i, ys) <- zip [0..] $ tails $ [goedel x | x <- Fold.toList xs]
       ]
+    lcp = Vector.fromList $ 0 : 
+      [ commonPrefixLength (suffixVector ! i) (suffixVector ! (i - 1))
+      | i <- [1 .. Vector.length suffixVector - 1]
+      ] 
 
 
-sort :: Vector Suffix -> Vector Suffix
-sort v = runST $ do
+commonPrefixLength :: Suffix -> Suffix -> Int
+commonPrefixLength (_, xs) (_, ys)
+  | Vector.null xs || Vector.null ys
+  = 0
+commonPrefixLength (p, xs_) (q, ys_)
+  | (x, xs) <- Vector.splitAt 1 xs_
+  , (y, ys) <- Vector.splitAt 1 ys_
+  , x == y
+  = 1 + commonPrefixLength (p, xs) (q, ys)
+commonPrefixLength _ _ = 0
+
+
+radixSort :: Vector Suffix -> Vector Suffix
+radixSort v = runST $ do
   m <- Vector.thaw v
-  Intro.sort m
+  Intro.sortBy comp m
   Vector.freeze m
+  where comp (_, a) (_, b) = compare a b
 
