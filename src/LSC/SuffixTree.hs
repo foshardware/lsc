@@ -3,61 +3,66 @@ module LSC.SuffixTree where
 
 import Data.Foldable as Fold
 import Control.Monad.ST
-import Data.Ord
 import Data.List (tails)
-import Data.IntMap (IntMap)
-import qualified Data.IntMap as Map
 import Data.Vector (Vector, (!))
 import qualified Data.Vector as Vector
+import qualified Data.Vector.Unboxed as Unboxed
 import qualified Data.Vector.Algorithms.Intro as Intro
 import qualified Data.Vector.Algorithms.Radix as Radix
 
 
-newtype SuffixTree a = SuffixTree (IntMap a, SuffixArray, LCP)
+data SuffixTree a = SuffixTree [a] SuffixArray LCP
   deriving Show
 
-newtype SuffixArray = SuffixArray (Vector Suffix)
-  deriving Show
+type SuffixArray = Vector (Position, Suffix)
 
-newtype LCP = LCP (Vector Length)
-  deriving Show
+type LCP = Vector (Position, Length)
 
 type Position = Int
-type Suffix = (Position, Vector Int)
+type Suffix = Unboxed.Vector Int
 
 type Length = Int
 
 
 constructSuffixTree :: Foldable f => (a -> Int) -> f a -> SuffixTree a
-constructSuffixTree goedel xs = SuffixTree (dictionary, SuffixArray suffixVector, LCP lcp)
+constructSuffixTree goedel xs = SuffixTree string suffixArray lcp
+  
   where
-    dictionary = Map.fromList [(goedel x, x) | x <- Fold.toList xs]
-    suffixVector = radixSort $ Vector.fromList
-      [ (i, Vector.fromList ys)
-      | (i, ys) <- zip [0..] $ tails $ [goedel x | x <- Fold.toList xs]
+
+    string = Fold.toList xs
+
+    suffixArray = sortBy snd $ Vector.fromList
+      [ (i, Unboxed.fromList ys)
+      | (i, ys) <- zip [0..] $ tails [goedel x | x <- string]
       ]
-    lcp = Vector.fromList $ 0 : 
-      [ commonPrefixLength (suffixVector ! i) (suffixVector ! (i - 1))
-      | i <- [1 .. Vector.length suffixVector - 1]
-      ] 
+
+    lcp = Vector.fromList
+      [ (i, commonPrefix x y)
+      | k <- [0 .. Vector.length suffixArray - 1]
+      , let (i, x) = suffixArray ! k
+      , let (_, y) = suffixArray ! (k-1) -- undefined for k=0: this is the sentinel string
+      ]
 
 
-commonPrefixLength :: Suffix -> Suffix -> Int
-commonPrefixLength (_, xs) (_, ys)
-  | Vector.null xs || Vector.null ys
-  = 0
-commonPrefixLength (p, xs_) (q, ys_)
-  | (x, xs) <- Vector.splitAt 1 xs_
-  , (y, ys) <- Vector.splitAt 1 ys_
+longestSubstring :: SuffixTree a -> [a]
+longestSubstring (SuffixTree string _ lcp)
+  = take l $ drop i string
+  where (i, l) = maximumBy ( \ a b -> snd a `compare` snd b ) lcp
+
+
+commonPrefix :: Suffix -> Suffix -> Int
+commonPrefix xs_ ys_
+  | (x, xs) <- Unboxed.splitAt 1 xs_
+  , (y, ys) <- Unboxed.splitAt 1 ys_
+  , Unboxed.length x > 0
   , x == y
-  = 1 + commonPrefixLength (p, xs) (q, ys)
-commonPrefixLength _ _ = 0
+  = 1 + commonPrefix xs ys
+commonPrefix _ _ = 0
 
 
-radixSort :: Vector Suffix -> Vector Suffix
-radixSort v = runST $ do
+sortBy :: (a -> Suffix) -> Vector a -> Vector a
+sortBy f v = runST $ do
   m <- Vector.thaw v
-  Intro.sortBy comp m
+  Intro.sortBy ( \ a b -> f a `compare` f b ) m
   Vector.freeze m
-  where comp (_, a) (_, b) = compare a b
 
