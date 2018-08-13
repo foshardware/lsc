@@ -40,6 +40,8 @@ library
                 , array
                 , parsec
                 , vector
+                , vector-algorithms
+                , hashable
                 , text
                 , containers
                 , blaze-svg
