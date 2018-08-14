@@ -2,12 +2,24 @@
 module LSC.Exlining where
 
 import Data.Hashable
-import Data.Vector
 
 import LSC.SuffixTree
 import LSC.Types
 
 
-hierarchical :: Netlist -> Vector Gate
-hierarchical (Netlist nodes _) = longestSubstring $ constructSuffixTree (hash . gateIdent) nodes
+hierarchical :: Netlist -> Netlist
+hierarchical (Netlist nodes edges) = Netlist
 
+  nodesPass
+
+  edges
+
+  where
+
+    suffixTree = constructSuffixTree (hash . gateIdent) nodes
+
+    (ix, len, prefix) = longestSubstring suffixTree
+
+    (xs, ys) = splitAt ix nodes
+    ( _, zs) = splitAt len ys
+    nodesPass = xs ++ ys

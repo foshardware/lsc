@@ -44,9 +44,9 @@ constructSuffixTree goedel xs = SuffixTree string suffixArray lcp
       ]
 
 
-longestSubstring :: SuffixTree a -> Vector a
+longestSubstring :: SuffixTree a -> (Int, Int, Vector a)
 longestSubstring (SuffixTree string _ lcp)
-  = Vector.take len $ Vector.drop ix $ string
+  = (ix, len, Vector.take len $ Vector.drop ix $ string)
   where (ix, len) = maximumBy ( \ a b -> snd a `compare` snd b ) lcp
 
 
