@@ -6,6 +6,7 @@ import Control.Monad.Reader
 import Data.Either
 import qualified Data.Map as Map
 import Data.Maybe
+import qualified Data.Vector as Vector
 
 import BLIF.Syntax
 import LSC.Types hiding (ask)
@@ -35,7 +36,10 @@ fromBLIF (BLIF models) = do
         | (i, pins) <- [1..] `zip` Map.elems nets
         ]
 
-  pure $ Netlist nodes edges
+  pure $ Netlist
+    mempty
+    (Vector.fromList nodes)
+    (Vector.fromList edges)
     
 
 gates :: Int -> Command -> [Gate]

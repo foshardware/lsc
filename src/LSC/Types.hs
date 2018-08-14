@@ -6,6 +6,7 @@ module LSC.Types where
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Text (Text)
+import Data.Vector (Vector)
 
 import Control.Monad.Codensity
 import Control.Monad.Reader (ReaderT(..), Reader, runReader)
@@ -15,8 +16,11 @@ import Control.Monad.State
 import Data.SBV
 
 
-data Netlist = Netlist [Gate] [Net]
-  deriving (Eq, Show)
+data Netlist = Netlist
+  { subModels  :: Map Text Netlist
+  , gateVector :: Vector Gate
+  , netVector  :: Vector Net
+  } deriving (Eq, Show)
 
 data Net = Net
   { contacts :: [(Gate, Pin)]

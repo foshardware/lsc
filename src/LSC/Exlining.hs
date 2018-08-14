@@ -2,13 +2,17 @@
 module LSC.Exlining where
 
 import Data.Hashable
+import Data.Vector
+import Prelude hiding ((++), splitAt)
 
 import LSC.SuffixTree
 import LSC.Types
 
 
 hierarchical :: Netlist -> Netlist
-hierarchical (Netlist nodes edges) = Netlist
+hierarchical (Netlist models nodes edges) = Netlist
+
+  models
 
   nodesPass
 
