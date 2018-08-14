@@ -11,7 +11,7 @@ import qualified Data.Vector.Algorithms.Intro as Intro
 import qualified Data.Vector.Algorithms.Radix as Radix
 
 
-data SuffixTree a = SuffixTree [a] SuffixArray LCP
+data SuffixTree a = SuffixTree (Vector a) SuffixArray LCP
   deriving Show
 
 type SuffixArray = Vector (Position, Suffix)
@@ -29,11 +29,11 @@ constructSuffixTree goedel xs = SuffixTree string suffixArray lcp
   
   where
 
-    string = Fold.toList xs
+    string = Vector.fromList $ Fold.toList xs
 
     suffixArray = sortBy snd $ Vector.fromList
       [ (i, Unboxed.fromList ys)
-      | (i, ys) <- zip [0..] $ tails [goedel x | x <- string]
+      | (i, ys) <- zip [0..] $ tails [goedel x | x <- Vector.toList string]
       ]
 
     lcp = Vector.fromList
@@ -44,10 +44,10 @@ constructSuffixTree goedel xs = SuffixTree string suffixArray lcp
       ]
 
 
-longestSubstring :: SuffixTree a -> [a]
+longestSubstring :: SuffixTree a -> Vector a
 longestSubstring (SuffixTree string _ lcp)
-  = take l $ drop i string
-  where (i, l) = maximumBy ( \ a b -> snd a `compare` snd b ) lcp
+  = Vector.take len $ Vector.drop ix $ string
+  where (ix, len) = maximumBy ( \ a b -> snd a `compare` snd b ) lcp
 
 
 commonPrefix :: Suffix -> Suffix -> Int

@@ -2,12 +2,12 @@
 module LSC.Exlining where
 
 import Data.Hashable
+import Data.Vector
 
 import LSC.SuffixTree
 import LSC.Types
 
 
-hierarchical :: Netlist -> [Gate]
-hierarchical (Netlist nodes _) = longestSubstring $ constructSuffixTree goedel nodes
-  where goedel gate = hash $ gateIdent gate
+hierarchical :: Netlist -> Vector Gate
+hierarchical (Netlist nodes _) = longestSubstring $ constructSuffixTree (hash . gateIdent) nodes
 
