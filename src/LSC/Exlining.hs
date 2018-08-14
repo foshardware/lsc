@@ -10,7 +10,7 @@ import LSC.Types
 
 
 hierarchical :: Netlist -> Netlist
-hierarchical (Netlist models nodes edges) = Netlist
+hierarchical (Netlist name models nodes edges) = Netlist name
 
   models
 

@@ -6,6 +6,7 @@ import Control.Monad.Reader
 import Data.Either
 import qualified Data.Map as Map
 import Data.Maybe
+import Data.List (tails)
 import qualified Data.Vector as Vector
 
 import BLIF.Syntax
@@ -13,14 +14,18 @@ import LSC.Types hiding (ask)
 
 
 fromBLIF :: BLIF -> Gnostic Netlist
+fromBLIF (BLIF     []) = pure mempty
 fromBLIF (BLIF models) = do
+
+  let (model, submodels) = splitAt 1 models
 
   technology <- ask
 
   let nodes =
-        [ g | Model _ _ _ _ commands <- models
+        [ gate
+        | Model _ _ _ _ commands <- model
         , (i, command) <- zip [1..] commands
-        , g <- gates i command
+        , gate <- gates i command
         ]
 
   let nets = Map.fromListWith (++)
@@ -36,11 +41,17 @@ fromBLIF (BLIF models) = do
         | (i, pins) <- [1..] `zip` Map.elems nets
         ]
 
+  subGraphs <- sequence
+        [ (,) name <$> fromBLIF (BLIF [submodel])
+        | submodel@(Model name _ _ _ _) <- submodels
+        ]
+
   pure $ Netlist
-    mempty
+    (head [name | Model name _ _ _ _ <- model])
+    (Map.fromList subGraphs)
     (Vector.fromList nodes)
     (Vector.fromList edges)
-    
+
 
 gates :: Int -> Command -> [Gate]
 gates i (LibraryGate ident assignments)
