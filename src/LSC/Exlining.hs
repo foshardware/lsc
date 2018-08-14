@@ -22,4 +22,4 @@ hierarchical (Netlist nodes edges) = Netlist
 
     (xs, ys) = splitAt ix nodes
     ( _, zs) = splitAt len ys
-    nodesPass = xs ++ ys
+    nodesPass = xs ++ zs
