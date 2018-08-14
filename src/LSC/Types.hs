@@ -18,15 +18,17 @@ import Data.SBV
 
 data Netlist = Netlist
   { modelName  :: Text
+  , modelPins  :: ([Text], [Text], [Text]) 
   , subModels  :: Map Text Netlist
   , gateVector :: Vector Gate
   , netVector  :: Vector Net
   } deriving Show
 
 instance Monoid Netlist where
-  mempty = Netlist mempty mempty mempty mempty
+  mempty = Netlist mempty mempty mempty mempty mempty
   net1 `mappend` net2 = Netlist
     (modelName  net1 `mappend` modelName  net2)
+    (modelPins  net1 `mappend` modelPins  net2)
     (subModels  net1 `mappend` subModels  net2)
     (gateVector net1 `mappend` gateVector net2)
     (netVector  net1 `mappend` netVector  net2)

@@ -18,7 +18,7 @@ import LSC.Types
 type Stage1 = Circuit2D
 
 stage1 :: Netlist -> LSC Stage1
-stage1 (Netlist _ _ gates wires) = do
+stage1 (Netlist _ _ _ gates wires) = do
 
   nodes <- Map.fromList . Vector.toList <$> sequence (freeNode <$> gates)
   edges <- Map.fromList . Vector.toList <$> sequence (freeEdge <$> wires)

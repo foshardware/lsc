@@ -48,6 +48,7 @@ fromBLIF (BLIF models) = do
 
   pure $ Netlist
     (head [name | Model name _ _ _ _ <- model])
+    (head [(i, o, c) | Model _ i o c _ <- model])
     (Map.fromList subGraphs)
     (Vector.fromList nodes)
     (Vector.fromList edges)
