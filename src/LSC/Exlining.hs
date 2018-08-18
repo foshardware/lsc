@@ -28,4 +28,7 @@ hierarchical (Netlist name pins models nodes edges) = Netlist name
 
     (xs, ys) = splitAt ix nodes
     ( _, zs) = splitAt len ys
-    nodesPass = xs ++ zs
+    nodesPass = xs ++ singleton component ++ zs
+
+    component = Gate mempty mempty 0
+

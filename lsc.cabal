@@ -37,6 +37,8 @@ library
                 , mtl
                 , sbv
                 , kan-extensions
+                , unordered-containers
+                , reducers
                 , array
                 , parsec
                 , vector
@@ -67,6 +69,7 @@ library
       LSC.SVG,
       LSC.SuffixTree,
       LSC.Exlining,
+      LSC.LZ78,
       LSC.Numbers,
       LSC.Operator,
       LSC.Types
