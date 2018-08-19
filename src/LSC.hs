@@ -6,8 +6,6 @@ module LSC where
 import qualified Data.Map as Map
 import qualified Data.Vector as Vector
 
-import Data.Maybe
-
 import Data.SBV
 import Data.SBV.Control
 

@@ -3,10 +3,8 @@ module LSC.BLIF where
 
 import Control.Monad.Reader
 
-import Data.Either
 import qualified Data.Map as Map
 import Data.Maybe
-import Data.List (tails)
 import qualified Data.Vector as Vector
 
 import BLIF.Syntax

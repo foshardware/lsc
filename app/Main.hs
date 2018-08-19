@@ -6,8 +6,6 @@ import Control.Monad
 import Control.Monad.Trans
 import Control.Monad.Trans.Maybe
 
-import Data.Foldable
-
 import qualified Data.Text.IO as Text
 
 import System.Console.GetOpt
