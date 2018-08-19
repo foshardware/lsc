@@ -2,7 +2,7 @@
 
 module LSC.Exlining where
 
-import Control.Monad
+import Data.Function
 import Data.Generator
 import Data.Hashable
 import Data.Semigroup.Reducer
@@ -18,21 +18,23 @@ import LSC.LZ78
 import LSC.Duval
 
 
-exline (Netlist name pins models nodes edges) = length <$> recurseLyndon 4 (GateChar <$> nodes)
+exline (Netlist name pins models nodes edges)
+  = length <$> lyn
+  where lyn = recurseLyndon 8 (GateChar <$> nodes)
 
 
 recurseLyndon :: Ord a => Int -> Vector a -> Vector (Vector a)
-recurseLyndon n nodes
+recurseLyndon k nodes
   | i <- maxLyndon nodes
   , (xs, ys) <- splitAt i nodes
-  , i > n
-  = recurseLyndon n xs ++ recurseLyndon n ys
+  , i > k
+  = recurseLyndon k xs ++ recurseLyndon k ys
 recurseLyndon _ nodes = singleton nodes
 
 maxLyndon :: Ord a => Vector a -> Int
 maxLyndon nodes
   = fst
-  $ maximumBy ( \ a b -> weight a `compare` weight b)
+  $ maximumBy (compare `on` weight)
   $ fromList
   [ (i, duval xs ++ duval ys)
   | i <- [ 1 .. length nodes - 1 ]
