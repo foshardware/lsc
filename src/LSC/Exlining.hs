@@ -6,6 +6,7 @@ import Control.Monad
 import Data.Generator
 import Data.Hashable
 import Data.Semigroup.Reducer
+import qualified Data.Set as Set
 import qualified Data.Sequence as Seq
 import Data.Sequence ((|>))
 import Data.Vector hiding (replicate)
@@ -17,7 +18,7 @@ import LSC.LZ78
 import LSC.Duval
 
 
-exline (Netlist name pins models nodes edges) = length <$> recurseLyndon 8 nodes
+exline (Netlist name pins models nodes edges) = length <$> recurseLyndon 4 nodes
 
 
 recurseLyndon :: Int -> Vector Gate -> Vector (Vector Gate)
@@ -25,24 +26,19 @@ recurseLyndon n nodes
   | i <- maxLyndon nodes
   , (xs, ys) <- splitAt i nodes
   , i > n
-  = recurseLyndon n xs ++ duval ys
+  = recurseLyndon n xs ++ recurseLyndon n ys
 recurseLyndon _ nodes = singleton nodes
 
 maxLyndon :: Vector Gate -> Int
 maxLyndon nodes
   = fst
-  $ maximumBy ( \ a b -> snd a `compare` snd b)
+  $ maximumBy ( \ a b -> weight a `compare` weight b)
   $ fromList
-  [ (i, weight $ duval ordering)
-  | i <- [0..]
-  | ordering <- tails $ GateChar <$> nodes
-  ] where weight = length 
+  [ (i, duval xs ++ duval ys)
+  | i <- [ 1 .. length nodes - 1 ]
+  , let (xs, ys) = splitAt i $ fmap GateChar nodes
+  ] where weight (_, xs) = div (length xs) (Set.size $ Set.fromList $ toList xs)
 
-tails :: Vector a -> [Vector a]
-tails v =
-  [ drop i v
-  | i <- [0 .. length v - 1]
-  ]
 
 hierarchical :: Netlist -> Netlist
 hierarchical (Netlist name pins models nodes edges) = Netlist name
