@@ -37,7 +37,7 @@ maxLyndon nodes
   [ (i, duval xs ++ duval ys)
   | i <- [ 1 .. length nodes - 1 ]
   , let (xs, ys) = splitAt i nodes
-  ] where weight (_, xs) = div (length xs) (Set.size $ Set.fromList $ toList xs)
+  ] where weight (_, xs) = length xs
 
 
 hierarchical :: Netlist -> Netlist
