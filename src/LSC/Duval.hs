@@ -48,5 +48,5 @@ duval s = runST $ do
 
           modifySTRef i_ (+ (j - k))
 
-  slice 0 <$> readSTRef c_ <*> freeze factorization
+  slice 0 <$> readSTRef c_ <*> unsafeFreeze factorization
 
