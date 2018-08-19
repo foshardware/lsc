@@ -61,6 +61,18 @@ instance Ord Gate where
   g `compare` h = gateIndex g `compare` gateIndex h
 
 
+newtype GateChar = GateChar { unGateChar :: Gate }
+
+instance Eq GateChar where
+  GateChar gate1 == GateChar gate2 = gateIdent gate1 == gateIdent gate2
+
+instance Ord GateChar where
+  GateChar gate1 `compare` GateChar gate2 = gateIdent gate1 `compare` gateIdent gate2
+
+instance Show GateChar where
+  show (GateChar gate) = show gate
+
+
 data Component = Component
   { componentPins :: Map Text Pin
   , componentDimensions :: (Integer, Integer)

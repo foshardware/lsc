@@ -37,6 +37,7 @@ library
                 , mtl
                 , sbv
                 , kan-extensions
+                , monad-loops
                 , unordered-containers
                 , reducers
                 , array
@@ -67,6 +68,7 @@ library
       LSC.BLIF,
       LSC.LEF,
       LSC.SVG,
+      LSC.Duval,
       LSC.SuffixTree,
       LSC.Exlining,
       LSC.LZ78,
