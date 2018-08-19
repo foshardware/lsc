@@ -18,10 +18,10 @@ import LSC.LZ78
 import LSC.Duval
 
 
-exline (Netlist name pins models nodes edges) = length <$> recurseLyndon 4 nodes
+exline (Netlist name pins models nodes edges) = length <$> recurseLyndon 4 (GateChar <$> nodes)
 
 
-recurseLyndon :: Int -> Vector Gate -> Vector (Vector Gate)
+recurseLyndon :: Ord a => Int -> Vector a -> Vector (Vector a)
 recurseLyndon n nodes
   | i <- maxLyndon nodes
   , (xs, ys) <- splitAt i nodes
@@ -29,14 +29,14 @@ recurseLyndon n nodes
   = recurseLyndon n xs ++ recurseLyndon n ys
 recurseLyndon _ nodes = singleton nodes
 
-maxLyndon :: Vector Gate -> Int
+maxLyndon :: Ord a => Vector a -> Int
 maxLyndon nodes
   = fst
   $ maximumBy ( \ a b -> weight a `compare` weight b)
   $ fromList
   [ (i, duval xs ++ duval ys)
   | i <- [ 1 .. length nodes - 1 ]
-  , let (xs, ys) = splitAt i $ fmap GateChar nodes
+  , let (xs, ys) = splitAt i nodes
   ] where weight (_, xs) = div (length xs) (Set.size $ Set.fromList $ toList xs)
 
 
