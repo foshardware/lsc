@@ -38,7 +38,7 @@ constructSuffixTree goedel xs = SuffixTree string suffixArray lcp
     suffixArray
       = sortBy (compare `on` snd)
       $ generate (length string + 1)
-      $ \ k -> (k + 1, Unboxed.fromList $ toList $ drop k $ goedel <$> string)
+      $ \ k -> (k + 1, Unboxed.generate (length string - k) (drop k (goedel <$> string) !))
 
     lcp = generate (length suffixArray) gen where
       gen k = (i, Unboxed.foldr commonPrefix 0 $ Unboxed.zip x y) where
@@ -88,10 +88,10 @@ findmaxr goedel xs ml = runST $ do
       then do
 
         -- multiple overlapping occurences
-        let pos = [ fst (r! x) - 1 | x <- [ p' - 1 .. n' - 1 ] ]
+        let pos = generate (n' - p' + 1) $ \ k -> fst (r! (k + p' - 1)) - 1
             len = snd (lcp! i)
 
-        modifySTRef result ((fromList pos, len) :)
+        modifySTRef result ((pos, len) :)
 
       else pure ()
     else pure ()
