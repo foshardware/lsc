@@ -22,7 +22,7 @@ duval s = runST $ do
 
   whileM_ ((n >) <$> readSTRef i_) $ do
 
-      j_ <- newSTRef . (+ 1) =<< readSTRef i_
+      j_ <- newSTRef . succ =<< readSTRef i_
       k_ <- newSTRef =<< readSTRef i_
 
       whileM_ (( \ j k -> j < n && s!k <= s!j ) <$> readSTRef j_ <*> readSTRef k_) $ do
@@ -32,9 +32,9 @@ duval s = runST $ do
 
           if s!k < s!j
           then writeSTRef k_ =<< readSTRef i_
-          else modifySTRef k_ (+ 1)
+          else modifySTRef k_ succ
 
-          modifySTRef j_ (+ 1)
+          modifySTRef j_ succ
 
       whileM_ ((<=) <$> readSTRef i_ <*> readSTRef k_) $ do
 
@@ -43,10 +43,10 @@ duval s = runST $ do
           k <- readSTRef k_
           c <- readSTRef c_
 
-          write factorization c (slice i (j - k) s)
-          modifySTRef c_ (+ 1)
+          write factorization c $ slice i (j - k) s
+          modifySTRef c_ succ
 
-          modifySTRef i_ (+ (j - k))
+          modifySTRef i_ $ \ x -> x + j - k
 
   slice 0 <$> readSTRef c_ <*> unsafeFreeze factorization
 

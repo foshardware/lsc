@@ -3,17 +3,21 @@
 module LSC.Exlining where
 
 import Data.Function
+import Data.Hashable
 import qualified Data.Set as Set
 import Data.Vector hiding (replicate)
-import Prelude hiding ((++), splitAt, length, concat, drop, take, null)
+import Prelude hiding ((++), splitAt, length, concat, drop, take, null, zip, unzip)
 
 import LSC.Types
 import LSC.Duval
+import LSC.SuffixTree
 
 
 exline (Netlist _ _ _ nodes _)
-  = (length $ unique, length $ lyn, length <$> lyn)
+  -- = (lz, length $ lz, length $ unique, length $ lyn, length <$> lyn)
+  = (longestSubString tree)
   where
+    tree@(SuffixTree _ _ lcp) = constructSuffixTree (hash . gateIdent) nodes
     lyn = recurseLyndon 16 (GateChar <$> nodes)
     unique = fromList $ Set.toList $ Set.fromList $ toList lyn
 
