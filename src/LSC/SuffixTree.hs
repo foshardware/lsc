@@ -2,7 +2,6 @@
 module LSC.SuffixTree where
 
 import qualified Data.Foldable as Fold
-import Control.Monad
 import Control.Monad.ST
 import Data.Foldable (for_)
 import Data.Function (on)
@@ -10,12 +9,10 @@ import Data.List (tails)
 import Data.STRef
 import qualified Data.IntSet as Set
 import Data.Vector hiding (zip, minimum, init)
-import Data.Vector.Mutable (new, write)
 import qualified Data.Vector.Unboxed as Unboxed
 import qualified Data.Vector.Algorithms.Intro as Intro
 import qualified Data.Vector.Algorithms.Radix as Radix
 import Prelude hiding (length, (++), take, drop, reverse, filter)
-import Debug.Trace
 
 
 data SuffixTree a = SuffixTree (Vector a) SuffixArray LCP
@@ -51,7 +48,7 @@ constructSuffixTree goedel xs = SuffixTree string suffixArray lcp
       ]
 
 
-findmaxr :: Foldable f => (a -> Int) -> f a -> Int -> [Vector a]
+findmaxr :: Foldable f => (a -> Int) -> f a -> Int -> [(Vector Position, Length)]
 findmaxr goedel xs ml = runST $ do
 
   let SuffixTree w r lcp = constructSuffixTree goedel xs
@@ -61,33 +58,42 @@ findmaxr goedel xs ml = runST $ do
   let n = length w
   let p = reverse r
 
-  _S <- newSTRef $ Set.fromList $ 0: n: [ u | u <- [1 .. n - 1], snd (lcp! u) < ml ]
+  -- discard all positions where length of least common prefix < ml
+  _S <- newSTRef $ Set.fromList [ u | u <- [1 .. n-1], snd (lcp! u) < ml ]
 
-  let _I = sortBy ( \ i j -> snd (lcp! i) `compare` snd (lcp! j)) $ fromList [0 .. n-1]
+  let _I = sortBy ( \ i j -> snd (lcp! i) `compare` snd (lcp! j)) $ generate (n-1) id
 
   let initial = minimum $ n: [ t | t <- toList _I, snd (lcp! (_I! t)) >= ml ]
 
-  for_ [ initial .. n - 1] $ \ t -> do
+  for_ [ initial .. n-1 ] $ \ t -> do
 
     let i = _I! t
 
-    pi <- maybe i succ . Set.lookupLT i <$> readSTRef _S
-    ni <- maybe i   id . Set.lookupGT i <$> readSTRef _S
+    p' <- maybe 0 succ . Set.lookupLT i <$> readSTRef _S
+    n' <- maybe n   id . Set.lookupGT i <$> readSTRef _S
 
     modifySTRef _S $ Set.insert i
 
-    if (pi == 1 || snd (lcp! (pi-1)) /= snd (lcp! i))
-      && (ni == n || snd (lcp! ni) /= snd (lcp! i))
+    -- check if this substring is maximal to the right
+    if   (p' == 1 || snd (lcp! (p'-1)) /= snd (lcp! i))
+      && (n' == n || snd (lcp!     n') /= snd (lcp! i))
+
     then do
-      if fst (r! pi) == 1 || fst (r! ni) == 1
-        || goedel (w! (fst (r! pi) - 1)) /= goedel (w! (fst (r! ni) - 1))
-        || fst (p! (fst (r! ni) - 1)) - fst (p! (fst (r! pi) - 1)) /= ni - pi
+
+      -- check if this substring is maximal to the left
+      if   fst (r! p') == 1 || fst (r! n') == 1
+        || goedel (w! (fst (r! p') - 1)) /= goedel (w! (fst (r! n') - 1))
+        || fst (p! (fst (r! n') - 1)) - fst (p! (fst (r! p') - 1)) /= n' - p'
+
       then do
 
-        modifySTRef result (slice (fst (r! i) - 1) (snd (lcp! i)) w :)
+        -- multiple overlapping occurences
+        let pos = [ fst (r! x) - 1 | x <- [ p' - 1 .. n' - 1 ] ]
+            len = snd (lcp! i)
+
+        modifySTRef result ((fromList pos, len) :)
 
       else pure ()
-
     else pure ()
 
   readSTRef result
