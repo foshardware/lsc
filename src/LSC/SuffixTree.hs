@@ -35,17 +35,17 @@ constructSuffixTree goedel xs = SuffixTree string suffixArray lcp
 
     string = fromList $ Fold.toList xs
 
-    suffixArray = sortBy (compare `on` snd) $ fromList
-      [ (i, Unboxed.fromList ys)
-      | (i, ys) <- zip [1..] $ tails [goedel x | x <- toList string]
-      ]
+    suffixArray
+      = sortBy (compare `on` snd)
+      $ generate (length string + 1)
+      $ \ k -> (k + 1, Unboxed.fromList $ toList $ drop k $ goedel <$> string)
 
-    lcp = fromList
-      [ (i, Unboxed.foldr commonPrefix 0 $ Unboxed.zip x y)
-      | k <- [0 .. length suffixArray - 1]
-      , let (i, x) = suffixArray ! k
-      , let (_, y) = if k > 0 then suffixArray ! (k-1) else (undefined, mempty)
-      ]
+    lcp = generate (length suffixArray) gen where
+      gen k = (i, Unboxed.foldr commonPrefix 0 $ Unboxed.zip x y) where
+        (i, x) = suffixArray ! k
+        (_, y) = case k of
+            0 -> (undefined, mempty)
+            _ -> suffixArray ! (k-1)
 
 
 findmaxr :: Foldable f => (a -> Int) -> f a -> Int -> [(Vector Position, Length)]
@@ -61,7 +61,7 @@ findmaxr goedel xs ml = runST $ do
   -- discard all positions where length of least common prefix < ml
   _S <- newSTRef $ Set.fromList [ u | u <- [1 .. n-1], snd (lcp! u) < ml ]
 
-  let _I = sortBy ( \ i j -> snd (lcp! i) `compare` snd (lcp! j)) $ generate (n-1) id
+  let _I = sortBy ( \ i j -> snd (lcp! i) `compare` snd (lcp! j)) $ generate n id
 
   let initial = minimum $ n: [ t | t <- toList _I, snd (lcp! (_I! t)) >= ml ]
 
