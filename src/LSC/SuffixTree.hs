@@ -52,13 +52,19 @@ constructSuffixTree goedel string = SuffixTree string suffixArray lcp
             _ -> suffixArray ! (k-1)
 
 
-maximalRepeatsDisjoint :: Foldable f => (a -> Int) -> f a -> Int -> Vector (Length, [Position])
+maximalRepeatsDisjoint
+  :: Foldable f
+  => (a -> Int)
+  -> f a
+  -> Int
+  -> Vector (Length, [Position], Int)
 maximalRepeatsDisjoint goedel xs ml
-  = sortBy ( \ (len1, xs) (len2, ys) -> sum (len2 <$ ys) `compare` sum (len1 <$ xs))
+  = sortBy ( \ (_, _, x) (_, _, y) -> compare y x)
   $ fromList
 
-  [ (len, foldr (disjoint len) [] rs)
-  | (rs, len) <- runST $ findmaxr goedel string ml
+  [ (len, xs, len * length xs)
+  | (len, rs) <- runST $ findmaxr goedel string ml
+  , let xs = foldr (disjoint len) [] rs
   ]
 
   where
@@ -69,7 +75,7 @@ maximalRepeatsDisjoint goedel xs ml
     disjoint _ p xs = p : xs
 
 
-findmaxr :: (a -> Int) -> Vector a -> Int -> ST s [(Vector Position, Length)]
+findmaxr :: (a -> Int) -> Vector a -> Int -> ST s [(Length, [Position])]
 findmaxr goedel string ml = do
 
   let SuffixTree w r lcp = constructSuffixTree goedel string
@@ -109,10 +115,10 @@ findmaxr goedel string ml = do
       then do
 
         -- multiple overlapping occurences
-        let pos = generate (n' - p' + 1) $ \ k -> fst (r! (k + p' - 1)) - 1
+        let pos = [ fst (r! k) - 1 | k <- [p' - 1 .. n' - 1] ]
             len = snd (lcp! i)
 
-        modifySTRef result ((pos, len) :)
+        modifySTRef result ((len, pos) :)
 
       else pure ()
     else pure ()
