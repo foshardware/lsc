@@ -3,16 +3,22 @@ module LSC.SuffixTree where
 
 import qualified Data.Foldable as Fold
 import Control.Monad.ST
-import Data.Foldable (for_)
+import Data.Foldable hiding (reverse)
 import Data.Function (on)
 import Data.List (tails)
 import Data.STRef
 import qualified Data.IntSet as Set
-import Data.Vector hiding (zip, minimum, init)
+import Data.Vector
+  ( Vector
+  , unsafeFreeze, freeze, thaw
+  , generate, (!)
+  , reverse, drop
+  , fromList
+  )
 import qualified Data.Vector.Unboxed as Unboxed
 import qualified Data.Vector.Algorithms.Intro as Intro
 import qualified Data.Vector.Algorithms.Radix as Radix
-import Prelude hiding (length, (++), take, drop, reverse, filter)
+import Prelude hiding (reverse, drop)
 
 
 data SuffixTree a = SuffixTree (Vector a) SuffixArray LCP
@@ -28,12 +34,10 @@ type Suffix = Unboxed.Vector Int
 type Length = Int
 
 
-constructSuffixTree :: Foldable f => (a -> Int) -> f a -> SuffixTree a
-constructSuffixTree goedel xs = SuffixTree string suffixArray lcp
+constructSuffixTree :: (a -> Int) -> Vector a -> SuffixTree a
+constructSuffixTree goedel string = SuffixTree string suffixArray lcp
   
   where
-
-    string = fromList $ Fold.toList xs
 
     suffixArray
       = sortBy (compare `on` snd)
@@ -48,10 +52,27 @@ constructSuffixTree goedel xs = SuffixTree string suffixArray lcp
             _ -> suffixArray ! (k-1)
 
 
-findmaxr :: Foldable f => (a -> Int) -> f a -> Int -> [(Vector Position, Length)]
-findmaxr goedel xs ml = runST $ do
+maximalRepeatsDisjoint :: Foldable f => (a -> Int) -> f a -> Int -> Vector (Length, [Position])
+maximalRepeatsDisjoint goedel xs ml
+  = sortBy ( \ (len1, xs) (len2, ys) -> sum (len2 <$ ys) `compare` sum (len1 <$ xs))
+  $ fromList
 
-  let SuffixTree w r lcp = constructSuffixTree goedel xs
+  [ (len, foldr (disjoint len) [] rs)
+  | (rs, len) <- runST $ findmaxr goedel string ml
+  ]
+
+  where
+
+    string = fromList $ Fold.toList xs
+
+    disjoint l p (x : xs) | x + l > p = x : xs
+    disjoint _ p xs = p : xs
+
+
+findmaxr :: (a -> Int) -> Vector a -> Int -> ST s [(Vector Position, Length)]
+findmaxr goedel string ml = do
+
+  let SuffixTree w r lcp = constructSuffixTree goedel string
 
   result <- newSTRef []
 
@@ -61,7 +82,7 @@ findmaxr goedel xs ml = runST $ do
   -- discard all positions where length of least common prefix < ml
   _S <- newSTRef $ Set.fromList [ u | u <- [1 .. n-1], snd (lcp! u) < ml ]
 
-  let _I = sortBy ( \ i j -> snd (lcp! i) `compare` snd (lcp! j)) $ generate n id
+  let _I = sortBy (compare `on` snd . (lcp!)) $ generate n id
 
   let initial = minimum $ n: [ t | t <- toList _I, snd (lcp! (_I! t)) >= ml ]
 
