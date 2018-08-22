@@ -5,7 +5,7 @@ import qualified Data.Foldable as Fold
 import Control.Monad.ST
 import Data.Foldable hiding (reverse)
 import Data.Function (on)
-import Data.List (tails)
+import Data.List (tails, sortBy)
 import Data.STRef
 import qualified Data.IntSet as Set
 import Data.Vector
@@ -40,7 +40,7 @@ constructSuffixTree goedel string = SuffixTree string suffixArray lcp
   where
 
     suffixArray
-      = sortBy (compare `on` snd)
+      = radixSortBy (compare `on` snd)
       $ generate (length string + 1)
       $ \ k -> (k + 1, Unboxed.generate (length string - k) (drop k (goedel <$> string) !))
 
@@ -57,10 +57,9 @@ maximalRepeatsDisjoint
   => (a -> Int)
   -> f a
   -> Int
-  -> Vector (Length, [Position], Int)
+  -> [(Length, [Position], Int)]
 maximalRepeatsDisjoint goedel xs ml
-  = sortBy ( \ (_, _, x) (_, _, y) -> compare y x)
-  $ fromList
+  = sortBy ( \ (k, _, x) (l, _, y) -> compare (y, l) (x, k))
 
   [ (len, xs, len * length xs)
   | (len, rs) <- runST $ findmaxr goedel string ml
@@ -88,7 +87,7 @@ findmaxr goedel string ml = do
   -- discard all positions where length of least common prefix < ml
   _S <- newSTRef $ Set.fromList [ u | u <- [1 .. n-1], snd (lcp! u) < ml ]
 
-  let _I = sortBy (compare `on` snd . (lcp!)) $ generate n id
+  let _I = radixSortBy (compare `on` snd . (lcp!)) $ generate n id
 
   let initial = minimum $ n: [ t | t <- toList _I, snd (lcp! (_I! t)) >= ml ]
 
@@ -136,8 +135,8 @@ longestSubString (SuffixTree _ _ lcp)
   = maximumBy ( \ a b -> snd a `compare` snd b ) lcp
 
 
-sortBy :: (a -> a -> Ordering) -> Vector a -> Vector a
-sortBy f v = runST $ do
+radixSortBy :: (a -> a -> Ordering) -> Vector a -> Vector a
+radixSortBy f v = runST $ do
   m <- thaw v
   Intro.sortBy f m
   unsafeFreeze m 

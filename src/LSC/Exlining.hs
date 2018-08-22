@@ -2,43 +2,45 @@
 
 module LSC.Exlining where
 
+import Control.Monad
+import Data.Foldable
 import Data.Function
+import qualified Data.List as List
 import Data.Hashable
+import Data.Set (Set)
 import qualified Data.Set as Set
-import Data.Vector hiding (replicate)
-import Prelude hiding ((++), splitAt, length, concat, drop, take, null, zip, unzip)
+import Data.Vector hiding (replicate, foldl', null, toList, length)
 
 import LSC.Types
-import LSC.Duval
 import LSC.SuffixTree
 
 
-exline (Netlist _ _ _ nodes _)
-  -- = (lz, length $ lz, length $ unique, length $ lyn, length <$> lyn)
-  = (longestSubString tree)
+exline k (Netlist name pins subModels nodes edges)
+  | not $ null maxr
+  = Netlist name pins subModels
+
+  (foldl' undefined nodes pos)
+
+  edges
+
   where
-    tree@(SuffixTree _ _ lcp) = constructSuffixTree (hash . gateIdent) nodes
-    lyn = recurseLyndon 16 (GateChar <$> nodes)
-    unique = fromList $ Set.toList $ Set.fromList $ toList lyn
+
+    ((len, pos, _) : _) = maxr
+    maxr = maximalRepeatsDisjoint (hash . gateIdent) nodes k
+
+    outerScope =
+      [ g | (p, q) <- List.zip (fmap (+ len) pos `mappend` pure 0) (length nodes : pos)
+      , g <- toList $ slice p (q - p) nodes
+      ]
+    innerScope = [ g | p <- pos, g <- toList $ slice p len nodes ]
+
+    outerScopeWires = scopeWires outerScope
+    innerScopeWires = scopeWires innerScope
+
+exline _ netlist = netlist
 
 
+scopeWires :: [Gate] -> Set Wire
+scopeWires nodes = Set.fromList [ snd wire | node <- nodes, wire <- gateWires node ]
 
-recurseLyndon :: Ord a => Int -> Vector a -> Vector (Vector a)
-recurseLyndon k nodes
-  | i <- maxLyndon nodes
-  , (xs, ys) <- splitAt i nodes
-  , i > 0
-  , length nodes > k
-  = recurseLyndon k xs ++ recurseLyndon k ys
-recurseLyndon _ nodes = singleton nodes
-
-maxLyndon :: Ord a => Vector a -> Int
-maxLyndon nodes
-  = fst
-  $ maximumBy (compare `on` weight)
-  $ fromList
-  [ (i, duval ys ++ duval xs)
-  | i <- [ 0 .. length nodes - 1 ]
-  , let (xs, ys) = splitAt i nodes
-  ] where weight (_, xs) = length xs
 

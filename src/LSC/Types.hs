@@ -3,6 +3,7 @@
 
 module LSC.Types where
 
+import Data.Function (on)
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Text (Text)
@@ -46,6 +47,8 @@ instance Ord Net where
   w `compare` v = netIndex w `compare` netIndex v
 
 
+type Wire = Text
+
 type Index = Int
 
 data Gate = Gate
@@ -86,6 +89,9 @@ data Pin = Pin
 
 instance Eq Pin where
   p == q = pinIdent p == pinIdent q
+
+instance Ord Pin where
+  compare = compare `on` pinIdent
 
 
 data Port = Port

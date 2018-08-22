@@ -64,7 +64,7 @@ program = do
     -- print debug info
     when (Debug `elem` fmap fst opts)
       $ do
-        liftIO $ hPutStrLn stderr $ show $ exline netlist
+        liftIO $ hPutStrLn stderr $ show $ exline 4 netlist
         exit
 
     -- svg output
