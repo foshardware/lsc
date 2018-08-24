@@ -2,45 +2,73 @@
 
 module LSC.Exlining where
 
+import Data.Monoid
 import Control.Monad
 import Data.Foldable
 import Data.Function
-import qualified Data.List as List
 import Data.Hashable
 import Data.Set (Set)
 import qualified Data.Set as Set
-import Data.Vector hiding (replicate, foldl', null, toList, length)
+import Data.Map (Map)
+import qualified Data.Map as Map
+import Data.Vector hiding (replicate, foldl', null, toList, length, zip, foldr)
+import TextShow
 
 import LSC.Types
 import LSC.SuffixTree
 
 
-exline k (Netlist name pins subModels nodes edges)
+exline k (Netlist name pins subs nodes edges)
   | not $ null maxr
-  = Netlist name pins subModels
+  = Netlist name pins
 
-  (foldl' undefined nodes pos)
+  (Map.insert (modelName abstractNetlist) abstractNetlist subs)
 
-  edges
+  mempty -- nodes
+
+  mempty -- edges
 
   where
 
     ((len, pos, _) : _) = maxr
     maxr = maximalRepeatsDisjoint (hash . gateIdent) nodes k
 
-    outerScope =
-      [ g | (p, q) <- List.zip (fmap (+ len) pos `mappend` pure 0) (length nodes : pos)
-      , g <- toList $ slice p (q - p) nodes
-      ]
-    innerScope = [ g | p <- pos, g <- toList $ slice p len nodes ]
+    represent = slice p1 len nodes
+    p1 : _ = pos
 
-    outerScopeWires = scopeWires outerScope
-    innerScopeWires = scopeWires innerScope
+    abstractNetlist
+      = Netlist
+      (buildName represent)
+      (inputPins closure represent, outputPins closure represent, mempty)
+      mempty mempty mempty
+    abstractGate = Gate mempty mempty 0
+
+    closure = Map.fromListWith Set.union
+      [ (i, Set.singleton x)
+      | p <- pos
+      , let inner = slice p len nodes
+      , let outer = slice 0 p nodes <> slice (p + len) (length nodes - p - len) nodes
+      , (i, x) <- Map.elems $ scopeWires inner `Map.intersection` scopeWires outer
+      ]
 
 exline _ netlist = netlist
 
 
-scopeWires :: [Gate] -> Set Wire
-scopeWires nodes = Set.fromList [ snd wire | node <- nodes, wire <- gateWires node ]
+scopeWires :: Foldable f => f Gate -> Map Identifier (Int, Wire)
+scopeWires nodes = Map.fromList
+  [ (k, (i, x))
+  | (i, node) <- [0..] `zip` toList nodes
+  , (x, k) <- gateWires node
+  ]
 
+
+buildName :: (Functor f, Foldable f) => f Gate -> Identifier
+buildName = showt . abs . hash . foldr mappend mempty . fmap gateIdent
+
+
+inputPins :: Foldable f => Map Int (Set Identifier) -> f Gate -> [Identifier]
+inputPins closure represent = undefined
+
+
+outputPins = undefined
 

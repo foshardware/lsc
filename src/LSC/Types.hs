@@ -49,6 +49,8 @@ instance Ord Net where
 
 type Wire = Text
 
+type Identifier = Text
+
 type Index = Int
 
 data Gate = Gate

@@ -46,6 +46,7 @@ library
                 , vector-algorithms
                 , hashable
                 , text
+                , text-show
                 , containers
                 , blaze-svg
   exposed-modules:
