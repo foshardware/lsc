@@ -35,8 +35,11 @@ instance Monoid Netlist where
     (netVector  net1 `mappend` netVector  net2)
 
 
+data Contact = Contact Gate Identifier Pin
+  deriving Show
+
 data Net = Net
-  { contacts :: [(Gate, Pin)]
+  { contacts :: [Contact]
   , netIndex :: Index
   } deriving Show
 

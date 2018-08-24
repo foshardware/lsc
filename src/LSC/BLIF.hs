@@ -26,8 +26,8 @@ fromBLIF (BLIF models) = do
         , gate <- gates i command
         ]
 
-  let nets = Map.fromListWith (++)
-        [ (net, [(gate, pin)])
+  let nets = Map.fromListWith mappend
+        [ (net, [Contact gate contact pin])
         | gate@(Gate ident assignments _) <- nodes
         , (contact, net) <- assignments
         , com <- maybeToList $ Map.lookup ident $ components technology
