@@ -11,7 +11,7 @@ import Data.Set (Set)
 import qualified Data.Set as Set
 import Data.Map (Map)
 import qualified Data.Map as Map
-import Data.Vector hiding (replicate, foldl', null, toList, length, zip, foldr)
+import Data.Vector hiding (replicate, foldl', null, toList, length, zip, foldr, elem)
 import TextShow
 
 import LSC.Types
@@ -39,7 +39,7 @@ exline k (Netlist name pins subs nodes edges)
     abstractNetlist
       = Netlist
       (buildName scope)
-      (inputIdents closure scope, outputIdents closure scope, mempty)
+      (inputIdents closure scope, error $ show closure, mempty)
       mempty mempty mempty
     abstractGate = Gate mempty mempty 0
 
@@ -57,8 +57,7 @@ exline _ netlist = netlist
 scopeWires :: Foldable f => f Gate -> Map Identifier (Int, Wire)
 scopeWires nodes = Map.fromList
   [ (k, (i, x))
-  | i      <- [0..]
-  | node   <- toList nodes
+  | (i, node) <- [0..] `zip` toList nodes
   , (x, k) <- gateWires node
   ]
 
@@ -68,8 +67,12 @@ buildName = showt . abs . hash . foldr mappend mempty . fmap gateIdent
 
 
 inputIdents :: Foldable f => Map Int (Set Identifier) -> f Gate -> [Identifier]
-inputIdents closure scope = undefined
-
+inputIdents closure scope =
+  [ x <> showt i
+  | (i, node) <- [0..] `zip` toList scope
+  , (x, _) <- gateWires node
+  , maybe False (x `elem`) (Map.lookup i closure)
+  ]
 
 outputIdents = undefined
 
