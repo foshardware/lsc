@@ -3,14 +3,14 @@ module LSC.SuffixTree where
 
 import qualified Data.Foldable as Fold
 import Control.Monad.ST
-import Data.Foldable hiding (reverse)
+import Data.Foldable
 import Data.Function (on)
-import Data.List (tails, sortBy)
+import Data.List (sortBy)
 import Data.STRef
 import qualified Data.IntSet as Set
 import Data.Vector
   ( Vector
-  , unsafeFreeze, freeze, thaw
+  , unsafeFreeze, thaw
   , generate, (!)
   , reverse, drop
   , fromList
@@ -61,17 +61,17 @@ maximalRepeatsDisjoint
 maximalRepeatsDisjoint goedel xs ml
   = sortBy ( \ (k, _, x) (l, _, y) -> compare (y, l) (x, k))
 
-  [ (len, xs, len * length xs)
+  [ (len, ys, len * length ys)
   | (len, rs) <- runST $ findmaxr goedel string ml
-  , let xs = foldr (disjoint len) [] rs
+  , let ys = foldr (disjoint len) [] rs
   ]
 
   where
 
     string = fromList $ Fold.toList xs
 
-    disjoint l p (x : xs) | x + l > p = x : xs
-    disjoint _ p xs = p : xs
+    disjoint l p (y : ys) | y + l > p = y : ys
+    disjoint _ p ys = p : ys
 
 
 findmaxr :: (a -> Int) -> Vector a -> Int -> ST s [(Length, [Position])]

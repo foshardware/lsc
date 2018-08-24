@@ -33,13 +33,13 @@ exline k (Netlist name pins subs nodes edges)
     ((len, pos, _) : _) = maxr
     maxr = maximalRepeatsDisjoint (hash . gateIdent) nodes k
 
-    represent = slice p1 len nodes
+    scope = slice p1 len nodes
     p1 : _ = pos
 
     abstractNetlist
       = Netlist
-      (buildName represent)
-      (inputPins closure represent, outputPins closure represent, mempty)
+      (buildName scope)
+      (inputIdents closure scope, outputIdents closure scope, mempty)
       mempty mempty mempty
     abstractGate = Gate mempty mempty 0
 
@@ -57,7 +57,8 @@ exline _ netlist = netlist
 scopeWires :: Foldable f => f Gate -> Map Identifier (Int, Wire)
 scopeWires nodes = Map.fromList
   [ (k, (i, x))
-  | (i, node) <- [0..] `zip` toList nodes
+  | i      <- [0..]
+  | node   <- toList nodes
   , (x, k) <- gateWires node
   ]
 
@@ -66,9 +67,9 @@ buildName :: (Functor f, Foldable f) => f Gate -> Identifier
 buildName = showt . abs . hash . foldr mappend mempty . fmap gateIdent
 
 
-inputPins :: Foldable f => Map Int (Set Identifier) -> f Gate -> [Identifier]
-inputPins closure represent = undefined
+inputIdents :: Foldable f => Map Int (Set Identifier) -> f Gate -> [Identifier]
+inputIdents closure scope = undefined
 
 
-outputPins = undefined
+outputIdents = undefined
 
