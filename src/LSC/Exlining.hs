@@ -53,7 +53,7 @@ exline k top@(Netlist name pins subs nodes edges)
       $ rescore nodes <$> maximalRepeatsDisjoint (hash . gateIdent) nodes k
 
     gate p = Gate (modelName netlist) (wires p) 0
-    wires p =
+    wires p = Map.assocs $ Map.fromList
       [ (i, v)
       | node <- toList $ slice (p - len) len nodes
       , (_, v) <- gateWires node
