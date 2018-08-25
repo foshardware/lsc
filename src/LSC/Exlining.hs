@@ -1,4 +1,4 @@
-{-# LANGUAGE TypeFamilies, ParallelListComp #-}
+{-# LANGUAGE TypeFamilies, ParallelListComp, ScopedTypeVariables #-}
 
 module LSC.Exlining where
 
@@ -18,6 +18,7 @@ import Data.Vector hiding
   , null, length
   , toList, zip
   , reverse
+  , head
   , take
   )
 import Prelude hiding (concat)
@@ -28,16 +29,14 @@ import LSC.SuffixTree
 
 
 exline :: Int -> Netlist -> Netlist
-exline k (Netlist name pins subs nodes edges)
+exline k top@(Netlist name pins subs nodes edges)
   | not $ null isomorphicGates
   = Netlist name pins
 
-  (Map.insert (modelName abstractNetlist) abstractNetlist subs)
+  (Map.insert (modelName netlist) netlist subs)
 
-  (foldr (<>) mempty $ reverse $
-    [ case p of
-        0 -> slice 0 q nodes
-        _ -> abstractGate (slice (p - len) len nodes) `cons` slice p (q - p) nodes
+  (concat $ reverse
+    [ head $ [ gate `cons` slice p (q - p) nodes | p > 0 ] <> [ slice 0 q nodes ]
     | p <- fmap (+ len) pos <> pure 0
     | q <- length nodes : pos
     ])
@@ -52,54 +51,55 @@ exline k (Netlist name pins subs nodes edges)
       $ filter ( \ (_, _, score) -> score > 0)
       $ rescore nodes <$> maximalRepeatsDisjoint (hash . gateIdent) nodes k
 
+    gate = Gate mempty mempty 0
+    netlist = createSublist len pos top
+
+exline _ netlist = netlist
+
+
+createSublist :: Length -> [Position] -> Netlist -> Netlist
+createSublist _ [] netlist = netlist
+
+createSublist len pos@(p1 : _) (Netlist name _ _ nodes edges) = Netlist
+
+  (name <> buildName scope)
+
+  ( [ pin | (pin, dir) <- pins, dir `elem` [In,  InOut] ]
+  , [ pin | (pin, dir) <- pins, dir `elem` [Out, InOut] ]
+  , mempty
+  )
+
+  mempty
+
+  (generate (length scope) mask)
+
+  mempty
+
+  where
+
+    input  i = True
+    output i = True
+
+    pins =
+      [ (i, dir)
+      | (i, (k, g)) <- Map.elems closure
+      , dir <- maybeToList $ Map.lookup (gateIdent g, k) dirs
+      ]
+
     scope = slice p1 len nodes
-    p1 : _ = pos
 
-    inputIdents  = lookupDirection [InOut,  In]
-    outputIdents = lookupDirection [InOut, Out]
+    dirs = directions edges
 
-    lookupDirection f =
-      [ ident
-      | ((contact, _), (ident, gate)) <- gateAssignments closure scope
-      , dir <- maybeToList $ Map.lookup (gateIdent gate, contact) pinDirections
-      , dir `elem` f
-      ]
-    pinDirections = Map.fromList
-      [ ((gateIdent gate, contact), pinDir pin)
-      | Net cs _ <- toList edges
-      , Contact gate contact pin <- cs
-      ]
+    mask i = Gate gn [ (k, maybe v fst $ Map.lookup v closure) | (k, v) <- ws ] gi
+      where Gate gn ws gi = scope ! i
 
-    abstractNetlist
-      = Netlist (buildName scope) (inputIdents, outputIdents, mempty) mempty
-
-      ( generate (length scope) $ \ i ->
-         let gate = scope ! i
-         in gate
-            { gateWires =
-              [ (j, v)
-              | (j, v) <- gateWires gate
-              -- , a <- maybeToList $ Nothing
-              , ref <- maybeToList $ Map.lookup i closure
-              ]
-            } )
-
-      mempty
-
-    abstractGate s
-      = Gate (buildName scope)
-      [ (ident, contact) | ((_, contact), (ident, gate)) <- gateAssignments closure s ]
-      (length nodes + 1)
-
-    closure = Map.fromListWith Map.union
-      [ (i, Map.singleton j o)
+    closure = Map.fromList
+      [ (v, (i, (k, g)))
       | p <- pos
       , let inner = slice p len nodes
       , let outer = slice 0 p nodes <> slice (p + len) (length nodes - p - len) nodes
-      , (o, (i, j)) <- Map.assocs $ scopeWires inner `Map.intersection` scopeWires outer
+      , (v, (i, (k, g))) <- Map.assocs $ scopeWires inner `Map.intersection` scopeWires outer
       ]
-
-exline _ netlist = netlist
 
 
 rescore :: Vector Gate -> (Length, [Position], Int) -> (Length, [Position], Int)
@@ -121,10 +121,10 @@ rescore nodes (len, pos,     _) = (len, qos, len * length qos)
     piece p = [ v | node <- toList $ slice p len nodes, (_, v) <- gateWires node ]
 
 
-scopeWires :: Foldable f => f Gate -> Map Identifier (Int, Wire)
+scopeWires :: Foldable f => f Gate -> Map Identifier (Identifier, (Wire, Gate))
 scopeWires nodes = Map.fromList
-  [ (v, (i, k))
-  | (i, node) <- [0..] `zip` toList nodes
+  [ (v, (k <> showt i, (k, node)))
+  | (i :: Int, node) <- [0..] `zip` toList nodes
   , (k, v) <- gateWires node
   ]
 
@@ -133,17 +133,11 @@ buildName :: (Functor f, Foldable f) => f Gate -> Identifier
 buildName = showt . abs . hash . foldr mappend mempty . fmap gateIdent
 
 
-gateAssignments
-  :: Foldable f
-  => Map Int (Map Identifier Identifier)
-  -> f Gate
-  -> [((Identifier, Identifier), (Identifier, Gate))]
-gateAssignments closure scope =
-  [ ((k, v), (k <> showt i, node))
-  | (i, node) <- [0..] `zip` toList scope
-  , (k, v) <- gateWires node
-  , ref <- maybeToList $ Map.lookup i closure
-  , Map.member k ref
+directions :: Vector Net -> Map (Identifier, Identifier) Dir
+directions edges = Map.fromList
+  [ ((gateIdent gate, contact), pinDir pin)
+  | Net cs _ <- toList edges
+  , Contact gate contact pin <- cs
   ]
 
 
