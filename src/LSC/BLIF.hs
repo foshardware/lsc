@@ -3,6 +3,7 @@ module LSC.BLIF where
 
 import Control.Monad.Reader
 
+import Data.Foldable
 import qualified Data.Map as Map
 import Data.Maybe
 import qualified Data.Vector as Vector
@@ -64,3 +65,22 @@ gates i (Subcircuit ident assignments)
         assignments
         i ]
 gates _ _ = []
+
+
+
+toBLIF :: Netlist -> BLIF
+toBLIF netlist = BLIF $ toModel netlist : [ toModel list | list <- toList $ subModels netlist ]
+
+
+toModel :: Netlist -> Model
+toModel (Netlist name (inputList, outputList, clockList) _ nodes _) = Model name
+
+  inputList outputList clockList
+
+  [ toSubcircuit node | node <- toList nodes ]
+
+
+toSubcircuit :: Gate -> Command
+toSubcircuit (Gate ident wires _) = Subcircuit ident wires
+
+
