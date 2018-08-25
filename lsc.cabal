@@ -88,6 +88,7 @@ library
       LSC.LEF,
       LSC.SVG,
       LSC.SuffixTree,
+      LSC.Inlining,
       LSC.Exlining,
       LSC.Numbers,
       LSC.Operator,
