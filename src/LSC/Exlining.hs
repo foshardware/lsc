@@ -7,8 +7,6 @@ import Data.Hashable
 import Data.List (sortBy)
 import Data.Maybe
 import Data.Monoid
-import Data.Set (Set)
-import qualified Data.Set as Set
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Vector hiding
@@ -35,11 +33,7 @@ exline k top@(Netlist name pins subs nodes edges)
 
   (Map.insert (modelName netlist) netlist subs)
 
-  (concat $ reverse
-    [ head $ [ gate `cons` slice p (q - p) nodes | p > 0 ] <> [ slice 0 q nodes ]
-    | p <- fmap (+ len) pos <> pure 0
-    | q <- length nodes : pos
-    ])
+  newGateVector
 
   edges
 
@@ -51,8 +45,14 @@ exline k top@(Netlist name pins subs nodes edges)
       $ filter ( \ (_, _, score) -> score > 0)
       $ rescore nodes <$> maximalRepeatsDisjoint (hash . gateIdent) nodes k
 
-    gate = Gate mempty mempty 0
+    gate p q = Gate (modelName netlist) mempty 0
     netlist = createSublist len pos top
+
+    newGateVector = concat $ reverse
+      [ head $ [ gate p q `cons` slice p (q - p) nodes | p > 0 ] <> [ slice 0 q nodes ]
+      | p <- fmap (+ len) pos <> pure 0
+      | q <- length nodes : pos
+      ]
 
 exline _ netlist = netlist
 
@@ -76,9 +76,6 @@ createSublist len pos@(p1 : _) (Netlist name _ _ nodes edges) = Netlist
   mempty
 
   where
-
-    input  i = True
-    output i = True
 
     pins =
       [ (i, dir)
