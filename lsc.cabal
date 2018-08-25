@@ -23,6 +23,7 @@ executable lsc
                      , transformers
                      , mtl
                      , text
+                     , file-embed
   hs-source-dirs:      app
   ghc-options:         -Wall
   default-language:    Haskell2010
@@ -70,10 +71,8 @@ library
       LSC.BLIF,
       LSC.LEF,
       LSC.SVG,
-      LSC.Duval,
       LSC.SuffixTree,
       LSC.Exlining,
-      LSC.LZ78,
       LSC.Numbers,
       LSC.Operator,
       LSC.Types
