@@ -98,12 +98,11 @@ createSublist len pos@(p1 : _) (Netlist name _ _ nodes edges) = (,) closure $ Ne
     mask i = Gate gn [ (k, maybe v fst $ Map.lookup v closure) | (k, v) <- ws ] gi
       where Gate gn ws gi = scope ! i
 
-    closure = Map.fromList
-      [ (v, (i, (k, g)))
+    closure = Map.unions
+      [ scopeWires inner `Map.intersection` scopeWires outer
       | p <- pos
       , let inner = slice p len nodes
       , let outer = slice 0 p nodes <> slice (p + len) (length nodes - p - len) nodes
-      , (v, (i, (k, g))) <- Map.assocs $ scopeWires inner `Map.intersection` scopeWires outer
       ]
 
 createSublist _ _ netlist = (mempty, netlist)
