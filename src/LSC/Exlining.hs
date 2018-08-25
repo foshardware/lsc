@@ -1,7 +1,11 @@
-{-# LANGUAGE TypeFamilies, ParallelListComp, ScopedTypeVariables #-}
+{-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE ParallelListComp #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TupleSections #-}
 
 module LSC.Exlining where
 
+import Control.Applicative
 import Data.Foldable hiding (concat)
 import Data.Hashable
 import Data.List (sortBy)
@@ -68,12 +72,12 @@ exline _ netlist = netlist
 
 
 createSublist :: Length -> [Position] -> Netlist -> (Closure, Netlist)
-createSublist len pos@(p1 : _) (Netlist name _ _ nodes edges) = (,) closure $ Netlist
+createSublist len pos@(p1 : _) (Netlist name (inputList, outputList, _) _ nodes edges)
+  = (,) closure
+  $ Netlist (name <> buildName scope)
 
-  (name <> buildName scope)
-
-  ( [ pin | (pin, dir) <- pins, dir `elem` [In,  InOut] ]
-  , [ pin | (pin, dir) <- pins, dir `elem` [Out, InOut] ]
+  ( [ pin | (pin, dir) <- abstractPins, dir `elem` [In,  InOut] ]
+  , [ pin | (pin, dir) <- abstractPins, dir `elem` [Out, InOut] ]
   , mempty
   )
 
@@ -85,24 +89,26 @@ createSublist len pos@(p1 : _) (Netlist name _ _ nodes edges) = (,) closure $ Ne
 
   where
 
-    pins =
+    abstractPins =
       [ (i, dir)
-      | (i, (k, g)) <- Map.elems closure
-      , dir <- maybeToList $ Map.lookup (gateIdent g, k) dirs
+      | (v, (i, (k, g))) <- Map.assocs closure
+      , dir <- maybeToList $ Map.lookup v modelDirs <|> Map.lookup (gateIdent g, k) scopeDirs
       ]
 
     scope = slice p1 len nodes
 
-    dirs = directions edges
+    scopeDirs = directions edges
+    modelDirs = Map.fromList $ fmap (, In) inputList <> fmap (, Out) outputList
 
     mask i = Gate gn [ (k, maybe v fst $ Map.lookup v closure) | (k, v) <- ws ] gi
       where Gate gn ws gi = scope ! i
 
     closure = Map.unions
-      [ scopeWires inner `Map.intersection` scopeWires outer
+      [ scopeWires inner `Map.intersection` (scopeWires outer `Map.union` model)
       | p <- pos
       , let inner = slice p len nodes
       , let outer = slice 0 p nodes <> slice (p + len) (length nodes - p - len) nodes
+      , let model = Map.fromList [(w, (w, (w, Gate name [] 0))) | w <- inputList <> outputList]
       ]
 
 createSublist _ _ netlist = (mempty, netlist)
