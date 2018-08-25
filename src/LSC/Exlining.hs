@@ -51,7 +51,7 @@ exline k (Netlist name pins subs nodes edges)
 
     lookupDirection f =
       [ ident
-      | (ident, (contact, gate)) <- enumGates closure scope
+      | ((contact, ident), gate) <- gateAssignments closure scope
       , dir <- maybeToList $ Map.lookup (gateIdent gate, contact) pinDirections
       , dir `elem` f
       ]
@@ -70,7 +70,7 @@ exline k (Netlist name pins subs nodes edges)
 
       mempty
 
-      mempty
+      scope
 
       mempty
 
@@ -118,17 +118,17 @@ buildName :: (Functor f, Foldable f) => f Gate -> Identifier
 buildName = showt . abs . hash . foldr mappend mempty . fmap gateIdent
 
 
-enumGates
+gateAssignments
   :: Foldable f
   => Map Int (Set Identifier)
   -> f Gate
-  -> [(Identifier, (Identifier, Gate))]
-enumGates closure scope =
-  [ (x <> showt i, (x, node))
+  -> [((Identifier, Identifier), Gate)]
+gateAssignments closure scope =
+  [ ((k, v), node)
   | (i, node) <- [0..] `zip` toList scope
-  , (x, _) <- gateWires node
+  , (k, v) <- gateWires node
   , ref <- maybeToList $ Map.lookup i closure
-  , x `elem` ref
+  , k `elem` ref
   ]
 
 
