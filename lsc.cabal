@@ -50,6 +50,7 @@ library
                 , containers
                 , blaze-svg
   exposed-modules:
+      BLIF.Builder,
       BLIF.Parser,
       BLIF.Syntax,
       BLIF.Tokens,

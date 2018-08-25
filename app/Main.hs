@@ -12,6 +12,7 @@ import System.Console.GetOpt
 import System.Environment
 import System.IO
 
+import BLIF.Builder
 import BLIF.Parser
 import LEF.Parser
 
@@ -61,6 +62,12 @@ program = do
         (pure . gnostic bootstr . fromBLIF)
         (parseBLIF net_)
 
+    -- print exlined blif to stdout
+    when (Exline `elem` fmap fst opts)
+      $ do
+        liftIO $ printBLIF $ toBLIF $ exline 4 netlist
+        exit
+
     -- print debug info
     when (Debug `elem` fmap fst opts)
       $ do
@@ -87,6 +94,7 @@ data FlagKey
   | Version
   | Blif
   | Lef
+  | Exline
   | Compile
   | Debug
   | Rtl
@@ -101,7 +109,9 @@ options =
     , Option ['b']      ["blif"]       (ReqArg (Blif, ) "FILE")    "BLIF file"
     , Option ['l']      ["lef"]        (ReqArg (Lef,  ) "FILE")    "LEF file"
     , Option ['d']      ["debug"]      (NoArg  (Debug, []))        "print some debug info"
-    , Option ['c']      ["compile"]    (OptArg ((Compile,  ) . maybe "svg" id) "svg,magic") "output format"
+    , Option ['c']      ["compile"]
+        (OptArg ((Compile,  ) . maybe "svg" id) "svg,magic")       "output format"
+    , Option ['x']      ["exline"]     (NoArg  (Exline, []))       "just exline and exit"
     ]
 
 compilerOpts :: [String] -> IO ([Flag], [String])
