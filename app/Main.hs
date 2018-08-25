@@ -65,13 +65,13 @@ program = do
     -- print exlined blif to stdout
     when (Exline `elem` fmap fst opts)
       $ do
-        liftIO $ printBLIF $ toBLIF $ exline 4 netlist
+        liftIO $ printBLIF $ toBLIF $ exlineRounds (replicate 3 4) netlist
         exit
 
     -- print debug info
     when (Debug `elem` fmap fst opts)
       $ do
-        liftIO $ hPutStrLn stderr $ show $ exline 4 netlist
+        liftIO $ printBLIF $ toBLIF $ exlineRounds (replicate 4 4) netlist
         exit
 
     -- svg output

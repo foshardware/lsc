@@ -32,6 +32,8 @@ import LSC.SuffixTree
 
 type Closure = Map Identifier (Identifier, (Wire, Gate))
 
+exlineRounds :: Foldable f => f Int -> Netlist -> Netlist
+exlineRounds xs netlist = foldr exline netlist xs
 
 exline :: Int -> Netlist -> Netlist
 exline k top@(Netlist name pins subs nodes edges)
@@ -89,7 +91,7 @@ createSublist len pos@(p1 : _) (Netlist name (inputList, outputList, _) _ nodes 
 
   where
 
-    abstractPins =
+    abstractPins = Map.assocs $ Map.fromList
       [ (i, dir)
       | (v, (i, (k, g))) <- Map.assocs closure
       , dir <- maybeToList $ Map.lookup v modelDirs <|> Map.lookup (gateIdent g, k) scopeDirs
