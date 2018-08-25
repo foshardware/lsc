@@ -2,9 +2,7 @@
 
 module LSC.Exlining where
 
-import Control.Monad
 import Data.Foldable
-import Data.Function
 import Data.Hashable
 import Data.List (sortBy)
 import Data.Maybe
@@ -31,15 +29,15 @@ exline k (Netlist name pins subs nodes edges)
 
   (Map.insert (modelName abstractNetlist) abstractNetlist subs)
 
-  mempty -- nodes
+  nodes
 
-  mempty -- edges
+  edges
 
   where
 
     ((len, pos, _) : _) = isomorphicGates
     isomorphicGates
-      = sortBy (\ (l, _, x) (m, _, y) -> compare (y, m) (x, l))
+      = sortBy ( \ (l, _, x) (m, _, y) -> compare (y, m) (x, l))
       $ filter ( \ (_, _, score) -> score > 0)
       $ rescore nodes <$> maximalRepeatsDisjoint (hash . gateIdent) nodes k
 
@@ -57,24 +55,18 @@ exline k (Netlist name pins subs nodes edges)
       ]
     pinDirections = Map.fromList
       [ ((gateIdent gate, contact), pinDir pin)
-      | Net contacts _ <- toList edges
-      , Contact gate contact pin <- contacts
+      | Net cs _ <- toList edges
+      , Contact gate contact pin <- cs
       ]
 
     abstractNetlist
-      = Netlist
-
-      (buildName scope)
-
-      (inputIdents, outputIdents, mempty)
-
-      mempty
+      = Netlist (buildName scope) (inputIdents, outputIdents, mempty) mempty
 
       scope
 
       mempty
 
-    abstractGate = Gate mempty mempty 0
+    -- abstractGate = Gate (buildName scope) mempty (length nodes + 1)
 
     closure = Map.fromListWith Set.union
       [ (i, Set.singleton x)

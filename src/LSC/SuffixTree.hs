@@ -61,9 +61,12 @@ maximalRepeatsDisjoint
 maximalRepeatsDisjoint goedel xs ml
   = sortBy ( \ (k, _, x) (l, _, y) -> compare (y, l) (x, k))
 
-  [ (len, ys, len * length ys)
+  [ (new, ys, new * length ys)
   | (len, rs) <- runST $ findmaxr goedel string ml
-  , let ys = foldr (disjoint len) [] rs
+  , let (new, ys) =
+          if unaryCode rs
+            then (length rs - 1 + len, [last rs])
+            else (len, foldr (disjoint len) [] rs)
   ]
 
   where
@@ -72,6 +75,15 @@ maximalRepeatsDisjoint goedel xs ml
 
     disjoint l p (y : ys) | y + l > p = y : ys
     disjoint _ p ys = p : ys
+
+
+unaryCode :: Foldable f => f Int -> Bool
+unaryCode = snd . foldr distance (minBound, True)
+  where
+    distance _ (p, False) = (p, False)
+    distance n (p, b) | p == minBound = (n, b)
+    distance n (p, b) | n - p == 1 = (n, b)
+    distance n (_, _) = (n, False)
 
 
 findmaxr :: (a -> Int) -> Vector a -> Int -> ST s [(Length, [Position])]
