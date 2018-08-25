@@ -13,5 +13,10 @@
 ## Usage
 
 `lsc -h`  
-`lsc -b test.blif -l osu035.lef -c > result.svg`
+`lsc -b test.blif -l osu035.lef -c > result.svg`  
+
+### Tests
+
+`lsc -t   # requires lsc-test in $PATH`  
+`lsc-test`  
 
