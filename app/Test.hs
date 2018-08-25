@@ -1,6 +1,6 @@
 {-# LANGUAGE TemplateHaskell #-}
 
-module Test where
+module Main where
 
 import Control.Monad
 import Control.Monad.Trans
@@ -14,7 +14,6 @@ import BLIF.Builder
 import BLIF.Parser
 import LEF.Parser
 
-import LSC
 import LSC.BLIF
 import LSC.LEF
 import LSC.Exlining
@@ -23,8 +22,8 @@ import LSC.Types
 
 type Test = MaybeT IO
 
-runTests :: IO ()
-runTests = void $ runMaybeT tests
+main :: IO ()
+main = void $ runMaybeT tests
 
 tests :: Test ()
 tests = do

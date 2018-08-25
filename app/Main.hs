@@ -23,8 +23,6 @@ import LSC.SVG
 import LSC.Exlining
 import LSC.Types
 
-import Test
-
 versionString :: String
 versionString = "lsc 0.1.0.0"
 
@@ -67,7 +65,6 @@ program = do
     -- run tests
     when (Test `elem` fmap fst opts)
       $ do
-        liftIO runTests
         exit
 
     -- print exlined blif to stdout
