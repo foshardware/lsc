@@ -23,6 +23,7 @@ executable lsc
                      , transformers
                      , mtl
                      , text
+                     , process
   hs-source-dirs:      app
   ghc-options:         -Wall
   default-language:    Haskell2010

@@ -6,11 +6,15 @@ import Control.Monad
 import Control.Monad.Trans
 import Control.Monad.Trans.Maybe
 
+import Data.Foldable (for_)
+
 import qualified Data.Text.IO as Text
+import qualified Data.Text.Lazy.IO as Pipe
 
 import System.Console.GetOpt
 import System.Environment
 import System.IO
+import System.Process
 
 import BLIF.Builder
 import BLIF.Parser
@@ -46,6 +50,14 @@ program = do
         liftIO $ hPutStrLn stderr $ versionString
         exit
 
+    -- run tests
+    when (Test `elem` fmap fst opts)
+      $ do
+        liftIO $ withCreateProcess (proc "lsc-test" []) { std_out = CreatePipe }
+         $ \ _ hout _ ph -> for_ hout
+          $ \ out -> Pipe.hGetContents out >>= Pipe.hPutStr stdout
+        exit
+
     let lefFiles   = [v | (k, v) <- opts, k == Lef ]
         blifFiles  = [v | (k, v) <- opts, k == Blif]
 
@@ -62,11 +74,6 @@ program = do
         (pure . gnostic bootstr . fromBLIF)
         (parseBLIF net_)
 
-    -- run tests
-    when (Test `elem` fmap fst opts)
-      $ do
-        exit
-
     -- print exlined blif to stdout
     when (Exline `elem` fmap fst opts)
       $ do
@@ -76,7 +83,7 @@ program = do
     -- print debug info
     when (Debug `elem` fmap fst opts)
       $ do
-        liftIO $ printBLIF $ toBLIF $ exlineRounds (replicate 4 4) netlist
+        liftIO $ hPutStrLn stderr $ show netlist
         exit
 
     -- svg output
