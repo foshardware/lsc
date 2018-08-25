@@ -23,6 +23,8 @@ import LSC.SVG
 import LSC.Exlining
 import LSC.Types
 
+import Test
+
 versionString :: String
 versionString = "lsc 0.1.0.0"
 
@@ -62,6 +64,12 @@ program = do
         (pure . gnostic bootstr . fromBLIF)
         (parseBLIF net_)
 
+    -- run tests
+    when (Test `elem` fmap fst opts)
+      $ do
+        liftIO runTests
+        exit
+
     -- print exlined blif to stdout
     when (Exline `elem` fmap fst opts)
       $ do
@@ -97,6 +105,7 @@ data FlagKey
   | Exline
   | Compile
   | Debug
+  | Test
   | Rtl
   deriving (Eq, Show)
 
@@ -112,6 +121,7 @@ options =
     , Option ['c']      ["compile"]
         (OptArg ((Compile,  ) . maybe "svg" id) "svg,magic")       "output format"
     , Option ['x']      ["exline"]     (NoArg  (Exline, []))       "just exline and exit"
+    , Option ['t']      ["test"]       (NoArg  (Test, []))         "run tests and exit"
     ]
 
 compilerOpts :: [String] -> IO ([Flag], [String])

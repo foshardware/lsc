@@ -15,7 +15,7 @@ cabal-version:       >=1.10
 
 executable lsc
   main-is:             Main.hs
-  -- other-modules:       
+  other-modules:       Test
   -- other-extensions:   
   build-tools:         happy, alex 
   build-depends:       base >=4.2

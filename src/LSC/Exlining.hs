@@ -32,8 +32,10 @@ import LSC.SuffixTree
 
 type Closure = Map Identifier (Identifier, (Wire, Gate))
 
+
 exlineRounds :: Foldable f => f Int -> Netlist -> Netlist
 exlineRounds xs netlist = foldr exline netlist xs
+
 
 exline :: Int -> Netlist -> Netlist
 exline k top@(Netlist name pins subs nodes edges)
