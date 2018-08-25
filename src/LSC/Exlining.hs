@@ -26,6 +26,9 @@ import LSC.Types
 import LSC.SuffixTree
 
 
+type Closure = Map Identifier (Identifier, (Wire, Gate))
+
+
 exline :: Int -> Netlist -> Netlist
 exline k top@(Netlist name pins subs nodes edges)
   | not $ null isomorphicGates
@@ -45,11 +48,18 @@ exline k top@(Netlist name pins subs nodes edges)
       $ filter ( \ (_, _, score) -> score > 0)
       $ rescore nodes <$> maximalRepeatsDisjoint (hash . gateIdent) nodes k
 
-    gate p q = Gate (modelName netlist) mempty 0
-    netlist = createSublist len pos top
+    gate p = Gate (modelName netlist) (wires p) 0
+    wires p =
+      [ (i, v)
+      | node <- toList $ slice (p - len) len nodes
+      , (_, v) <- gateWires node
+      , (i, _) <- maybeToList $ Map.lookup v closure
+      ]
+
+    (closure, netlist) = createSublist len pos top
 
     newGateVector = concat $ reverse
-      [ head $ [ gate p q `cons` slice p (q - p) nodes | p > 0 ] <> [ slice 0 q nodes ]
+      [ head $ [ gate p `cons` slice p (q - p) nodes | p > 0 ] <> [ slice 0 q nodes ]
       | p <- fmap (+ len) pos <> pure 0
       | q <- length nodes : pos
       ]
@@ -57,10 +67,8 @@ exline k top@(Netlist name pins subs nodes edges)
 exline _ netlist = netlist
 
 
-createSublist :: Length -> [Position] -> Netlist -> Netlist
-createSublist _ [] netlist = netlist
-
-createSublist len pos@(p1 : _) (Netlist name _ _ nodes edges) = Netlist
+createSublist :: Length -> [Position] -> Netlist -> (Closure, Netlist)
+createSublist len pos@(p1 : _) (Netlist name _ _ nodes edges) = (,) closure $ Netlist
 
   (name <> buildName scope)
 
@@ -98,6 +106,8 @@ createSublist len pos@(p1 : _) (Netlist name _ _ nodes edges) = Netlist
       , (v, (i, (k, g))) <- Map.assocs $ scopeWires inner `Map.intersection` scopeWires outer
       ]
 
+createSublist _ _ netlist = (mempty, netlist)
+
 
 rescore :: Vector Gate -> (Length, [Position], Int) -> (Length, [Position], Int)
 rescore     _ (len, [p], score) = (len, [p], score)
@@ -118,7 +128,7 @@ rescore nodes (len, pos,     _) = (len, qos, len * length qos)
     piece p = [ v | node <- toList $ slice p len nodes, (_, v) <- gateWires node ]
 
 
-scopeWires :: Foldable f => f Gate -> Map Identifier (Identifier, (Wire, Gate))
+scopeWires :: Foldable f => f Gate -> Closure
 scopeWires nodes = Map.fromList
   [ (v, (k <> showt i, (k, node)))
   | (i :: Int, node) <- [0..] `zip` toList nodes
