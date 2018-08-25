@@ -2,7 +2,7 @@
 
 module LSC.Exlining where
 
-import Data.Foldable
+import Data.Foldable hiding (concat)
 import Data.Hashable
 import Data.List (sortBy)
 import Data.Maybe
@@ -13,9 +13,14 @@ import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Vector hiding
   ( replicate
-  , foldl', null, toList, length, zip, foldr, elem, filter
+  , foldl', foldl, foldr
+  , elem, filter
+  , null, length
+  , toList, zip
+  , reverse
   , take
   )
+import Prelude hiding (concat)
 import TextShow
 
 import LSC.Types
@@ -29,7 +34,13 @@ exline k (Netlist name pins subs nodes edges)
 
   (Map.insert (modelName abstractNetlist) abstractNetlist subs)
 
-  nodes
+  (foldr (<>) mempty $ reverse $
+    [ case p of
+        0 -> slice 0 q nodes
+        _ -> abstractGate (slice (p - len) len nodes) `cons` slice p (q - p) nodes
+    | p <- fmap (+ len) pos <> pure 0
+    | q <- length nodes : pos
+    ])
 
   edges
 
@@ -49,7 +60,7 @@ exline k (Netlist name pins subs nodes edges)
 
     lookupDirection f =
       [ ident
-      | ((contact, ident), gate) <- gateAssignments closure scope
+      | ((contact, _), (ident, gate)) <- gateAssignments closure scope
       , dir <- maybeToList $ Map.lookup (gateIdent gate, contact) pinDirections
       , dir `elem` f
       ]
@@ -62,18 +73,30 @@ exline k (Netlist name pins subs nodes edges)
     abstractNetlist
       = Netlist (buildName scope) (inputIdents, outputIdents, mempty) mempty
 
-      scope
+      ( generate (length scope) $ \ i ->
+         let gate = scope ! i
+         in gate
+            { gateWires =
+              [ (j, v)
+              | (j, v) <- gateWires gate
+              -- , a <- maybeToList $ Nothing
+              , ref <- maybeToList $ Map.lookup i closure
+              ]
+            } )
 
       mempty
 
-    -- abstractGate = Gate (buildName scope) mempty (length nodes + 1)
+    abstractGate s
+      = Gate (buildName scope)
+      [ (ident, contact) | ((_, contact), (ident, gate)) <- gateAssignments closure s ]
+      (length nodes + 1)
 
-    closure = Map.fromListWith Set.union
-      [ (i, Set.singleton x)
+    closure = Map.fromListWith Map.union
+      [ (i, Map.singleton j o)
       | p <- pos
       , let inner = slice p len nodes
       , let outer = slice 0 p nodes <> slice (p + len) (length nodes - p - len) nodes
-      , (i, x) <- Map.elems $ scopeWires inner `Map.intersection` scopeWires outer
+      , (o, (i, j)) <- Map.assocs $ scopeWires inner `Map.intersection` scopeWires outer
       ]
 
 exline _ netlist = netlist
@@ -100,9 +123,9 @@ rescore nodes (len, pos,     _) = (len, qos, len * length qos)
 
 scopeWires :: Foldable f => f Gate -> Map Identifier (Int, Wire)
 scopeWires nodes = Map.fromList
-  [ (k, (i, x))
+  [ (v, (i, k))
   | (i, node) <- [0..] `zip` toList nodes
-  , (x, k) <- gateWires node
+  , (k, v) <- gateWires node
   ]
 
 
@@ -112,15 +135,15 @@ buildName = showt . abs . hash . foldr mappend mempty . fmap gateIdent
 
 gateAssignments
   :: Foldable f
-  => Map Int (Set Identifier)
+  => Map Int (Map Identifier Identifier)
   -> f Gate
-  -> [((Identifier, Identifier), Gate)]
+  -> [((Identifier, Identifier), (Identifier, Gate))]
 gateAssignments closure scope =
-  [ ((k, v), node)
+  [ ((k, v), (k <> showt i, node))
   | (i, node) <- [0..] `zip` toList scope
   , (k, v) <- gateWires node
   , ref <- maybeToList $ Map.lookup i closure
-  , k `elem` ref
+  , Map.member k ref
   ]
 
 
