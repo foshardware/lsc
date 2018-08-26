@@ -5,7 +5,6 @@ import Control.Monad.Reader
 
 import Data.Foldable
 import qualified Data.Map as Map
-import Data.Maybe
 import qualified Data.Vector as Vector
 
 import BLIF.Syntax
@@ -30,9 +29,9 @@ fromBLIF (BLIF models) = do
   let nets = Map.fromListWith mappend
         [ (net, [Contact gate contact pin])
         | gate@(Gate ident assignments _ _) <- nodes
-        , (contact, net) <- assignments
-        , com <- maybeToList $ Map.lookup ident $ components technology
-        , pin <- maybeToList $ Map.lookup contact $ componentPins com
+        , (contact, net) <- Map.assocs assignments
+        , com <- maybe [] pure $ Map.lookup ident $ components technology
+        , pin <- maybe [] pure $ Map.lookup contact $ componentPins com
         ]
 
   let edges =
@@ -57,12 +56,14 @@ gates :: Int -> Command -> [Gate]
 gates i (LibraryGate ident assignments)
   = [ Gate
         ident
-        assignments []
+        (Map.fromList assignments)
+        mempty
         i ]
 gates i (Subcircuit ident assignments)
   = [ Gate
         ident
-        assignments []
+        (Map.fromList assignments)
+        mempty
         i ]
 gates _ _ = []
 
@@ -81,6 +82,6 @@ toModel (Netlist name (inputList, outputList, clockList) _ nodes _) = Model name
 
 
 toSubcircuit :: Gate -> Command
-toSubcircuit (Gate ident wires _ _) = Subcircuit ident wires
+toSubcircuit (Gate ident wires _ _) = Subcircuit ident (Map.assocs wires)
 
 

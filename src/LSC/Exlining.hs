@@ -6,6 +6,7 @@
 module LSC.Exlining where
 
 import Control.Applicative
+import Data.Default
 import Data.Foldable hiding (concat)
 import Data.Hashable
 import Data.List (sortBy)
@@ -57,17 +58,17 @@ exline k top@(Netlist name pins subs nodes edges)
       $ rescore nodes <$> maximalRepeatsDisjoint (hash . gateIdent) nodes k
 
     gate p = Gate (modelName netlist) (wires p) (maps p) 0
-    wires p = Map.assocs $ Map.fromList
+    wires p = Map.fromList
       [ (i, v)
       | node <- toList $ slice (p - len) len nodes
-      , (_, v) <- gateWires node
+      , v <- toList (gateWires node)
       , (i, _) <- maybe [] pure $ Map.lookup v closure
       ]
-    maps p = Map.assocs $ Map.fromList
+    maps p = Map.fromList
       [ (v, u)
       | (offset, nodep) <- zip [0..] $ toList $ slice (p - len) len nodes
       , let node1 = nodes ! (p1 + offset)
-      , ((_, u), (_, v)) <- gateWires nodep `zip` gateWires node1
+      , (u, v) <- toList (gateWires nodep) `zip` toList (gateWires node1)
       ]
 
     (closure, netlist) = createSublist len pos top
@@ -110,15 +111,15 @@ createSublist len pos@(p1 : _) (Netlist name (inputList, outputList, _) _ nodes 
     scopeDirs = directions edges
     modelDirs = Map.fromList $ fmap (, In) inputList <> fmap (, Out) outputList
 
-    mask i = Gate gn [ (k, maybe v fst $ Map.lookup v closure) | (k, v) <- ws ] [] gi
-      where Gate gn ws _ gi = scope ! i
+    mask i = (scope ! i) { gateWires = lexicon <$> gateWires (scope ! i) } where
+      lexicon v = maybe v fst $ Map.lookup v closure
 
     closure = Map.unions
       [ scopeWires inner `Map.intersection` (scopeWires outer `Map.union` model)
       | p <- pos
       , let inner = slice p len nodes
       , let outer = slice 0 p nodes <> slice (p + len) (length nodes - p - len) nodes
-      , let model = Map.fromList [(w, (w, (w, Gate name [] [] 0))) | w <- inputList <> outputList]
+      , let model = Map.fromList [(w, (w, (w, def))) | w <- inputList <> outputList]
       ]
 
 createSublist _ _ netlist = (mempty, netlist)
@@ -140,14 +141,14 @@ rescore nodes (len, pos,     _) = (len, qos, len * length qos)
 
     conf (a, b) (s, ss) = (s && maybe s (b ==) (Map.lookup a ss), Map.insert a b ss)
 
-    piece p = [ v | node <- toList $ slice p len nodes, (_, v) <- gateWires node ]
+    piece p = [ v | node <- toList $ slice p len nodes, v <- toList $ gateWires node ]
 
 
 scopeWires :: Foldable f => f Gate -> Closure
 scopeWires nodes = Map.fromList
   [ (v, (k <> showt i, (k, node)))
   | (i :: Int, node) <- [0..] `zip` toList nodes
-  , (k, v) <- gateWires node
+  , (k, v) <- Map.assocs $ gateWires node
   ]
 
 

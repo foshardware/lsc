@@ -1,8 +1,11 @@
 {-# OPTIONS_GHC -fno-warn-type-defaults #-}
-{-# LANGUAGE GADTs, DataKinds #-}
+{-# LANGUAGE GADTs #-}
+{-# LANGUAGE DataKinds #-}
+{-# LANGUAGE OverloadedStrings #-}
 
 module LSC.Types where
 
+import Data.Default
 import Data.Function (on)
 import Data.Map (Map)
 import qualified Data.Map as Map
@@ -57,9 +60,9 @@ type Identifier = Text
 type Index = Int
 
 data Gate = Gate
-  { gateIdent :: Text
-  , gateWires :: [(Text, Text)]
-  , mapWires  :: [(Text, Text)]
+  { gateIdent :: Identifier
+  , gateWires :: Map Identifier Identifier
+  , mapWires  :: Map Identifier Identifier
   , gateIndex :: Index
   } deriving Show
 
@@ -68,6 +71,9 @@ instance Eq Gate where
 
 instance Ord Gate where
   g `compare` h = gateIndex g `compare` gateIndex h
+
+instance Default Gate where
+  def = Gate "default" def def def
 
 
 newtype GateChar = GateChar { unGateChar :: Gate }
