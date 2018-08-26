@@ -1,6 +1,7 @@
 
 module LSC.Inlining where
 
+import Control.Applicative
 import qualified Data.Map as Map
 import Data.Foldable hiding (concat)
 import Data.Monoid
@@ -37,8 +38,9 @@ inline (Netlist _ _ _ nodes _) g
 
     where
 
-      assignments = Map.fromList $ gateWires g <> mapWires g
-      rewire (k, v) = (k, maybe v id $ Map.lookup v assignments)
+      assignments = Map.fromList $ gateWires g
+      internals = Map.fromList $ mapWires g
+      rewire (k, v) = (k, maybe v id $ Map.lookup v assignments <|> Map.lookup v internals)
 
 
 
