@@ -22,7 +22,6 @@ import TextShow
 
 import LSC.Types
 import LSC.SuffixTree
-import Debug.Trace
 
 type Closure = Map Identifier (Int, (Wire, Gate))
 
