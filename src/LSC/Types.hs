@@ -78,18 +78,6 @@ instance Default Gate where
   def = Gate "default" def def def
 
 
-newtype GateChar = GateChar { unGateChar :: Gate }
-
-instance Eq GateChar where
-  GateChar gate1 == GateChar gate2 = gateIdent gate1 == gateIdent gate2
-
-instance Ord GateChar where
-  GateChar gate1 `compare` GateChar gate2 = gateIdent gate1 `compare` gateIdent gate2
-
-instance Show GateChar where
-  show (GateChar gate) = show gate
-
-
 data Component = Component
   { componentPins :: Map Text Pin
   , componentDimensions :: (Integer, Integer)
@@ -132,8 +120,8 @@ instance Default Technology where
 
 lookupDimensions :: Technology -> Gate -> (Integer, Integer)
 lookupDimensions tech g
-  = maybe (0, 0) id
-  $ componentDimensions <$> Map.lookup (gateIdent g) (components tech)
+  = maybe (0, 0) componentDimensions
+  $ Map.lookup (gateIdent g) (components tech)
 
 type BootstrapT m = StateT Technology m
 type Bootstrap = State Technology
