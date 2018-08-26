@@ -8,30 +8,23 @@ module LSC.Exlining where
 import Control.Applicative
 import Data.Default
 import Data.Foldable hiding (concat)
+import Data.Function (on)
 import Data.Hashable
 import Data.List (sortBy)
 import Data.Maybe
 import Data.Monoid
 import Data.Map (Map)
 import qualified Data.Map as Map
-import Data.Vector hiding
-  ( replicate
-  , foldl', foldl, foldr
-  , elem, filter
-  , null, length
-  , toList, zip
-  , reverse
-  , head, last, init
-  , take, drop
-  )
+import Data.Vector (Vector, slice, concat, (!), generate, cons)
+import Data.Text (Text)
 import Prelude hiding (concat)
 import TextShow
 
 import LSC.Types
 import LSC.SuffixTree
+import Debug.Trace
 
-
-type Closure = Map Identifier (Identifier, (Wire, Gate))
+type Closure = Map Identifier (Int, (Wire, Gate))
 
 
 exlineRounds :: Foldable f => f Int -> Netlist -> Netlist
@@ -59,10 +52,10 @@ exline k top@(Netlist name pins subs nodes edges)
 
     gate p = Gate (modelName netlist) (wires p) (maps p) 0
     wires p = Map.fromList
-      [ (i, v)
+      [ (wireName w, v)
       | node <- toList $ slice (p - len) len nodes
       , v <- toList (gateWires node)
-      , (i, _) <- maybe [] pure $ Map.lookup v =<< Map.lookup (p - len) closures
+      , w <- maybe [] pure $ Map.lookup v =<< Map.lookup (p - len) closures
       ]
     maps p = Map.fromList
       [ (v, u)
@@ -101,8 +94,8 @@ createSublist len pos@(p1 : _) (Netlist name (inputList, outputList, _) _ nodes 
   where
 
     abstractPins = Map.assocs $ Map.fromList
-      [ (i, dir)
-      | (v, (i, (k, g))) <- maybe [] Map.assocs $ Map.lookup p1 closures
+      [ (wireName w, dir)
+      | (v, w@(_, (k, g))) <- maybe [] Map.assocs $ Map.lookup p1 closures
       , dir <- maybe [] pure $ Map.lookup v modelDirs <|> Map.lookup (gateIdent g, k) scopeDirs
       ]
 
@@ -112,7 +105,7 @@ createSublist len pos@(p1 : _) (Netlist name (inputList, outputList, _) _ nodes 
     modelDirs = Map.fromList $ fmap (, In) inputList <> fmap (, Out) outputList
 
     mask i = (scope ! i) { gateWires = lexicon <$> gateWires (scope ! i) } where
-      lexicon v = maybe v fst $ Map.lookup v =<< Map.lookup p1 closures
+      lexicon v = maybe v wireName $ Map.lookup v =<< Map.lookup p1 closures
 
     -- there is a unique mapping for each scope at position p
     closures = Map.fromList
@@ -120,7 +113,7 @@ createSublist len pos@(p1 : _) (Netlist name (inputList, outputList, _) _ nodes 
       | p <- pos
       , let inner = slice p len nodes
       , let outer = slice 0 p nodes <> slice (p + len) (length nodes - p - len) nodes
-      , let model = Map.fromList [(w, (w, (w, def))) | w <- inputList <> outputList]
+      , let model = Map.fromList [(w, (def, (w, def))) | w <- inputList <> outputList]
       ]
 
 createSublist _ _ netlist = (mempty, netlist)
@@ -132,17 +125,28 @@ rescore nodes (len, pos,     _) = (len, qos, len * length qos)
 
   where
 
-    qos = foldr configs [] pos
+    qos = filter (eqConfig maximalPosition) pos
 
-    configs p [] = [p]
-    configs p (q : ps)
-      | fst $ foldr conf (True, mempty) $ piece p `zip` piece q
-      = p : q : ps
-    configs _ ps = ps
-
-    conf (a, b) (s, ss) = (s && maybe s (b ==) (Map.lookup a ss), Map.insert a b ss)
+    maximalPosition = snd $ maximumBy (compare `on` fst)
+      [ (length [ q | q <- pos, eqConfig p q, p > q ], p)
+      | p <- pos
+      ]
 
     piece p = [ v | node <- toList $ slice p len nodes, v <- toList $ gateWires node ]
+
+    eqConfig p q = p == q || g == h && fst (foldr conf (True, mempty) $ piece p `zip` piece q)
+
+      where
+
+        conf (a, b) (s, ss) = (s && maybe s (b ==) (Map.lookup a ss), Map.insert a b ss)
+
+        g = fmap fst $ toList $ scopeWires innerP `Map.intersection` scopeWires outerP
+        h = fmap fst $ toList $ scopeWires innerQ `Map.intersection` scopeWires outerQ
+
+        innerP = slice p len nodes
+        outerP = slice 0 p nodes <> slice (p + len) (length nodes - p - len) nodes
+        innerQ = slice q len nodes
+        outerQ = slice 0 q nodes <> slice (q + len) (length nodes - q - len) nodes
 
 
 -- | Closures are specific to scopes and map
@@ -150,10 +154,14 @@ rescore nodes (len, pos,     _) = (len, qos, len * length qos)
 --
 scopeWires :: Foldable f => f Gate -> Closure
 scopeWires nodes = Map.fromList
-  [ (v, (k <> showt i, (k, node)))
+  [ (v, (i, (k, node)))
   | (i :: Int, node) <- [0..] `zip` toList nodes
   , (k, v) <- Map.assocs $ gateWires node
   ]
+
+
+wireName :: (Int, (Wire, Gate)) -> Text
+wireName (i, (k, _)) = k <> showt i
 
 
 buildName :: (Functor f, Foldable f) => f Gate -> Identifier

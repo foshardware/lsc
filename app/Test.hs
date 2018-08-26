@@ -43,8 +43,9 @@ tests = do
     (pure . gnostic lefOsu035 . fromBLIF)
     (parseBLIF rotFile)
 
-  let exlined = exlineRounds (replicate 3 4) blifRot
+  let exlined = exlineRounds (replicate 7 4) blifRot
   let inlined = inlineAll exlined
+  liftIO $ printBLIF $ toBLIF $ exlined
   it "inlines correctly" (reprBlif inlined == reprBlif blifRot)
     $ liftIO $ printBLIF $ toBLIF $ inlined
 
