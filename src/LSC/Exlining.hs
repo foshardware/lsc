@@ -133,19 +133,16 @@ rescore nodes (len, pos,     _) = (len, qos, len * length qos)
 
     piece p = [ v | node <- toList $ slice p len nodes, v <- toList $ gateWires node ]
 
-    eqConfig p q = p == q || g == h && fst (foldr conf (True, mempty) $ piece p `zip` piece q)
+    eqConfig p q = p == q
+      || length (wires p) == length (wires q)
+      && toList (wires p) == toList (wires q)
+      && fst (foldr conf (True, mempty) $ piece p `zip` piece q)
 
-      where
+    conf (a, b) (s, ss) = (s && maybe s (b ==) (Map.lookup a ss), Map.insert a b ss)
 
-        conf (a, b) (s, ss) = (s && maybe s (b ==) (Map.lookup a ss), Map.insert a b ss)
-
-        g = fmap fst $ toList $ scopeWires innerP `Map.intersection` scopeWires outerP
-        h = fmap fst $ toList $ scopeWires innerQ `Map.intersection` scopeWires outerQ
-
-        innerP = slice p len nodes
-        outerP = slice 0 p nodes <> slice (p + len) (length nodes - p - len) nodes
-        innerQ = slice q len nodes
-        outerQ = slice 0 q nodes <> slice (q + len) (length nodes - q - len) nodes
+    wires x = fmap fst $ scopeWires (inner x) `Map.intersection` scopeWires (outer x)
+    inner x = slice x len nodes
+    outer x = slice 0 x nodes <> slice (x + len) (length nodes - x - len) nodes
 
 
 -- | Closures are specific to scopes and map
