@@ -37,7 +37,7 @@ inline (Netlist _ _ _ nodes _) g
 
     where
 
-      assignments = Map.fromList $ gateWires g
+      assignments = Map.fromList $ gateWires g <> mapWires g
       rewire (k, v) = (k, maybe v id $ Map.lookup v assignments)
 
 

@@ -50,18 +50,24 @@ exline k top@(Netlist name pins subs nodes edges)
 
   where
 
-    ((len, pos, _) : _) = isomorphicGates
+    ((len, pos@(p1 : _), _) : _) = isomorphicGates
     isomorphicGates
       = sortBy ( \ (l, _, x) (m, _, y) -> compare (y, m) (x, l))
       $ filter ( \ (_, _, score) -> score > 0)
       $ rescore nodes <$> maximalRepeatsDisjoint (hash . gateIdent) nodes k
 
-    gate p = Gate (modelName netlist) (wires p) [] 0
+    gate p = Gate (modelName netlist) (wires p) (maps p) 0
     wires p = Map.assocs $ Map.fromList
       [ (i, v)
       | node <- toList $ slice (p - len) len nodes
       , (_, v) <- gateWires node
-      , (i, _) <- maybeToList $ Map.lookup v closure
+      , (i, _) <- maybe [] pure $ Map.lookup v closure
+      ]
+    maps p = Map.assocs $ Map.fromList
+      [ (v, u)
+      | (offset, nodep) <- zip [0..] $ toList $ slice (p - len) len nodes
+      , let node1 = nodes ! (p1 + offset)
+      , ((_, u), (_, v)) <- gateWires nodep `zip` gateWires node1
       ]
 
     (closure, netlist) = createSublist len pos top
