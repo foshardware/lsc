@@ -86,6 +86,9 @@ program = do
         liftIO $ hPutStrLn stderr $ show netlist
         exit
 
+    -- use concurrency
+    let j = maybe 1 read $ lookup Cores opts
+
     -- svg output
     circuit2d <- lift $ bootstr `runLSC` stage1 netlist
 
@@ -109,6 +112,7 @@ data FlagKey
   | Exline
   | Compile
   | Debug
+  | Cores
   | Test
   | Rtl
   deriving (Eq, Show)
@@ -126,6 +130,8 @@ options =
         (OptArg ((Compile,  ) . maybe "svg" id) "svg,magic")       "output format"
     , Option ['x']      ["exline"]     (NoArg  (Exline, []))       "just exline and exit"
     , Option ['t']      ["test"]       (NoArg  (Test, []))         "run tests and exit"
+    , Option ['j']      ["cores"]
+        (OptArg ((Cores,  ) . maybe "1" id) "count")               "use concurrency"
     ]
 
 compilerOpts :: [String] -> IO ([Flag], [String])

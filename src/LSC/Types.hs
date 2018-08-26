@@ -13,6 +13,8 @@ import Data.Text (Text)
 import Data.Vector (Vector)
 
 import Control.Monad.Codensity
+import Control.Monad.Parallel (MonadFork(..), MonadParallel(..))
+import qualified Control.Monad.Parallel as Par
 import Control.Monad.Reader (ReaderT(..), Reader, runReader)
 import qualified Control.Monad.Reader as Reader
 import Control.Monad.State
@@ -156,16 +158,46 @@ gnostic :: Bootstrap () -> Gnostic r -> r
 gnostic b a = a `runReader` freeze b
 
 
-type LSC = Codensity (GnosticT Symbolic)
+type LSC = Codensity LST
+
+newtype LST a = LST { unLST :: GnosticT Symbolic a }
+
+instance Functor LST where
+  fmap f (LST a) = LST (fmap f a)
+
+instance Applicative LST where
+  pure = LST . pure
+  LST a <*> LST b = LST (a <*> b)
+
+instance Monad LST where
+  return = pure
+  m >>= k = LST (unLST m >>= unLST . k)
+
+instance MonadIO LST where
+  liftIO = LST . liftIO
+
+instance MonadFork LST where
+  forkExec (LST m) = do
+    fmap liftIO . liftIO . forkExec . runSMT . runGnosticT m =<< LST Reader.ask
+
+instance MonadParallel LST where
+  bindM2 f ma mb = do
+    wb <- forkExec mb
+    a <- ma
+    b <- wb
+    f a b
 
 runLSC :: Bootstrap () -> LSC a -> IO a
-runLSC b a = runSMT $ lowerCodensity a `runGnosticT` freeze b
+runLSC b a = runSMT $ unLST (lowerCodensity a) `runGnosticT` freeze b
+
+concLSC :: [LSC a] -> LSC [a]
+concLSC = lift . Par.sequence . fmap lowerCodensity
 
 liftSMT :: Symbolic a -> LSC a
-liftSMT = lift . lift
+liftSMT = lift . LST . lift
 
 ask :: LSC Technology
-ask = lift Reader.ask
+ask = lift $ LST Reader.ask
 
 
 data Circuit2D = Circuit2D [Rectangle] [Path]
@@ -173,3 +205,4 @@ data Circuit2D = Circuit2D [Rectangle] [Path]
 
 newtype Path = Path [(Integer, Integer)]
   deriving (Eq, Show)
+
