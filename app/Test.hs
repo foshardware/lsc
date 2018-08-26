@@ -46,7 +46,7 @@ tests = do
   let exlined = exlineRounds (replicate 2 4) blifRot
   let inlined = inlineAll exlined
   it "inlines correctly" (reprBlif inlined == reprBlif blifRot)
-    $ liftIO $ printBLIF $ toBLIF $ inlined
+    $ liftIO $ printBLIF $ toBLIF $ exlined
 
   where
 

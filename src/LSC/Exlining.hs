@@ -62,7 +62,7 @@ exline k top@(Netlist name pins subs nodes edges)
       [ (i, v)
       | node <- toList $ slice (p - len) len nodes
       , v <- toList (gateWires node)
-      , (i, _) <- maybe [] pure $ Map.lookup v closure
+      , (i, _) <- maybe [] pure $ Map.lookup v =<< Map.lookup (p - len) closures
       ]
     maps p = Map.fromList
       [ (v, u)
@@ -71,7 +71,7 @@ exline k top@(Netlist name pins subs nodes edges)
       , (u, v) <- toList (gateWires nodep) `zip` toList (gateWires node1)
       ]
 
-    (closure, netlist) = createSublist len pos top
+    (closures, netlist) = createSublist len pos top
 
     newGateVector = concat $ reverse
       [ head $ [ gate p `cons` slice p (q - p) nodes | p > 0 ] <> [ slice 0 q nodes ]
@@ -82,9 +82,9 @@ exline k top@(Netlist name pins subs nodes edges)
 exline _ netlist = netlist
 
 
-createSublist :: Length -> [Position] -> Netlist -> (Closure, Netlist)
+createSublist :: Length -> [Position] -> Netlist -> (Map Position Closure, Netlist)
 createSublist len pos@(p1 : _) (Netlist name (inputList, outputList, _) _ nodes edges)
-  = (,) closure
+  = (,) closures
   $ Netlist (name <> buildName scope)
 
   ( [ pin | (pin, dir) <- abstractPins, dir `elem` [In,  InOut] ]
@@ -102,8 +102,8 @@ createSublist len pos@(p1 : _) (Netlist name (inputList, outputList, _) _ nodes 
 
     abstractPins = Map.assocs $ Map.fromList
       [ (i, dir)
-      | (v, (i, (k, g))) <- Map.assocs closure
-      , dir <- maybeToList $ Map.lookup v modelDirs <|> Map.lookup (gateIdent g, k) scopeDirs
+      | (v, (i, (k, g))) <- maybe [] Map.assocs $ Map.lookup p1 closures
+      , dir <- maybe [] pure $ Map.lookup v modelDirs <|> Map.lookup (gateIdent g, k) scopeDirs
       ]
 
     scope = slice p1 len nodes
@@ -112,10 +112,10 @@ createSublist len pos@(p1 : _) (Netlist name (inputList, outputList, _) _ nodes 
     modelDirs = Map.fromList $ fmap (, In) inputList <> fmap (, Out) outputList
 
     mask i = (scope ! i) { gateWires = lexicon <$> gateWires (scope ! i) } where
-      lexicon v = maybe v fst $ Map.lookup v closure
+      lexicon v = maybe v fst $ Map.lookup v $ Map.unions (toList closures)
 
-    closure = Map.unions
-      [ scopeWires inner `Map.intersection` (scopeWires outer `Map.union` model)
+    closures = Map.fromList
+      [ (p, scopeWires inner `Map.intersection` (scopeWires outer `Map.union` model))
       | p <- pos
       , let inner = slice p len nodes
       , let outer = slice 0 p nodes <> slice (p + len) (length nodes - p - len) nodes
