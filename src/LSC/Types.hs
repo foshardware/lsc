@@ -116,6 +116,7 @@ type Rectangle = (Integer, Integer, Integer, Integer)
 data Dir = In | Out | InOut
   deriving (Eq, Show)
 
+
 data Technology = Technology
   { padDimensions :: (Integer, Integer)
   , wireResolution :: Integer
@@ -124,11 +125,13 @@ data Technology = Technology
   , components :: Map Text Component
   } deriving Show
 
-defaultTechnology :: Technology
-defaultTechnology = Technology (10^6 :: Integer, 10^6 :: Integer) 16 1 1 mempty
+instance Default Technology where
+  def = Technology (10^6 :: Integer, 10^6 :: Integer) 16 1 1 mempty
 
 lookupDimensions :: Technology -> Gate -> (Integer, Integer)
-lookupDimensions tech g = maybe (0, 0) id $ componentDimensions <$> Map.lookup (gateIdent g) (components tech)
+lookupDimensions tech g
+  = maybe (0, 0) id
+  $ componentDimensions <$> Map.lookup (gateIdent g) (components tech)
 
 type BootstrapT m = StateT Technology m
 type Bootstrap = State Technology
@@ -137,7 +140,7 @@ bootstrap :: (Technology -> Technology) -> Bootstrap ()
 bootstrap = modify
 
 freeze :: Bootstrap () -> Technology
-freeze bootstrapping = execState bootstrapping defaultTechnology
+freeze bootstrapping = execState bootstrapping def
 
 thaw :: Technology -> Bootstrap ()
 thaw = put

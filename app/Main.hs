@@ -54,7 +54,7 @@ program = do
     when (Test `elem` fmap fst opts)
       $ do
         liftIO $ withCreateProcess (proc "lsc-test" []) { std_out = CreatePipe }
-         $ \ _ hout _ ph -> for_ hout
+         $ \ _ hout _ _ -> for_ hout
           $ \ out -> Pipe.hGetContents out >>= Pipe.hPutStr stdout
         exit
 
