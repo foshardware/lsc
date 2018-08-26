@@ -11,6 +11,7 @@ import Data.Text (Text)
 import Data.Text.Encoding
 import Data.Text.Lazy.Builder
 
+import System.IO
 
 import BLIF.Builder
 import BLIF.Parser
@@ -41,21 +42,27 @@ tests = do
     (pure . gnostic lefOsu035 . fromBLIF)
     (parseBLIF rotFile)
 
-  let exlined = exlineRounds (replicate 3 4) blifRot
+  let exlined = exlineRounds (replicate 1 4) blifRot
   let inlined = inlineAll exlined
-  it "inlines correctly" $ reprBlif inlined == reprBlif exlined
+  it "inlines correctly" (reprBlif inlined == reprBlif blifRot)
+    $ liftIO $ printBLIF $ toBLIF $ inlined
 
   where
 
     reprBlif = toLazyText . builderBlif . toBLIF
 
 
-it :: String -> Bool -> Test ()
-it desc True = do
-  liftIO $ putStrLn $ unwords ["it", desc, "\t", "✔"]
-it desc b = do
-  liftIO $ putStrLn $ unwords ["FAIL:", desc, "\t", "✖"]
+it :: String -> Bool -> Test () -> Test ()
+it desc True _ = do
+  liftIO $ hPutStrLn stderr $ unwords ["it", desc, "\t", "✔"]
+it desc b action = do
+  liftIO $ hPutStrLn stderr $ unwords ["\n\n", "FAIL:", desc, "\t", "✖", "\n\n"]
+  action
   guard b
+
+
+it_ :: String -> Bool -> Test ()
+it_ desc b = it desc b $ pure ()
 
 
 rotFile :: Text
