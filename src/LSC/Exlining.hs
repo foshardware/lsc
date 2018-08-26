@@ -106,7 +106,7 @@ createSublist len pos@(p1 : _) (Netlist name (inputList, outputList, _) _ nodes 
     mask i = (scope ! i) { gateWires = lexicon <$> gateWires (scope ! i) } where
       lexicon v = maybe v wireName $ Map.lookup v =<< Map.lookup p1 closures
 
-    -- there is a unique mapping for each scope at position p
+    -- keep scopes distinct by position in the gate vector
     closures = Map.fromList
       [ (p, scopeWires inner `Map.intersection` (scopeWires outer `Map.union` model))
       | p <- pos
@@ -145,8 +145,7 @@ rescore nodes (len, pos,     _) = (len, qos, len * length qos)
     outer x = slice 0 x nodes <> slice (x + len) (length nodes - x - len) nodes
 
 
--- | Closures are specific to scopes and map
---   the original wire name to a tuple (enumerated pin, (pin, gate))
+-- | Creates a dictionary for all nets mapping its name to several details
 --
 scopeWires :: Foldable f => f Gate -> Closure
 scopeWires nodes = Map.fromList
