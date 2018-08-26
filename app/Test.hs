@@ -11,6 +11,7 @@ import Data.Text (Text)
 import Data.Text.Encoding
 import Data.Text.Lazy.Builder
 
+import System.Exit
 import System.IO
 
 import BLIF.Builder
@@ -27,7 +28,7 @@ import LSC.Types
 type Test = MaybeT IO
 
 main :: IO ()
-main = void $ runMaybeT tests
+main = exitWith . maybe (ExitFailure 1) (const ExitSuccess) =<< runMaybeT tests
 
 tests :: Test ()
 tests = do
