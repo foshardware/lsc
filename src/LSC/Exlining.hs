@@ -56,7 +56,7 @@ exline k top@(Netlist name pins subs nodes edges)
       $ filter ( \ (_, _, score) -> score > 0)
       $ rescore nodes <$> maximalRepeatsDisjoint (hash . gateIdent) nodes k
 
-    gate p = Gate (modelName netlist) (wires p) 0
+    gate p = Gate (modelName netlist) (wires p) [] 0
     wires p = Map.assocs $ Map.fromList
       [ (i, v)
       | node <- toList $ slice (p - len) len nodes
@@ -104,15 +104,15 @@ createSublist len pos@(p1 : _) (Netlist name (inputList, outputList, _) _ nodes 
     scopeDirs = directions edges
     modelDirs = Map.fromList $ fmap (, In) inputList <> fmap (, Out) outputList
 
-    mask i = Gate gn [ (k, maybe v fst $ Map.lookup v closure) | (k, v) <- ws ] gi
-      where Gate gn ws gi = scope ! i
+    mask i = Gate gn [ (k, maybe v fst $ Map.lookup v closure) | (k, v) <- ws ] [] gi
+      where Gate gn ws _ gi = scope ! i
 
     closure = Map.unions
       [ scopeWires inner `Map.intersection` (scopeWires outer `Map.union` model)
       | p <- pos
       , let inner = slice p len nodes
       , let outer = slice 0 p nodes <> slice (p + len) (length nodes - p - len) nodes
-      , let model = Map.fromList [(w, (w, (w, Gate name [] 0))) | w <- inputList <> outputList]
+      , let model = Map.fromList [(w, (w, (w, Gate name [] [] 0))) | w <- inputList <> outputList]
       ]
 
 createSublist _ _ netlist = (mempty, netlist)

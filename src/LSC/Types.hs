@@ -59,6 +59,7 @@ type Index = Int
 data Gate = Gate
   { gateIdent :: Text
   , gateWires :: [(Text, Text)]
+  , mapWires  :: [(Text, Text)]
   , gateIndex :: Index
   } deriving Show
 

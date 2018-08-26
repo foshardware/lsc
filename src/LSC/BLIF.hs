@@ -29,7 +29,7 @@ fromBLIF (BLIF models) = do
 
   let nets = Map.fromListWith mappend
         [ (net, [Contact gate contact pin])
-        | gate@(Gate ident assignments _) <- nodes
+        | gate@(Gate ident assignments _ _) <- nodes
         , (contact, net) <- assignments
         , com <- maybeToList $ Map.lookup ident $ components technology
         , pin <- maybeToList $ Map.lookup contact $ componentPins com
@@ -57,12 +57,12 @@ gates :: Int -> Command -> [Gate]
 gates i (LibraryGate ident assignments)
   = [ Gate
         ident
-        assignments
+        assignments []
         i ]
 gates i (Subcircuit ident assignments)
   = [ Gate
         ident
-        assignments
+        assignments []
         i ]
 gates _ _ = []
 
@@ -81,6 +81,6 @@ toModel (Netlist name (inputList, outputList, clockList) _ nodes _) = Model name
 
 
 toSubcircuit :: Gate -> Command
-toSubcircuit (Gate ident wires _) = Subcircuit ident wires
+toSubcircuit (Gate ident wires _ _) = Subcircuit ident wires
 
 
