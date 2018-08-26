@@ -21,8 +21,8 @@ import Data.Vector hiding
   , null, length
   , toList, zip
   , reverse
-  , head
-  , take
+  , head, last, init
+  , take, drop
   )
 import Prelude hiding (concat)
 import TextShow
@@ -112,8 +112,9 @@ createSublist len pos@(p1 : _) (Netlist name (inputList, outputList, _) _ nodes 
     modelDirs = Map.fromList $ fmap (, In) inputList <> fmap (, Out) outputList
 
     mask i = (scope ! i) { gateWires = lexicon <$> gateWires (scope ! i) } where
-      lexicon v = maybe v fst $ Map.lookup v $ Map.unions (toList closures)
+      lexicon v = maybe v fst $ Map.lookup v =<< Map.lookup p1 closures
 
+    -- there is a unique mapping for each scope at position p
     closures = Map.fromList
       [ (p, scopeWires inner `Map.intersection` (scopeWires outer `Map.union` model))
       | p <- pos
@@ -144,6 +145,9 @@ rescore nodes (len, pos,     _) = (len, qos, len * length qos)
     piece p = [ v | node <- toList $ slice p len nodes, v <- toList $ gateWires node ]
 
 
+-- | Closures are specific to scopes and map
+--   the original wire name to a tuple (enumerated pin, (pin, gate))
+--
 scopeWires :: Foldable f => f Gate -> Closure
 scopeWires nodes = Map.fromList
   [ (v, (k <> showt i, (k, node)))
