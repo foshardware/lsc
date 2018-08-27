@@ -22,29 +22,29 @@ import Control.Monad.State
 import Data.SBV
 
 
-data Netlist = Netlist
+data NetGraph = NetGraph
   { modelName  :: Text
   , modelPins  :: ([Text], [Text], [Text]) 
-  , subModels  :: Map Text Netlist
+  , subModels  :: Map Text NetGraph
   , gateVector :: Vector Gate
-  , netVector  :: Vector Net
+  , netMapping :: Map Identifier Net
   } deriving Show
 
-instance Monoid Netlist where
-  mempty = Netlist mempty mempty mempty mempty mempty
-  net1 `mappend` net2 = Netlist
+instance Monoid NetGraph where
+  mempty = NetGraph mempty mempty mempty mempty mempty
+  net1 `mappend` net2 = NetGraph
     (modelName  net1 `mappend` modelName  net2)
     (modelPins  net1 `mappend` modelPins  net2)
     (subModels  net1 `mappend` subModels  net2)
     (gateVector net1 `mappend` gateVector net2)
-    (netVector  net1 `mappend` netVector  net2)
+    (netMapping net1 `mappend` netMapping net2)
 
 
-data Contact = Contact Gate Identifier Pin
-  deriving Show
+type Contact = (Identifier, Pin)
 
 data Net = Net
-  { contacts :: [Contact]
+  { netIdent :: Identifier
+  , contacts :: Map Gate Contact
   , netIndex :: Index
   } deriving Show
 
@@ -53,6 +53,10 @@ instance Eq Net where
 
 instance Ord Net where
   w `compare` v = netIndex w `compare` netIndex v
+
+instance Monoid Net where
+  mempty = Net mempty mempty def
+  Net i as k `mappend` Net j bs _ = Net (mappend i j) (mappend as bs) k
 
 
 type Wire = Text

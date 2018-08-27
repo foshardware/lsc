@@ -3,6 +3,7 @@
 
 module LSC where
 
+import Data.Foldable
 import qualified Data.Map as Map
 import qualified Data.Vector as Vector
 
@@ -15,11 +16,11 @@ import LSC.Types
 
 type Stage1 = Circuit2D
 
-stage1 :: Netlist -> LSC Stage1
-stage1 (Netlist _ _ _ gates wires) = do
+stage1 :: NetGraph -> LSC Stage1
+stage1 (NetGraph _ _ _ gates wires) = do
 
-  nodes <- Map.fromList . Vector.toList <$> sequence (freeNode <$> gates)
-  edges <- Map.fromList . Vector.toList <$> sequence (freeEdge <$> wires)
+  nodes <- Map.fromList <$> sequence (freeNode <$> toList gates)
+  edges <- Map.fromList <$> sequence (freeEdge <$> toList wires)
 
   collision nodes
   boundedSpace nodes

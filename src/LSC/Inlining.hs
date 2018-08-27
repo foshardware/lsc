@@ -11,8 +11,8 @@ import Prelude hiding (concat)
 import LSC.Types
 
 
-inlineAll :: Netlist -> Netlist
-inlineAll (Netlist name pins subs nodes edges) = Netlist name
+inlineAll :: NetGraph -> NetGraph
+inlineAll (NetGraph name pins subs nodes edges) = NetGraph name
 
   pins
 
@@ -27,12 +27,12 @@ inlineAll (Netlist name pins subs nodes edges) = Netlist name
     build sub ns = concat [ inline sub node | node <- toList ns ]
 
 
-inline :: Netlist -> Gate -> Vector Gate
-inline (Netlist name _ _ _ _) g
+inline :: NetGraph -> Gate -> Vector Gate
+inline (NetGraph name _ _ _ _) g
   | gateIdent g /= name
   = singleton g
 
-inline (Netlist _ _ _ nodes _) g
+inline (NetGraph _ _ _ nodes _) g
   = generate (length nodes) 
   $ \ i -> (nodes ! i) { gateWires = rewire <$> gateWires (nodes ! i) }
 

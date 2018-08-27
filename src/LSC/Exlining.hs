@@ -26,14 +26,14 @@ import LSC.SuffixTree
 type Closure = Map Identifier (Int, (Wire, Gate))
 
 
-exlineRounds :: Foldable f => f Int -> Netlist -> Netlist
+exlineRounds :: Foldable f => f Int -> NetGraph -> NetGraph
 exlineRounds xs netlist = foldr exline netlist xs
 
 
-exline :: Int -> Netlist -> Netlist
-exline k top@(Netlist name pins subs nodes edges)
+exline :: Int -> NetGraph -> NetGraph
+exline k top@(NetGraph name pins subs nodes edges)
   | not $ null isomorphicGates
-  = Netlist name pins
+  = NetGraph name pins
 
   (Map.insert (modelName netlist) netlist subs)
 
@@ -74,10 +74,10 @@ exline k top@(Netlist name pins subs nodes edges)
 exline _ netlist = netlist
 
 
-createSublist :: Length -> [Position] -> Netlist -> (Map Position Closure, Netlist)
-createSublist len pos@(p1 : _) (Netlist name (inputList, outputList, _) _ nodes edges)
+createSublist :: Length -> [Position] -> NetGraph -> (Map Position Closure, NetGraph)
+createSublist len pos@(p1 : _) (NetGraph name (inputList, outputList, _) _ nodes edges)
   = (,) closures
-  $ Netlist (name <> buildName scope)
+  $ NetGraph (name <> buildName scope)
 
   ( [ pin | (pin, dir) <- abstractPins, dir `elem` [In,  InOut] ]
   , [ pin | (pin, dir) <- abstractPins, dir `elem` [Out, InOut] ]
@@ -94,14 +94,13 @@ createSublist len pos@(p1 : _) (Netlist name (inputList, outputList, _) _ nodes 
 
     abstractPins = Map.assocs $ Map.fromList
       [ (wireName w, dir)
-      | (v, w@(_, (k, g))) <- maybe [] Map.assocs $ Map.lookup p1 closures
-      , dir <- maybe [] pure $ Map.lookup v modelDirs <|> Map.lookup (gateIdent g, k) scopeDirs
-      ]
+      | (v, w@(_, (_, g))) <- maybe [] Map.assocs $ Map.lookup p1 closures
+      , dir <- maybe [] pure $ direction g v edges <|> Map.lookup v modelDirs
+      ] 
+
+    modelDirs = Map.fromList $ fmap (, In) inputList <> fmap (, Out) outputList
 
     scope = slice p1 len nodes
-
-    scopeDirs = directions edges
-    modelDirs = Map.fromList $ fmap (, In) inputList <> fmap (, Out) outputList
 
     mask i = (scope ! i) { gateWires = lexicon <$> gateWires (scope ! i) } where
       lexicon v = maybe v wireName $ Map.lookup v =<< Map.lookup p1 closures
@@ -163,11 +162,10 @@ buildName :: (Functor f, Foldable f) => f Gate -> Identifier
 buildName = showt . abs . hash . foldr mappend mempty . fmap gateIdent
 
 
-directions :: Vector Net -> Map (Identifier, Identifier) Dir
-directions edges = Map.fromList
-  [ ((gateIdent gate, contact), pinDir pin)
-  | Net cs _ <- toList edges
-  , Contact gate contact pin <- cs
-  ]
+direction :: Gate -> Identifier -> Map Identifier Net -> Maybe Dir
+direction gate net edges
+  = pure . pinDir . snd
+  =<< Map.lookup gate . contacts
+  =<< Map.lookup net edges
 
 

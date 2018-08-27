@@ -11,7 +11,7 @@ import BLIF.Syntax
 import LSC.Types hiding (ask)
 
 
-fromBLIF :: BLIF -> Gnostic Netlist
+fromBLIF :: BLIF -> Gnostic NetGraph
 fromBLIF (BLIF     []) = pure mempty
 fromBLIF (BLIF models) = do
 
@@ -19,62 +19,60 @@ fromBLIF (BLIF models) = do
 
   technology <- ask
 
-  let nodes =
+  let gates =
         [ gate
         | Model _ _ _ _ commands <- model
         , (i, command) <- zip [1..] commands
-        , gate <- gates i command
+        , gate <- toGates i command
         ]
 
-  let nets = Map.fromListWith mappend
-        [ (net, [Contact gate contact pin])
-        | gate@(Gate ident assignments _ _) <- nodes
+  let nets =
+        [ (net, Net net (Map.singleton g (contact, pin)) 0)
+        | g@(Gate ident assignments _ _) <- gates
         , (contact, net) <- Map.assocs assignments
         , com <- maybe [] pure $ Map.lookup ident $ components technology
         , pin <- maybe [] pure $ Map.lookup contact $ componentPins com
         ]
 
-  let edges =
-        [ Net pins i
-        | (i, pins) <- [1..] `zip` Map.elems nets
-        ]
+  let nodes = Vector.fromList gates
+  let edges = Map.fromListWith mappend nets
 
   subGraphs <- sequence
         [ (,) name <$> fromBLIF (BLIF [submodel])
         | submodel@(Model name _ _ _ _) <- submodels
         ]
 
-  pure $ Netlist
+  pure $ NetGraph
     (head [name | Model name _ _ _ _ <- model])
     (head [(i, o, c) | Model _ i o c _ <- model])
     (Map.fromList subGraphs)
-    (Vector.fromList nodes)
-    (Vector.fromList edges)
+    nodes
+    edges
 
 
-gates :: Int -> Command -> [Gate]
-gates i (LibraryGate ident assignments)
+toGates :: Int -> Command -> [Gate]
+toGates i (LibraryGate ident assignments)
   = [ Gate
         ident
         (Map.fromList assignments)
         mempty
         i ]
-gates i (Subcircuit ident assignments)
+toGates i (Subcircuit ident assignments)
   = [ Gate
         ident
         (Map.fromList assignments)
         mempty
         i ]
-gates _ _ = []
+toGates _ _ = []
 
 
 
-toBLIF :: Netlist -> BLIF
+toBLIF :: NetGraph -> BLIF
 toBLIF netlist = BLIF $ toModel netlist : [ toModel list | list <- toList $ subModels netlist ]
 
 
-toModel :: Netlist -> Model
-toModel (Netlist name (inputList, outputList, clockList) _ nodes _) = Model name
+toModel :: NetGraph -> Model
+toModel (NetGraph name (inputList, outputList, clockList) _ nodes _) = Model name
 
   inputList outputList clockList
 
