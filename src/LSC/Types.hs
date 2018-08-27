@@ -44,7 +44,7 @@ type Contact = (Identifier, Pin)
 
 data Net = Net
   { netIdent :: Identifier
-  , contacts :: Map Gate Contact
+  , contacts :: Map Gate [Contact]
   , netIndex :: Index
   } deriving Show
 
@@ -56,7 +56,7 @@ instance Ord Net where
 
 instance Monoid Net where
   mempty = Net mempty mempty def
-  Net i as k `mappend` Net j bs _ = Net (mappend i j) (mappend as bs) k
+  Net i as k `mappend` Net _ bs _ = Net i (Map.unionWith mappend as bs) k
 
 
 type Wire = Text

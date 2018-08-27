@@ -23,8 +23,6 @@ import TextShow
 import LSC.Types
 import LSC.SuffixTree
 
-type Closure = Map Identifier (Int, (Wire, Gate))
-
 
 exlineRounds :: Foldable f => f Int -> NetGraph -> NetGraph
 exlineRounds xs netlist = foldr exline netlist xs
@@ -94,8 +92,8 @@ createSublist len pos@(p1 : _) (NetGraph name (inputList, outputList, _) _ nodes
 
     abstractPins = Map.assocs $ Map.fromList
       [ (wireName w, dir)
-      | (v, w@(_, (_, g))) <- maybe [] Map.assocs $ Map.lookup p1 closures
-      , dir <- maybe [] pure $ direction g v edges <|> Map.lookup v modelDirs
+      | (v, w@(_, (k, g))) <- maybe [] Map.assocs $ Map.lookup p1 closures
+      , dir <- maybe [] pure $ direction g k v edges <|> Map.lookup v modelDirs
       ] 
 
     modelDirs = Map.fromList $ fmap (, In) inputList <> fmap (, Out) outputList
@@ -144,10 +142,12 @@ rescore nodes (len, pos,     _) = (len, qos, len * length qos)
     outer x = slice 0 x nodes <> slice (x + len) (length nodes - x - len) nodes
 
 
+type Closure = Map Identifier (Int, (Wire, Gate))
+
 -- | Creates a dictionary for all nets mapping its name to several details
 --
 scopeWires :: Foldable f => f Gate -> Closure
-scopeWires nodes = Map.fromList
+scopeWires nodes = Map.fromList $ reverse
   [ (v, (i, (k, node)))
   | (i :: Int, node) <- [0..] `zip` toList nodes
   , (k, v) <- Map.assocs $ gateWires node
@@ -162,9 +162,10 @@ buildName :: (Functor f, Foldable f) => f Gate -> Identifier
 buildName = showt . abs . hash . foldr mappend mempty . fmap gateIdent
 
 
-direction :: Gate -> Identifier -> Map Identifier Net -> Maybe Dir
-direction gate net edges
-  = pure . pinDir . snd
+direction :: Gate -> Identifier -> Identifier -> Map Identifier Net -> Maybe Dir
+direction gate contact net edges
+  = pure . pinDir
+  =<< lookup contact
   =<< Map.lookup gate . contacts
   =<< Map.lookup net edges
 
