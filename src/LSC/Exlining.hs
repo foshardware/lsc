@@ -5,6 +5,10 @@
 
 module LSC.Exlining where
 
+-- | Software compilers use inlining which is grounded in the von Neumann architecture;
+--   Dually, hardware compilers use exlining to identify an implicit module hierarchy.
+--
+
 import Control.Applicative
 import Data.Default
 import Data.Foldable hiding (concat)
