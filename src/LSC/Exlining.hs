@@ -17,6 +17,7 @@ import Data.Hashable
 import Data.List (sortBy)
 import Data.Maybe
 import Data.Monoid
+import qualified Data.Set as Set
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Vector (Vector, slice, concat, (!), generate, cons)
@@ -88,11 +89,27 @@ createSublist len pos@(p1 : _) (NetGraph name (inputList, outputList, _) _ nodes
 
   mempty
 
-  (generate (length scope) mask)
+  newGateVector
 
-  mempty
+  newNetMapping
 
   where
+
+    newGateVector = generate (length scope) mask
+
+    mask i = (scope ! i) { gateWires = lexicon <$> gateWires (scope ! i) } where
+      lexicon v = maybe v wireName $ Map.lookup v =<< Map.lookup p1 closures
+
+    newNetMapping = Map.fromList
+      [ (w, net)
+      | (k, net) <- Map.assocs edges
+      , w <- maybe [k] pure $ Map.lookup k scopeNets
+      ]
+    scopeNets = Map.fromList
+      [ (v, w)
+      | i <- [ 0 .. len - 1 ]
+      , (v, w) <- Map.elems (gateWires $ scope ! i) `zip` Map.elems (gateWires $ mask i)
+      ]
 
     abstractPins = Map.assocs $ Map.fromList
       [ (wireName w, dir)
@@ -103,9 +120,6 @@ createSublist len pos@(p1 : _) (NetGraph name (inputList, outputList, _) _ nodes
     modelDirs = Map.fromList $ fmap (, In) inputList <> fmap (, Out) outputList
 
     scope = slice p1 len nodes
-
-    mask i = (scope ! i) { gateWires = lexicon <$> gateWires (scope ! i) } where
-      lexicon v = maybe v wireName $ Map.lookup v =<< Map.lookup p1 closures
 
     -- keep scopes distinct by position in the gate vector
     closures = Map.fromList

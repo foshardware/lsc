@@ -1,3 +1,4 @@
+{-# LANGUAGE ParallelListComp #-}
 
 module LSC.BLIF where
 
@@ -27,7 +28,8 @@ fromBLIF (BLIF models) = do
         ]
 
   let nets =
-        [ (net, Net net (Map.singleton g [(contact, pin)]) 0)
+        [ (net, Net net (Map.singleton g [(contact, pin)]) i)
+        | i <- [ 1 .. ]
         | g@(Gate ident assignments _ _) <- gates
         , (contact, net) <- Map.assocs assignments
         , com <- maybe [] pure $ Map.lookup ident $ components technology

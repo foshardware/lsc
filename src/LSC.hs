@@ -1,8 +1,10 @@
 {-# OPTIONS_GHC -fno-warn-missing-signatures #-}
 {-# LANGUAGE GADTs, DataKinds, TupleSections, FlexibleContexts #-}
+{-# LANGUAGE ParallelListComp #-}
 
 module LSC where
 
+import Control.Monad.Trans
 import Data.Foldable
 import qualified Data.Map as Map
 import qualified Data.Vector as Vector
@@ -37,7 +39,7 @@ pnr (NetGraph _ _ _ gates wires) = do
   collision nodes
   boundedSpace nodes
 
-  connect edges
+  connect nodes edges
 
   -- intersections edges
 
@@ -84,16 +86,33 @@ collision nodes = do
         ||| x2 .> x1 &&& x2 - x1 .> w1
         ||| y1 .> y2 &&& y1 - y2 .> h2
         ||| y2 .> y1 &&& y2 - y1 .> h1
-    | (i, (x1, y1, w1, h1)) <- zip [1..] $ Map.elems nodes
+    | (i, (x1, y1, w1, h1)) <- zip [ 1 .. ] $ Map.elems nodes
     ,     (x2, y2, w2, h2)  <- drop i $ Map.elems nodes
     ]
 
 
-connect edges = do
+connect nodes edges = do
   resolution <- wireResolution <$> ask
   sequence_
     [ do
-      pure ()
+      liftSMT $ constrain
+        $   x1 + literal sx .== pathX ! 1
+        &&& y1 + literal sy .== pathY ! 1
+        &&& x2 + literal tx .== pathX ! resolution
+        &&& y2 + literal ty .== pathY ! resolution
+
+      rectangular resolution pathX pathY
+
+      shorten wire resolution pathX pathY
+
+    | (wire, (pathX, pathY)) <- Map.assocs edges
+    , (gate, cs) <- Map.assocs $ contacts wire
+    , (gate, cs) <- Map.assocs $ contacts wire
+    , ((_, sourcePin), (_, targetPin)) <- drop 1 cs `zip` cs
+    , (sx, sy, _, _) <- take 1 $ portRects $ pinPort sourcePin
+    , (tx, ty, _, _) <- take 1 $ portRects $ pinPort targetPin
+    , (x1, y1, _, _) <- maybe [] pure $ Map.lookup sourceGate nodes
+    , (x2, y2, _, _) <- maybe [] pure $ Map.lookup targetGate nodes
     ]
 
 
