@@ -106,9 +106,9 @@ connect nodes edges = do
       shorten wire resolution pathX pathY
 
     | (wire, (pathX, pathY)) <- Map.assocs edges
-    , (gate, cs) <- Map.assocs $ contacts wire
-    , (gate, cs) <- Map.assocs $ contacts wire
-    , ((_, sourcePin), (_, targetPin)) <- drop 1 cs `zip` cs
+    , let (sourceGate, cs) = head $ Map.assocs $ contacts wire
+    , let (targetGate, ds) = last $ Map.assocs $ contacts wire
+    , ((_, sourcePin), (_, targetPin)) <- cs `zip` ds
     , (sx, sy, _, _) <- take 1 $ portRects $ pinPort sourcePin
     , (tx, ty, _, _) <- take 1 $ portRects $ pinPort targetPin
     , (x1, y1, _, _) <- maybe [] pure $ Map.lookup sourceGate nodes
