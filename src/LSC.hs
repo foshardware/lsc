@@ -13,17 +13,19 @@ import Data.SBV.Control
 import LSC.Operator
 import LSC.NetGraph
 import LSC.Types
+import LSC.Exlining
 
 
 type Stage1 = Circuit2D
 
 stage1 :: Int -> NetGraph -> LSC Stage1
-stage1 j netlist
+stage1 j
   = fmap head
-  $ concLSC
-  $ fmap pnr
-  $ take j
-  $ getLeaves netlist
+  . concLSC
+  . take j
+  . fmap pnr
+  . getLeaves
+  . exlineRounds (replicate 7 4)
 
 
 pnr :: NetGraph -> LSC Circuit2D
