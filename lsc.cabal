@@ -92,6 +92,7 @@ library
       LSC.SuffixTree,
       LSC.Inlining,
       LSC.Exlining,
+      LSC.NetGraph,
       LSC.Numbers,
       LSC.Operator,
       LSC.Types

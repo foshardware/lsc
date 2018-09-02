@@ -11,13 +11,23 @@ import Data.SBV
 import Data.SBV.Control
 
 import LSC.Operator
+import LSC.NetGraph
 import LSC.Types
 
 
 type Stage1 = Circuit2D
 
-stage1 :: NetGraph -> LSC Stage1
-stage1 (NetGraph _ _ _ gates wires) = do
+stage1 :: Int -> NetGraph -> LSC Stage1
+stage1 j netlist
+  = fmap head
+  $ concLSC
+  $ fmap pnr
+  $ take j
+  $ getLeaves netlist
+
+
+pnr :: NetGraph -> LSC Circuit2D
+pnr (NetGraph _ _ _ gates wires) = do
 
   nodes <- Map.fromList <$> sequence (freeNode <$> toList gates)
   edges <- Map.fromList <$> sequence (freeEdge <$> toList wires)
@@ -38,16 +48,16 @@ stage1 (NetGraph _ _ _ gates wires) = do
       Sat -> Circuit2D
 
         <$> sequence
-            [ (, , , ) <$> getValue x <*> getValue y <*> getValue w <*> getValue h
-            | (x, y, w, h) <- Map.elems nodes
+            [ fmap (gate, ) $ (,,,) <$> getValue x <*> getValue y <*> getValue w <*> getValue h
+            | (gate, (x, y, w, h)) <- Map.assocs nodes
             ]
 
         <*> sequence
-            [ Path <$> sequence
+            [ fmap (net, ) $ Path <$> sequence
                 [ (, ) <$> getValue (pathX ! i) <*> getValue (pathY ! i)
                 | i <- [1 .. resolution]
                 ]
-            | (pathX, pathY) <- Map.elems edges
+            | (net, (pathX, pathY)) <- Map.assocs edges
             ]
 
       _   -> pure $ Circuit2D [] []

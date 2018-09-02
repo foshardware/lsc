@@ -27,15 +27,15 @@ svgDoc (Circuit2D nodes edges) = S.docTypeSvg
     mapM_ place  nodes
     mapM_ follow edges
 
-place :: Rectangle -> S.Svg
-place (x, y, width, height) = S.path
+place :: (Gate, Rectangle) -> S.Svg
+place (_, (x, y, width, height)) = S.path
   ! A.d (mkPath $ m x y *> h (x + width) *> v (y + height) *> h x *> z)
   ! A.stroke "black"
   ! A.fill "transparent"
   ! A.strokeWidth "4"
 
-follow :: Path -> S.Svg
-follow (Path ((x1, y1) : (x2, y2) : xs)) = do
+follow :: (Net, Path) -> S.Svg
+follow (net, (Path ((x1, y1) : (x2, y2) : xs))) = do
 
   S.line
     ! A.x1 (S.toValue x1)
@@ -46,7 +46,7 @@ follow (Path ((x1, y1) : (x2, y2) : xs)) = do
     ! A.fill "transparent"
     ! A.strokeWidth "3"
 
-  follow (Path xs)
+  follow (net, Path xs)
 
 follow _ = pure ()
 
@@ -54,10 +54,10 @@ follow _ = pure ()
 scaleDown :: Integer -> Circuit2D -> Circuit2D
 scaleDown n (Circuit2D nodes edges) = Circuit2D
 
-  [ (div x n, div y n, div w' n, div h' n)
-  | (x, y, w', h') <- nodes
+  [ (gate, (div x n, div y n, div w' n, div h' n))
+  | (gate, (x, y, w', h')) <- nodes
   ]
 
-  [ Path [ (div x n, div y n) | (x, y) <- pos ]
-  | Path pos <- edges
+  [ (net, Path [ (div x n, div y n) | (x, y) <- pos ])
+  | (net, Path pos) <- edges
   ]

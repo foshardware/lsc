@@ -90,7 +90,7 @@ program = do
     let j = maybe 1 read $ lookup Cores opts
 
     -- svg output
-    circuit2d <- lift $ bootstr `runLSC` stage1 netlist
+    circuit2d <- lift $ bootstr `runLSC` stage1 j netlist
 
     when (Compile `elem` fmap fst opts)
       $ do
