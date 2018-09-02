@@ -61,7 +61,7 @@ follow (net, (Path ((x1, y1) : (x2, y2) : xs))) = do
     ! A.y1 (S.toValue y1)
     ! A.x2 (S.toValue x2)
     ! A.y2 (S.toValue y2)
-    ! A.stroke "black"
+    ! A.stroke "darkblue"
     ! A.fill "transparent"
     ! A.strokeWidth "3"
 

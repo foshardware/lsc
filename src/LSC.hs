@@ -103,16 +103,16 @@ connect nodes edges = do
 
       rectangular resolution pathX pathY
 
-      shorten wire resolution pathX pathY
+      shorten source target wire resolution pathX pathY
 
     | (wire, (pathX, pathY)) <- Map.assocs edges
-    , let (sourceGate, cs) = head $ Map.assocs $ contacts wire
-    , let (targetGate, ds) = last $ Map.assocs $ contacts wire
+    , let (source, cs) = head $ Map.assocs $ contacts wire
+    , let (target, ds) = last $ Map.assocs $ contacts wire
     , ((_, sourcePin), (_, targetPin)) <- cs `zip` ds
     , (sx, sy, _, _) <- take 1 $ portRects $ pinPort sourcePin
     , (tx, ty, _, _) <- take 1 $ portRects $ pinPort targetPin
-    , (x1, y1, _, _) <- maybe [] pure $ Map.lookup sourceGate nodes
-    , (x2, y2, _, _) <- maybe [] pure $ Map.lookup targetGate nodes
+    , (x1, y1, _, _) <- maybe [] pure $ Map.lookup source nodes
+    , (x2, y2, _, _) <- maybe [] pure $ Map.lookup target nodes
     ]
 
 
@@ -127,9 +127,11 @@ rectangular _ _ _
   = pure ()
 
 
-shorten net resolution pathX pathY = do
+shorten source target net resolution pathX pathY = do
 
   let goal = "min_p_" ++ show (netIndex net)
+        ++ "_" ++ show (gateIndex source)
+        ++ "_" ++ show (gateIndex target)
 
   liftSMT $ minimize goal
     $ sum
