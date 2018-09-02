@@ -30,13 +30,14 @@ import LSC.SuffixTree
 
 
 exlineRounds :: Foldable f => f Int -> NetGraph -> NetGraph
-exlineRounds xs netlist = foldr exline netlist xs
+exlineRounds xs netlist = exline (toList xs) netlist
 
 
-exline :: Int -> NetGraph -> NetGraph
-exline k top@(NetGraph name pins subs nodes edges)
+exline :: [Int] -> NetGraph -> NetGraph
+exline (k : ks) top@(NetGraph name pins subs nodes edges)
   | not $ null isomorphicGates
-  = NetGraph name pins
+  = exline ks
+  $ NetGraph name pins
 
   (Map.insert (modelName netlist) netlist subs)
 
@@ -74,7 +75,7 @@ exline k top@(NetGraph name pins subs nodes edges)
       | q <- length nodes : pos
       ]
 
-exline _ netlist = netlist
+exline _ top = top
 
 
 createSublist :: Length -> [Position] -> NetGraph -> (Map Position Closure, NetGraph)
