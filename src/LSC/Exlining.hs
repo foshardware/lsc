@@ -17,7 +17,6 @@ import Data.Hashable
 import Data.List (sortBy)
 import Data.Maybe
 import Data.Monoid
-import qualified Data.Set as Set
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Vector (Vector, slice, concat, (!), generate, cons)

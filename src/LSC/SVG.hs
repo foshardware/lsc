@@ -65,7 +65,7 @@ follow (net, (Path ((x1, y1) : (x2, y2) : xs))) = do
     ! A.fill "transparent"
     ! A.strokeWidth "3"
 
-  follow (net, Path xs)
+  follow (net, Path ((x2, y2) : xs))
 
 follow _ = pure ()
 
