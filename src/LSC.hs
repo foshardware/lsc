@@ -97,7 +97,7 @@ connect nodes edges = do
 
     | (wire, path) <- Map.assocs edges
     , (source, cs) <- take 1 $ Map.assocs $ contacts wire
-    , (target, ds) <- take 4 $ drop 1 $ Map.assocs $ contacts wire
+    , (target, ds) <- drop 1 $ Map.assocs $ contacts wire
     , ((_, sourcePin), (_, targetPin)) <- take 1 $ zip cs ds
     , (sx, sy, _, _) <- take 1 $ portRects $ pinPort sourcePin
     , (tx, ty, _, _) <- take 1 $ portRects $ pinPort targetPin
