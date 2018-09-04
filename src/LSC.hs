@@ -4,10 +4,8 @@
 
 module LSC where
 
-import Control.Monad.Trans
 import Data.Foldable
 import qualified Data.Map as Map
-import qualified Data.Vector as Vector
 
 import Data.SBV
 import Data.SBV.Control
@@ -27,7 +25,7 @@ stage1 j
   . take j
   . fmap pnr
   . getLeaves
-  . exlineRounds (replicate 7 4)
+  . exlineRounds (repeat 20)
 
 
 pnr :: NetGraph -> LSC Circuit2D
@@ -106,9 +104,9 @@ connect nodes edges = do
       shorten source target wire resolution pathX pathY
 
     | (wire, (pathX, pathY)) <- Map.assocs edges
-    , let (source, cs) = head $ Map.assocs $ contacts wire
-    , let (target, ds) = last $ Map.assocs $ contacts wire
-    , ((_, sourcePin), (_, targetPin)) <- cs `zip` ds
+    , (source, cs) <- take 1 $ Map.assocs $ contacts wire
+    , (target, ds) <- take 1 $ drop 1 $ Map.assocs $ contacts wire
+    , ((_, sourcePin), (_, targetPin)) <- take 1 $ zip cs ds
     , (sx, sy, _, _) <- take 1 $ portRects $ pinPort sourcePin
     , (tx, ty, _, _) <- take 1 $ portRects $ pinPort targetPin
     , (x1, y1, _, _) <- maybe [] pure $ Map.lookup source nodes
