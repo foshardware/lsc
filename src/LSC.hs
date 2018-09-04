@@ -56,10 +56,8 @@ pnr (NetGraph _ _ _ gates wires) = do
 
         <*> sequence
             [ fmap (net, ) $ Path <$> sequence
-                [ (, ) <$> getValue (pathX ! i) <*> getValue (pathY ! i)
-                | i <- [1 .. resolution]
-                ]
-            | (net, (pathX, pathY)) <- Map.assocs edges
+                [ (, ) <$> getValue x <*> getValue y | (x, y) <- path ]
+            | (net, path) <- Map.assocs edges
             ]
 
       _   -> pure $ Circuit2D [] []
@@ -94,16 +92,19 @@ connect nodes edges = do
   sequence_
     [ do
       liftSMT $ constrain
-        $   x1 + literal sx .== pathX ! 1
-        &&& y1 + literal sy .== pathY ! 1
-        &&& x2 + literal tx .== pathX ! resolution
-        &&& y2 + literal ty .== pathY ! resolution
+        $   (x1 + literal sx, y1 + literal sy) `sElem` path
+        &&& (x2 + literal tx, y2 + literal ty) `sElem` path
 
-      rectangular resolution pathX pathY
+        -- $   x1 + literal sx .== pathX ! 1
+        -- &&& y1 + literal sy .== pathY ! 1
+        -- &&& x2 + literal tx .== pathX ! resolution
+        -- &&& y2 + literal ty .== pathY ! resolution
 
-      shorten source target wire resolution pathX pathY
+      rectangular path
 
-    | (wire, (pathX, pathY)) <- Map.assocs edges
+      shorten source target wire path
+
+    | (wire, path) <- Map.assocs edges
     , (source, cs) <- take 1 $ Map.assocs $ contacts wire
     , (target, ds) <- take 1 $ drop 1 $ Map.assocs $ contacts wire
     , ((_, sourcePin), (_, targetPin)) <- take 1 $ zip cs ds
@@ -114,18 +115,14 @@ connect nodes edges = do
     ]
 
 
-rectangular r x y
-  | r > 1
+rectangular ((x1, y1) : (x2, y2) : xs)
   = do
-    liftSMT $ constrain
-      $   x ! r .== x ! (r - 1)
-      ||| y ! r .== y ! (r - 1)
-    rectangular (r - 1) x y
-rectangular _ _ _
-  = pure ()
+    liftSMT $ constrain $ x1 .== x2 ||| y1 .== y2
+    rectangular ((x2, y2) : xs)
+rectangular _ = pure ()
 
 
-shorten source target net resolution pathX pathY = do
+shorten source target net path = do
 
   let goal = "min_p_" ++ show (netIndex net)
         ++ "_" ++ show (gateIndex source)
@@ -134,10 +131,8 @@ shorten source target net resolution pathX pathY = do
   liftSMT $ minimize goal
     $ sum
       [ abs (x1 - x2) + abs (y1 - y2)
-      | ((x1, y1), (x2, y2))
-              <-  foldr accumulate [] [1 .. resolution]
-            `zip` foldr accumulate [] [2 .. resolution]
-      ] where accumulate i a = (pathX ! i, pathY ! i) : a
+      | ((x1, y1), (x2, y2)) <-  path `zip` drop 1 path
+      ]
 
 
 freeNode :: Gate -> LSC (Gate, (SInteger, SInteger, SInteger, SInteger))
@@ -160,13 +155,19 @@ freeNode gate = do
     pure (gate, (x, y, w, h))
 
 
-freeEdge :: Net -> LSC (Net, (SArray Integer Integer, SArray Integer Integer))
+freeEdge :: Net -> LSC (Net, [(SInteger, SInteger)])
 freeEdge net = do
+
+  resolution <- wireResolution <$> ask
 
   let suffix = show $ netIndex net
 
-  pathX <- liftSMT $ newArray $ "px_" ++ suffix
-  pathY <- liftSMT $ newArray $ "py_" ++ suffix
+  path <- sequence
+    [ liftSMT $ (,)
+        <$> free ("px_"++ suffix ++"_"++ show i)
+        <*> free ("py_"++ suffix ++"_"++ show i)
+    | i <- [ 1 .. resolution ]
+    ]
 
-  pure (net, (pathX, pathY))
+  pure (net, path)
 
