@@ -120,7 +120,7 @@ data Technology = Technology
   } deriving Show
 
 instance Default Technology where
-  def = Technology (10^6 :: Integer, 10^6 :: Integer) 16 1 1 mempty
+  def = Technology (10^6, 10^6) 32 1 1 mempty
 
 lookupDimensions :: Technology -> Gate -> (Integer, Integer)
 lookupDimensions tech g

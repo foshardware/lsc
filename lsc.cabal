@@ -94,7 +94,6 @@ library
       LSC.Exlining,
       LSC.NetGraph,
       LSC.Numbers,
-      LSC.Operator,
       LSC.Types
   other-modules:
       Paths_lsc

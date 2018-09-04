@@ -1,6 +1,7 @@
 {-# OPTIONS_GHC -fno-warn-missing-signatures #-}
 {-# LANGUAGE GADTs, DataKinds, TupleSections, FlexibleContexts #-}
 {-# LANGUAGE ParallelListComp #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 
 module LSC where
 
@@ -10,7 +11,6 @@ import qualified Data.Map as Map
 import Data.SBV
 import Data.SBV.Control
 
-import LSC.Operator
 import LSC.NetGraph
 import LSC.Types
 import LSC.Exlining
@@ -39,9 +39,10 @@ pnr (NetGraph _ _ _ gates wires) = do
 
   connect nodes edges
 
-  -- intersections edges
+  rectangular edges
+  shorten edges
 
-  resolution <- wireResolution <$> ask
+  -- intersections edges
 
   liftSMT $ query $ do
     result <- checkSat
@@ -88,25 +89,15 @@ collision nodes = do
 
 
 connect nodes edges = do
-  resolution <- wireResolution <$> ask
   sequence_
     [ do
       liftSMT $ constrain
         $   (x1 + literal sx, y1 + literal sy) `sElem` path
         &&& (x2 + literal tx, y2 + literal ty) `sElem` path
 
-        -- $   x1 + literal sx .== pathX ! 1
-        -- &&& y1 + literal sy .== pathY ! 1
-        -- &&& x2 + literal tx .== pathX ! resolution
-        -- &&& y2 + literal ty .== pathY ! resolution
-
-      rectangular path
-
-      shorten source target wire path
-
     | (wire, path) <- Map.assocs edges
     , (source, cs) <- take 1 $ Map.assocs $ contacts wire
-    , (target, ds) <- take 1 $ drop 1 $ Map.assocs $ contacts wire
+    , (target, ds) <- take 4 $ drop 1 $ Map.assocs $ contacts wire
     , ((_, sourcePin), (_, targetPin)) <- take 1 $ zip cs ds
     , (sx, sy, _, _) <- take 1 $ portRects $ pinPort sourcePin
     , (tx, ty, _, _) <- take 1 $ portRects $ pinPort targetPin
@@ -115,24 +106,24 @@ connect nodes edges = do
     ]
 
 
-rectangular ((x1, y1) : (x2, y2) : xs)
-  = do
-    liftSMT $ constrain $ x1 .== x2 ||| y1 .== y2
-    rectangular ((x2, y2) : xs)
-rectangular _ = pure ()
+rectangular edges = sequence_ [ liftSMT $ rect path | path <- Map.elems edges ]
+
+rect ((x1, y1) : (x2, y2) : xs) = do
+  constrain $ x1 .== x2 ||| y1 .== y2
+  rect $ (x2, y2) : xs
+rect _ = pure ()
 
 
-shorten source target net path = do
+shorten edges = sequence_ [ liftSMT $ short net path | (net, path) <- Map.assocs edges ]
+
+short net path = do
 
   let goal = "min_p_" ++ show (netIndex net)
-        ++ "_" ++ show (gateIndex source)
-        ++ "_" ++ show (gateIndex target)
 
-  liftSMT $ minimize goal
-    $ sum
-      [ abs (x1 - x2) + abs (y1 - y2)
-      | ((x1, y1), (x2, y2)) <-  path `zip` drop 1 path
-      ]
+  minimize goal $ sum
+    [ abs (x1 - x2) + abs (y1 - y2)
+    | ((x1, y1), (x2, y2)) <-  path `zip` drop 1 path
+    ]
 
 
 freeNode :: Gate -> LSC (Gate, (SInteger, SInteger, SInteger, SInteger))
