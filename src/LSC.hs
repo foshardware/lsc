@@ -122,7 +122,8 @@ short net path = do
 
   minimize goal $ sum
     [ abs (x1 - x2) + abs (y1 - y2)
-    | ((x1, y1), (x2, y2)) <-  path `zip` drop 1 path
+    | (x1, y1) <- path
+    | (x2, y2) <- drop 1 path
     ]
 
 
