@@ -163,14 +163,7 @@ freeEdge net = do
 
   resolution <- wireResolution <$> ask
 
-  let suffix = show $ netIndex net
-
-  path <- sequence
-    [ liftSMT $ (,)
-        <$> free ("px_"++ suffix ++"_"++ show i)
-        <*> free ("py_"++ suffix ++"_"++ show i)
-    | i <- [ 1 .. resolution ]
-    ]
+  path <- sequence $ replicate resolution $ liftSMT $ (,) <$> free_ <*> free_
 
   pure (net, path)
 
