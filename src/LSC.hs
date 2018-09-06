@@ -29,13 +29,13 @@ stage1 j
 
 
 pnr :: NetGraph -> LSC Circuit2D
-pnr (NetGraph _ (inputList, _, _) _ gates wires) = do
+pnr (NetGraph _ _ _ gates wires) = do
 
   nodes <- Map.fromList <$> sequence (freeNode <$> toList gates)
 
-  steiner <- Map.fromList <$> sequence (freeSteiner <$> inputList)
-  
-  edges <- connect steiner nodes wires
+  steiner <- Map.fromList <$> sequence (freeSteiner <$> toList wires)
+
+  edges <- connect nodes wires steiner
 
   collision nodes
   boundedSpace nodes
@@ -89,27 +89,29 @@ collision nodes = do
     ]
 
 
-connect steiner nodes edges = do
+connect nodes wires steiner = do
+
   sequence
     [ do
 
-      (net, path) <- freeEdge wire
-      distance  <- liftSMT free_
+      path <- freeEdge
 
       liftSMT $ constrain
-        $   manhattan .== distance
-        &&& coords `sElem` path
+        $   abs (fst sourceCoords - fst targetCoords)
+          + abs (snd sourceCoords - snd targetCoords)
+          ./= distance
+        &&& sourceCoords .== head path
+        &&& targetCoords .== last path
 
-      pure (net, path)
+      pure (wire, path)
 
-    | wire <- Map.elems edges
-    , (x1, y1) <- maybe [] pure $ Map.lookup (netIdent wire) steiner
+    | wire <- toList wires
+    , (distance, sourceCoords) <- maybe [] pure $ Map.lookup wire steiner
     , (target, cs) <- Map.assocs $ contacts wire
     , (_, pin) <- take 1 cs
     , (tx, ty, _, _) <- take 1 $ portRects $ pinPort pin
     , (x2, y2, _, _) <- maybe [] pure $ Map.lookup target nodes
-    , let coords = (x2 + literal tx, y2 + literal ty)
-    , let manhattan = abs (fst coords - x1) + abs (snd coords - y1)
+    , let targetCoords = (x2 + literal tx, y2 + literal ty)
     ]
 
 
@@ -141,14 +143,15 @@ short i net path = do
     ]
 
 
-freeSteiner :: Identifier -> LSC (Identifier, (SInteger, SInteger))
-freeSteiner wire = do
+freeSteiner :: Net -> LSC (Net, (SInteger, (SInteger, SInteger)))
+freeSteiner net = do
 
   liftSMT $ do
+    d <- free_
     x <- free_
     y <- free_
 
-    pure (wire, (x, y))
+    pure (net, (d, (x, y)))
 
 
 freeNode :: Gate -> LSC (Gate, (SInteger, SInteger, SInteger, SInteger))
@@ -168,12 +171,12 @@ freeNode gate = do
     pure (gate, (x, y, w, h))
 
 
-freeEdge :: Net -> LSC (Net, [(SInteger, SInteger)])
-freeEdge net = do
+freeEdge :: LSC [(SInteger, SInteger)]
+freeEdge = do
 
   resolution <- wireResolution <$> ask
 
   path <- sequence $ replicate resolution $ liftSMT $ (,) <$> free_ <*> free_
 
-  pure (net, path)
+  pure path
 
