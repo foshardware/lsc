@@ -40,7 +40,8 @@ pnr (NetGraph _ _ _ gates wires) = do
   collision nodes
   boundedSpace nodes
 
-  manhattan edges
+  rectangular edges
+  shorten edges
 
   -- intersections edges
 
@@ -111,21 +112,32 @@ connect nodes wires steiner = do
     ]
 
 
-manhattan edges = sequence_
-  [ rect path <$> liftSMT free_ <*> liftSMT free_
-  | (_, path) <- edges
+
+rectangular edges = sequence_ [ liftSMT $ rect path | (_, path) <- edges ]
+
+rect ((x1, y1) : (x2, y2) : xs) = do
+
+  constrain $ x1 .== x2 ||| y1 .== y2
+  rect $ (x2, y2) : xs
+
+rect _ = pure ()
+
+
+shorten edges = sequence_
+  [ liftSMT $ short i net path
+  | (net, path) <- edges
+  | i :: Int <- [ 0.. ]
   ]
 
-rect :: [(SInteger, SInteger)] -> SBool -> SBool -> LSC ()
-rect ((x1, y1) : (x2, y2) : xs) h v = do
+short i net path = do
 
-  liftSMT $ constrain
-    $   x1 .== x2 -- &&& h .== (x1 - x2 .< literal 0)
-    ||| y1 .== y2 -- &&& v .== (y1 - y2 .< literal 0)
+  let goal = "min_p_"++ show i ++"_"++ show (netIndex net)
 
-  rect ((x2, y2) : xs) h v
-
-rect _ _ _ = pure ()
+  minimize goal $ sum
+    [ abs (x1 - x2) + abs (y1 - y2)
+    | (x1, y1) <- path
+    | (x2, y2) <- drop 1 path
+    ]
 
 
 freeSteiner :: Net -> LSC (Net, (SInteger, (SInteger, SInteger)))
