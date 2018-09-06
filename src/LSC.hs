@@ -93,25 +93,22 @@ connect nodes wires steiner = do
 
   sequence
     [ do
-
       path <- freeEdge
 
       liftSMT $ constrain
-        $   abs (fst sourceCoords - fst targetCoords)
-          + abs (snd sourceCoords - snd targetCoords)
-          ./= distance
-        &&& sourceCoords .== head path
-        &&& targetCoords .== last path
+        $   abs (fst source - fst target) + abs (snd source - snd target) .== distance
+        &&& source .== head path
+        &&& target .== last path
 
       pure (wire, path)
 
     | wire <- toList wires
-    , (distance, sourceCoords) <- maybe [] pure $ Map.lookup wire steiner
-    , (target, cs) <- Map.assocs $ contacts wire
+    , (distance, source) <- maybe [] pure $ Map.lookup wire steiner
+    , (gate, cs) <- Map.assocs $ contacts wire
     , (_, pin) <- take 1 cs
     , (tx, ty, _, _) <- take 1 $ portRects $ pinPort pin
-    , (x2, y2, _, _) <- maybe [] pure $ Map.lookup target nodes
-    , let targetCoords = (x2 + literal tx, y2 + literal ty)
+    , (x2, y2, _, _) <- maybe [] pure $ Map.lookup gate nodes
+    , let target = (x2 + literal tx, y2 + literal ty)
     ]
 
 
