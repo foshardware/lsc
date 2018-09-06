@@ -5,6 +5,8 @@
 
 module LSC where
 
+import Data.Monoid
+import Data.Text (unpack)
 import Data.Foldable
 import qualified Data.Map as Map
 
@@ -14,7 +16,7 @@ import Data.SBV.Control
 import LSC.NetGraph
 import LSC.Types
 import LSC.Exlining
-
+import Debug.Trace
 
 type Stage1 = Circuit2D
 
@@ -29,15 +31,17 @@ stage1 j
 
 
 pnr :: NetGraph -> LSC Circuit2D
-pnr (NetGraph _ _ _ gates wires) = do
+pnr (NetGraph ident (inputList, _, _) _ gates wires) = do
 
   nodes <- Map.fromList <$> sequence (freeNode <$> toList gates)
   edges <- Map.fromList <$> sequence (freeEdge <$> toList wires)
 
+  steiner <- Map.fromList <$> sequence (freeSteiner ident <$> inputList)
+
   collision nodes
   boundedSpace nodes
 
-  connect nodes edges
+  connect steiner nodes edges
 
   rectangular edges
   shorten edges
@@ -88,7 +92,7 @@ collision nodes = do
     ]
 
 
-connect nodes edges = do
+connect steiner nodes edges = do
   sequence_
     [ do
       liftSMT $ constrain
@@ -96,14 +100,13 @@ connect nodes edges = do
         &&& targetCoords `sElem` path
 
     | (wire, path) <- Map.assocs edges
-    , (source, cs) <- take 1 $ Map.assocs $ contacts wire
-    , (target, ds) <- drop 1 $ Map.assocs $ contacts wire
-    , ((_, sourcePin), (_, targetPin)) <- take 1 $ zip cs ds
-    , (sx, sy, _, _) <- take 1 $ portRects $ pinPort sourcePin
-    , (tx, ty, _, _) <- take 1 $ portRects $ pinPort targetPin
-    , (x1, y1, _, _) <- maybe [] pure $ Map.lookup source nodes
+    , (x1, y1) <- maybe [] pure $ Map.lookup (netIdent wire) steiner
+    , trace (unpack $ netIdent wire) True
+    , (target, cs) <- Map.assocs $ contacts wire
+    , (_, pin) <- take 1 cs
+    , (tx, ty, _, _) <- take 1 $ portRects $ pinPort pin
     , (x2, y2, _, _) <- maybe [] pure $ Map.lookup target nodes
-    , let sourceCoords = (x1 + literal sx, y1 + literal sy)
+    , let sourceCoords = (x1, y1)
     , let targetCoords = (x2 + literal tx, y2 + literal ty)
     ]
 
@@ -127,6 +130,17 @@ short net path = do
     | (x1, y1) <- path
     | (x2, y2) <- drop 1 path
     ]
+
+
+freeSteiner :: Identifier -> Identifier -> LSC (Identifier, (SInteger, SInteger))
+freeSteiner ident wire = do
+
+  let suffix = unpack $ ident <> wire
+  liftSMT $ do
+    x <- free $ "x_" ++ suffix
+    y <- free $ "y_" ++ suffix
+
+    pure (wire, (x, y))
 
 
 freeNode :: Gate -> LSC (Gate, (SInteger, SInteger, SInteger, SInteger))
