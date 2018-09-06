@@ -5,8 +5,6 @@
 
 module LSC where
 
-import Data.Monoid
-import Data.Text (unpack)
 import Data.Foldable
 import qualified Data.Map as Map
 
@@ -31,17 +29,16 @@ stage1 j
 
 
 pnr :: NetGraph -> LSC Circuit2D
-pnr (NetGraph ident (inputList, _, _) _ gates wires) = do
+pnr (NetGraph _ (inputList, _, _) _ gates wires) = do
 
   nodes <- Map.fromList <$> sequence (freeNode <$> toList gates)
-  edges <- Map.fromList <$> sequence (freeEdge <$> toList wires)
 
   steiner <- Map.fromList <$> sequence (freeSteiner <$> inputList)
+  
+  edges <- connect steiner nodes wires
 
   collision nodes
   boundedSpace nodes
-
-  connect steiner nodes edges
 
   rectangular edges
   shorten edges
@@ -62,7 +59,7 @@ pnr (NetGraph ident (inputList, _, _) _ gates wires) = do
         <*> sequence
             [ fmap (net, ) $ Path <$> sequence
                 [ (, ) <$> getValue x <*> getValue y | (x, y) <- path ]
-            | (net, path) <- Map.assocs edges
+            | (net, path) <- edges
             ]
 
       _   -> pure $ Circuit2D [] []
@@ -93,16 +90,19 @@ collision nodes = do
 
 
 connect steiner nodes edges = do
-  sequence_
+  sequence
     [ do
 
-      distance <- liftSMT free_
+      (net, path) <- freeEdge wire
+      distance  <- liftSMT free_
 
       liftSMT $ constrain
         $   manhattan .== distance
         &&& coords `sElem` path
 
-    | (wire, path) <- Map.assocs edges
+      pure (net, path)
+
+    | wire <- Map.elems edges
     , (x1, y1) <- maybe [] pure $ Map.lookup (netIdent wire) steiner
     , (target, cs) <- Map.assocs $ contacts wire
     , (_, pin) <- take 1 cs
@@ -114,19 +114,25 @@ connect steiner nodes edges = do
 
 
 
-rectangular edges = sequence_ [ liftSMT $ rect path | path <- Map.elems edges ]
+rectangular edges = sequence_ [ liftSMT $ rect path | (_, path) <- edges ]
 
 rect ((x1, y1) : (x2, y2) : xs) = do
+
   constrain $ x1 .== x2 ||| y1 .== y2
   rect $ (x2, y2) : xs
+
 rect _ = pure ()
 
 
-shorten edges = sequence_ [ liftSMT $ short net path | (net, path) <- Map.assocs edges ]
+shorten edges = sequence_
+  [ liftSMT $ short i net path
+  | (net, path) <- edges
+  | i :: Int <- [ 0.. ]
+  ]
 
-short net path = do
+short i net path = do
 
-  let goal = "min_p_" ++ show (netIndex net)
+  let goal = "min_p_"++ show i ++"_"++ show (netIndex net)
 
   minimize goal $ sum
     [ abs (x1 - x2) + abs (y1 - y2)
