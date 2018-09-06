@@ -28,10 +28,6 @@ import LSC.Types
 import LSC.SuffixTree
 
 
-exlineRounds :: Foldable f => f Int -> NetGraph -> NetGraph
-exlineRounds xs netlist = exline (toList xs) netlist
-
-
 exline :: [Int] -> NetGraph -> NetGraph
 exline (k : ks) top@(NetGraph name pins subs nodes edges)
   | not $ null isomorphicGates
@@ -82,10 +78,7 @@ createSublist len pos@(p1 : _) (NetGraph name (inputList, outputList, _) _ nodes
   = (,) closures
   $ NetGraph (name <> buildName scope)
 
-  ( [ pin | (pin, dir) <- abstractPins, dir `elem` [In,  InOut] ]
-  , [ pin | (pin, dir) <- abstractPins, dir `elem` [Out, InOut] ]
-  , mempty
-  )
+  (newInputList, newOutputList, mempty)
 
   mempty
 
@@ -95,13 +88,16 @@ createSublist len pos@(p1 : _) (NetGraph name (inputList, outputList, _) _ nodes
 
   where
 
+    newInputList  = [ pin | (pin, dir) <- abstractPins, dir `elem` [In,  InOut] ]
+    newOutputList = [ pin | (pin, dir) <- abstractPins, dir `elem` [Out, InOut] ]
+
     newGateVector = generate (length scope) mask
 
     mask i = (scope ! i) { gateWires = lexicon <$> gateWires (scope ! i) } where
       lexicon v = maybe v wireName $ Map.lookup v =<< Map.lookup p1 closures
 
     newNetMapping = Map.fromList
-      [ (w, net)
+      [ (w, net { netIdent = w })
       | (k, net) <- Map.assocs edges
       , w <- maybe [k] pure $ Map.lookup k scopeNets
       ]

@@ -122,8 +122,8 @@ data Technology = Technology
 instance Default Technology where
   def = Technology (10^6, 10^6) 32 1 1 mempty
 
-lookupDimensions :: Technology -> Gate -> (Integer, Integer)
-lookupDimensions tech g
+lookupDimensions :: Gate -> Technology -> (Integer, Integer)
+lookupDimensions g tech
   = maybe (0, 0) componentDimensions
   $ Map.lookup (gateIdent g) (components tech)
 

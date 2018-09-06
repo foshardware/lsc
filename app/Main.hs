@@ -77,7 +77,7 @@ program = do
     -- print exlined blif to stdout
     when (Exline `elem` fmap fst opts)
       $ do
-        liftIO $ printBLIF $ toBLIF $ exlineRounds (replicate 3 4) netlist
+        liftIO $ printBLIF $ toBLIF $ exline (replicate 3 4) netlist
         exit
 
     -- print debug info

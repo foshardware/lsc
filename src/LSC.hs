@@ -16,7 +16,7 @@ import Data.SBV.Control
 import LSC.NetGraph
 import LSC.Types
 import LSC.Exlining
-import Debug.Trace
+
 
 type Stage1 = Circuit2D
 
@@ -27,7 +27,7 @@ stage1 j
   . take j
   . fmap pnr
   . getLeaves
-  . exlineRounds (repeat 20)
+  . exline (repeat 20)
 
 
 pnr :: NetGraph -> LSC Circuit2D
@@ -36,7 +36,7 @@ pnr (NetGraph ident (inputList, _, _) _ gates wires) = do
   nodes <- Map.fromList <$> sequence (freeNode <$> toList gates)
   edges <- Map.fromList <$> sequence (freeEdge <$> toList wires)
 
-  steiner <- Map.fromList <$> sequence (freeSteiner ident <$> inputList)
+  steiner <- Map.fromList <$> sequence (freeSteiner <$> inputList)
 
   collision nodes
   boundedSpace nodes
@@ -69,13 +69,13 @@ pnr (NetGraph ident (inputList, _, _) _ gates wires) = do
 
 
 boundedSpace nodes = do
-  (xDim, yDim) <- padDimensions <$> ask
+  (width, height) <- padDimensions <$> ask
   sequence_
     [ liftSMT $ constrain
         $   x .> literal 0
         &&& y .> literal 0
-        &&& x .< literal xDim
-        &&& y .< literal yDim
+        &&& x .< literal width
+        &&& y .< literal height
     | (x, y, _, _) <- Map.elems nodes
     ]
 
@@ -101,7 +101,6 @@ connect steiner nodes edges = do
 
     | (wire, path) <- Map.assocs edges
     , (x1, y1) <- maybe [] pure $ Map.lookup (netIdent wire) steiner
-    , trace (unpack $ netIdent wire) True
     , (target, cs) <- Map.assocs $ contacts wire
     , (_, pin) <- take 1 cs
     , (tx, ty, _, _) <- take 1 $ portRects $ pinPort pin
@@ -132,13 +131,12 @@ short net path = do
     ]
 
 
-freeSteiner :: Identifier -> Identifier -> LSC (Identifier, (SInteger, SInteger))
-freeSteiner ident wire = do
+freeSteiner :: Identifier -> LSC (Identifier, (SInteger, SInteger))
+freeSteiner wire = do
 
-  let suffix = unpack $ ident <> wire
   liftSMT $ do
-    x <- free $ "x_" ++ suffix
-    y <- free $ "y_" ++ suffix
+    x <- free_
+    y <- free_
 
     pure (wire, (x, y))
 
@@ -146,19 +144,16 @@ freeSteiner ident wire = do
 freeNode :: Gate -> LSC (Gate, (SInteger, SInteger, SInteger, SInteger))
 freeNode gate = do
 
-  technology <- ask
-
-  let suffix = show $ gateIndex gate
-      (xDim, yDim) = lookupDimensions technology gate
+  (width, height) <- lookupDimensions gate <$> ask
 
   liftSMT $ do
-    x <- free $ "x_" ++ suffix
-    y <- free $ "y_" ++ suffix
-    w <- free $ "w_" ++ suffix
-    h <- free $ "h_" ++ suffix
+    x <- free_
+    y <- free_
+    w <- free_
+    h <- free_
 
-    constrain $ w .== literal xDim
-    constrain $ h .== literal yDim
+    constrain $ w .== literal width
+    constrain $ h .== literal height
 
     pure (gate, (x, y, w, h))
 
