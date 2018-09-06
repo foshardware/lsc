@@ -95,9 +95,12 @@ collision nodes = do
 connect steiner nodes edges = do
   sequence_
     [ do
+
+      distance <- liftSMT free_
+
       liftSMT $ constrain
-        $   sourceCoords `sElem` path
-        &&& targetCoords `sElem` path
+        $   manhattan .== distance
+        &&& coords `sElem` path
 
     | (wire, path) <- Map.assocs edges
     , (x1, y1) <- maybe [] pure $ Map.lookup (netIdent wire) steiner
@@ -105,9 +108,10 @@ connect steiner nodes edges = do
     , (_, pin) <- take 1 cs
     , (tx, ty, _, _) <- take 1 $ portRects $ pinPort pin
     , (x2, y2, _, _) <- maybe [] pure $ Map.lookup target nodes
-    , let sourceCoords = (x1, y1)
-    , let targetCoords = (x2 + literal tx, y2 + literal ty)
+    , let coords = (x2 + literal tx, y2 + literal ty)
+    , let manhattan = abs (fst coords - x1) + abs (snd coords - y1)
     ]
+
 
 
 rectangular edges = sequence_ [ liftSMT $ rect path | path <- Map.elems edges ]

@@ -113,7 +113,7 @@ data Dir = In | Out | InOut
 
 data Technology = Technology
   { padDimensions :: (Integer, Integer)
-  , wireResolution :: Integer
+  , wireResolution :: Int
   , wireWidth :: Integer
   , scaleFactor :: Double
   , components :: Map Text Component
