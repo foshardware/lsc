@@ -92,8 +92,8 @@ connect nodes edges = do
   sequence_
     [ do
       liftSMT $ constrain
-        $   (x1 + literal sx, y1 + literal sy) `sElem` path
-        &&& (x2 + literal tx, y2 + literal ty) `sElem` path
+        $   sourceCoords `sElem` path
+        &&& targetCoords `sElem` path
 
     | (wire, path) <- Map.assocs edges
     , (source, cs) <- take 1 $ Map.assocs $ contacts wire
@@ -103,6 +103,8 @@ connect nodes edges = do
     , (tx, ty, _, _) <- take 1 $ portRects $ pinPort targetPin
     , (x1, y1, _, _) <- maybe [] pure $ Map.lookup source nodes
     , (x2, y2, _, _) <- maybe [] pure $ Map.lookup target nodes
+    , let sourceCoords = (x1 + literal sx, y1 + literal sy)
+    , let targetCoords = (x2 + literal tx, y2 + literal ty)
     ]
 
 
