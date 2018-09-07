@@ -43,7 +43,7 @@ pnr (NetGraph _ pins _ gates wires) = do
 
   outerRim steiner nodes
 
-  -- intersections edges
+  intersections edges
 
   liftSMT $ query $ do
     result <- checkSat
@@ -89,8 +89,11 @@ collision nodes = do
     ]
 
 
-connect nodes wires steiner = do
+intersections edges = do
+  pure ()
 
+
+connect nodes wires steiner = do
   sequence
     [ do
       path <- freeEdge
@@ -117,9 +120,9 @@ outerRim steiner nodes = do
     [ liftSMT $ constrain
         $   bnot i &&& bnot o
         ||| i &&& x1 .< x2 &&& y1 .< y2
-        ||| o &&& x2 .< x1 &&& y2 .< y1
+        ||| o &&& x2 + w .< x1 &&& y2 + h .< y1
     | (_, (i, o), (x1, y1)) <- toList steiner
-    , (x2, y2, _, _) <- toList nodes
+    , (x2, y2, w, h) <- toList nodes
     ]
 
 
@@ -145,7 +148,6 @@ freeSteiner (inputs, outputs, _) net = do
     pure (net, (d, (i, o), (x, y)))
 
 
-freeNode :: Gate -> LSC (Gate, (SInteger, SInteger, SInteger, SInteger))
 freeNode gate = do
 
   (width, height) <- lookupDimensions gate <$> ask
@@ -162,7 +164,6 @@ freeNode gate = do
     pure (gate, (x, y, w, h))
 
 
-freeEdge :: LSC [(SInteger, SInteger)]
 freeEdge = do
 
   resolution <- wireResolution <$> ask
