@@ -89,8 +89,23 @@ collision nodes = do
     ]
 
 
-intersections edges = do
-  pure ()
+intersections ((net1, _) : (net2, path2) : edges)
+  | net1 == net2
+  = intersections ((net2, path2) : edges)
+
+intersections ((_, path1) : (net2, path2) : edges) = do
+  sequence_
+    [ do
+      liftSMT $ constrain
+        $   x1 ./= x2
+        &&& y1 ./= y2
+    | (x1, y1) <- path1
+    | (x2, y2) <- path2
+    ]
+
+  intersections ((net2, path2) : edges)
+
+intersections _ = pure ()
 
 
 connect nodes wires steiner = do
