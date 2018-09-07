@@ -115,8 +115,9 @@ connect nodes wires steiner = do
 outerRim steiner nodes = do
   sequence_
     [ liftSMT $ constrain
-        $   (i &&& x1 .< x2 ||| o &&& x2 .< x1 ||| bnot i &&& bnot o)
-        &&& (i &&& y1 .< y2 ||| o &&& y2 .< y1 ||| bnot i &&& bnot o)
+        $   bnot i &&& bnot o
+        ||| i &&& x1 .< x2 &&& y1 .< y2
+        ||| o &&& x2 .< x1 &&& y2 .< y1
     | (_, (i, o), (x1, y1)) <- toList steiner
     , (x2, y2, _, _) <- toList nodes
     ]
