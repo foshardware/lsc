@@ -29,11 +29,10 @@ stage1 j
 
 
 pnr :: NetGraph -> LSC Circuit2D
-pnr (NetGraph _ _ _ gates wires) = do
+pnr (NetGraph _ pins _ gates wires) = do
 
   nodes <- Map.fromList <$> sequence (freeNode <$> toList gates)
-
-  steiner <- Map.fromList <$> sequence (freeSteiner <$> toList wires)
+  steiner <- Map.fromList <$> sequence (freeSteiner pins <$> toList wires)
 
   edges <- connect nodes wires steiner
 
@@ -104,7 +103,7 @@ connect nodes wires steiner = do
       pure (wire, path)
 
     | wire <- toList wires
-    , (distance, source) <- maybe [] pure $ Map.lookup wire steiner
+    , (distance, _, source) <- maybe [] pure $ Map.lookup wire steiner
     , (gate, cs) <- Map.assocs $ contacts wire
     , (_, pin) <- take 1 cs
     , (tx, ty, _, _) <- take 1 $ portRects $ pinPort pin
@@ -115,8 +114,10 @@ connect nodes wires steiner = do
 
 outerRim steiner nodes = do
   sequence_
-    [ liftSMT $ constrain $ x1 .< x2 &&& y1 .< y2
-    |  (_, (x1, y1)) <- toList steiner
+    [ liftSMT $ constrain
+        $   (i &&& x1 .< x2 ||| o &&& x2 .< x1 ||| bnot i &&& bnot o)
+        &&& (i &&& y1 .< y2 ||| o &&& y2 .< y1 ||| bnot i &&& bnot o)
+    | (_, (i, o), (x1, y1)) <- toList steiner
     , (x2, y2, _, _) <- toList nodes
     ]
 
@@ -131,15 +132,16 @@ rect ((x1, y1) : (x2, y2) : xs) = do
 rect _ = pure ()
 
 
-freeSteiner :: Net -> LSC (Net, (SInteger, (SInteger, SInteger)))
-freeSteiner net = do
+freeSteiner (inputs, outputs, _) net = do
 
   liftSMT $ do
+    let i = fromBool $ netIdent net `elem` inputs
+        o = fromBool $ netIdent net `elem` outputs
     d <- free_
     x <- free_
     y <- free_
 
-    pure (net, (d, (x, y)))
+    pure (net, (d, (i, o), (x, y)))
 
 
 freeNode :: Gate -> LSC (Gate, (SInteger, SInteger, SInteger, SInteger))
