@@ -41,7 +41,8 @@ pnr (NetGraph _ _ _ gates wires) = do
   boundedSpace nodes
 
   rectangular edges
-  shorten edges
+
+  outerRim steiner nodes
 
   -- intersections edges
 
@@ -112,32 +113,22 @@ connect nodes wires steiner = do
     ]
 
 
+outerRim steiner nodes = do
+  sequence_
+    [ liftSMT $ constrain $ x1 .< x2 &&& y1 .< y2
+    |  (_, (x1, y1)) <- Map.elems steiner
+    , (x2, y2, _, _) <- Map.elems nodes 
+    ]
+
 
 rectangular edges = sequence_ [ liftSMT $ rect path | (_, path) <- edges ]
 
 rect ((x1, y1) : (x2, y2) : xs) = do
 
   constrain $ x1 .== x2 ||| y1 .== y2
-  rect $ (x2, y2) : xs
+  rect ((x2, y2) : xs)
 
 rect _ = pure ()
-
-
-shorten edges = sequence_
-  [ liftSMT $ short i net path
-  | (net, path) <- edges
-  | i :: Int <- [ 0.. ]
-  ]
-
-short i net path = do
-
-  let goal = "min_p_"++ show i ++"_"++ show (netIndex net)
-
-  minimize goal $ sum
-    [ abs (x1 - x2) + abs (y1 - y2)
-    | (x1, y1) <- path
-    | (x2, y2) <- drop 1 path
-    ]
 
 
 freeSteiner :: Net -> LSC (Net, (SInteger, (SInteger, SInteger)))
