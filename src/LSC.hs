@@ -5,11 +5,12 @@
 
 module LSC where
 
+import Control.Monad.Trans
 import Data.Foldable
 import qualified Data.Map as Map
-
 import Data.SBV
 import Data.SBV.Control
+import System.IO
 
 import LSC.NetGraph
 import LSC.Types
@@ -31,6 +32,9 @@ stage1 j
 pnr :: NetGraph -> LSC Circuit2D
 pnr (NetGraph _ pins _ gates wires) = do
 
+  liftSMT $ do
+    setOption $ ProduceUnsatCores True
+
   nodes <- Map.fromList <$> sequence (freeNode <$> toList gates)
   steiner <- Map.fromList <$> sequence (freeSteiner pins <$> toList wires)
 
@@ -39,11 +43,11 @@ pnr (NetGraph _ pins _ gates wires) = do
   collision nodes
   boundedSpace nodes
 
-  rectangular edges
+  rectilinear edges
 
   outerRim steiner nodes
 
-  intersections edges
+  -- intersections edges
 
   liftSMT $ query $ do
     result <- checkSat
@@ -62,7 +66,19 @@ pnr (NetGraph _ pins _ gates wires) = do
             | (net, path) <- edges
             ]
 
-      _   -> pure $ Circuit2D [] []
+      Unsat -> do
+
+        unsat <- getUnsatCore
+        liftIO $ sequence_ $ hPutStrLn stderr <$> unsat
+
+        pure $ Circuit2D [] []
+
+      _ -> do
+
+        reason <- getUnknownReason
+        liftIO $ hPutStrLn stderr $ show reason
+
+        pure $ Circuit2D [] []
 
 
 boundedSpace nodes = do
@@ -97,8 +113,8 @@ intersections ((_, path1) : (net2, path2) : edges) = do
   sequence_
     [ do
       liftSMT $ constrain
-        $   x1 ./= x2
-        &&& y1 ./= y2
+        $   abs (x1 - x2) .> literal 1000
+        &&& abs (y1 - y2) .> literal 1000
     | (x1, y1) <- path1
     | (x2, y2) <- path2
     ]
@@ -141,14 +157,23 @@ outerRim steiner nodes = do
     ]
 
 
-rectangular edges = sequence_ [ liftSMT $ rect path | (_, path) <- edges ]
+rectilinear edges = do
+  v <- liftSMT free_
+  h <- liftSMT free_
+  sequence_
+    [ rect v h path
+    | (_, path) <- edges
+    ]
 
-rect ((x1, y1) : (x2, y2) : xs) = do
+rect v h ((x1, y1) : (x2, y2) : xs) = do
 
-  constrain $ x1 .== x2 ||| y1 .== y2
-  rect ((x2, y2) : xs)
+  liftSMT $ constrain
+    $   x1 .== x2 &&& y1 .== y2
+    ||| x1 .== x2 &&& v .== (y1 - y2 .< literal 0)
+    ||| y1 .== y2 &&& h .== (x1 - x2 .< literal 0)
+  rect v h ((x2, y2) : xs)
 
-rect _ = pure ()
+rect _ _ _ = pure ()
 
 
 freeSteiner (inputs, outputs, _) net = do
