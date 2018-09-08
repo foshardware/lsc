@@ -5,6 +5,7 @@
 
 module LSC where
 
+import Control.Monad
 import Control.Monad.Trans
 import Data.Foldable
 import qualified Data.Map as Map
@@ -105,23 +106,31 @@ collision nodes = do
     ]
 
 
-intersections ((net1, path1) : (net2, path2) : edges) | net1 == net2 = do
+intersections ((net1, path1) : (net2, path2) : edges) = do
 
-  intersections ((net2, path2) : edges)
-
-intersections ((_, path1) : (net2, path2) : edges) = do
   sequence_
-    [ do
-      liftSMT $ constrain
-        $   x1 .< x2
-        &&& y1 .< y2
-    | (x1, y1) <- path1
-    | (x2, y2) <- path2
+    [ overlap a b
+    | a <- path1 `zip` drop 1 path1
+    , b <- path2 `zip` drop 1 path2
+    , net1 /= net2
     ]
 
   intersections ((net2, path2) : edges)
 
 intersections _ = pure ()
+
+
+overlap ((sx1, sy1), (sx2, sy2)) ((tx1, ty1), (tx2, ty2)) = do
+
+  liftSMT $ constrain
+    $   (sx1 - sx2) .== literal 0 &&& (tx1 - tx2) .== literal 0
+    ||| (sy1 - sy2) .== literal 0 &&& (ty1 - ty2) .== literal 0
+
+    ||| (tx1 - tx2) .== literal 0 &&& tx1 .< sx1 &&& tx1 .> sx2
+    ||| (ty1 - ty2) .== literal 0 &&& ty1 .< sy1 &&& ty1 .> sy2
+
+    ||| (sx1 - sx2) .== literal 0 &&& sx1 .< tx1 &&& sx1 .> tx2
+    ||| (sy1 - sy2) .== literal 0 &&& sy1 .< ty1 &&& sy1 .> ty2
 
 
 connect nodes wires steiner = do
