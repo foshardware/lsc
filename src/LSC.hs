@@ -158,10 +158,13 @@ outerRim steiner nodes = do
 
 
 rectilinear edges = do
-  v <- liftSMT free_
-  h <- liftSMT free_
   sequence_
-    [ rect v h path
+    [ do
+      v <- liftSMT free_
+      h <- liftSMT free_
+
+      rect v h path
+
     | (_, path) <- edges
     ]
 
