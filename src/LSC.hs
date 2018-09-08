@@ -105,16 +105,16 @@ collision nodes = do
     ]
 
 
-intersections ((net1, _) : (net2, path2) : edges)
-  | net1 == net2
-  = intersections ((net2, path2) : edges)
+intersections ((net1, path1) : (net2, path2) : edges) | net1 == net2 = do
+
+  intersections ((net2, path2) : edges)
 
 intersections ((_, path1) : (net2, path2) : edges) = do
   sequence_
     [ do
       liftSMT $ constrain
-        $   abs (x1 - x2) .> literal 1000
-        &&& abs (y1 - y2) .> literal 1000
+        $   x1 .< x2
+        &&& y1 .< y2
     | (x1, y1) <- path1
     | (x2, y2) <- path2
     ]
@@ -130,7 +130,7 @@ connect nodes wires steiner = do
       path <- freeEdge
 
       liftSMT $ constrain
-        $   abs (fst source - fst target) + abs (snd source - snd target) .== distance
+        $   manhattan source target .== distance
         &&& source .== head path
         &&& target .== last path
 
@@ -148,13 +148,18 @@ connect nodes wires steiner = do
 
 outerRim steiner nodes = do
   sequence_
-    [ liftSMT $ constrain
+    [ do
+      liftSMT $ constrain
         $   bnot i &&& bnot o
         ||| i &&& x1 .< x2 &&& y1 .< y2
         ||| o &&& x2 + w .< x1 &&& y2 + h .< y1
     | (_, (i, o), (x1, y1)) <- toList steiner
     , (x2, y2, w, h) <- toList nodes
     ]
+
+
+manhattan :: (SInteger, SInteger) -> (SInteger, SInteger) -> SInteger
+manhattan (x1, y1) (x2, y2) = abs (x1 - x2) + abs (y1 - y2)
 
 
 rectilinear edges = do
