@@ -41,6 +41,8 @@ pnr (NetGraph _ pins _ gates wires) = do
 
   collision nodes
 
+  arboresence nodes edges
+
   liftSMT $ query $ do
     result <- checkSat
     case result of
@@ -74,12 +76,31 @@ pnr (NetGraph _ pins _ gates wires) = do
         pure $ Circuit2D [] []
 
 
+arboresence nodes edges = do
+  sequence_
+    [ do
+
+        pure $ hananGridIntersections nodes sinks
+
+        pure ()
+
+    | (net, path) <- Map.assocs edges
+    , let sinks = Map.assocs $ contacts net
+
+    -- , (gate, cs) <- Map.assocs $ contacts net
+    -- , (_,   pin) <- take 1 cs
+    -- , (tx, ty, _, _) <- take 1 $ portRects $ pinPort pin
+    -- , (x2, y2) <- maybe [] (take 1) (Map.lookup gate nodes)
+    -- , let target = (x2 + literal tx, y2 + literal ty)
+    ]
+
+
 collision nodes = do
   sequence_
-    [ liftSMT $ do
+    [ do
 
+      liftSMT $ do
         constrain $ fst topLeft1 .> fst bottomRight2 ||| fst topLeft2 .> fst bottomRight1
-
         constrain $ snd topLeft1 .< snd bottomRight2 ||| snd topLeft2 .< snd bottomRight1
 
     | (i, path1) <- [ 1 .. ] `zip` Map.elems nodes
@@ -88,6 +109,25 @@ collision nodes = do
     , let _ : topLeft2 : _ : bottomRight2 : _ = path2
     ]
 
+
+hananGridIntersections nodes sinks =
+
+    [ (gx + literal px, gy + literal py)
+
+    | (gate1, cs1) <- sinks
+    , (gx, _) <- maybe [] (take 1) (Map.lookup gate1 nodes)
+    , (_, pin1) <- take 1 cs1
+    , (px, _, _, _) <- take 1 $ portRects $ pinPort pin1
+
+    , (gate2, cs2) <- sinks
+    , (_, gy) <- maybe [] (take 1) (Map.lookup gate2 nodes)
+    , (_, pin2) <- take 1 cs2
+    , (_, py, _, _) <- take 1 $ portRects $ pinPort pin2
+
+    ]
+
+
+freeSteinerNodes net sinks = pure ()
 
 
 freeGatePolygon gate = do
