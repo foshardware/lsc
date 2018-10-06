@@ -36,9 +36,19 @@ svgDoc (Circuit2D nodes edges) = S.docTypeSvg
 
 
 place :: (Gate, Path) -> S.Svg
-place (g, path) = do
+place (g, path@(Path ((x, y) : _))) = do
+
+  S.text_
+    ! A.x (S.toValue $ x + 42)
+    ! A.y (S.toValue $ y + 24)
+    ! A.fontSize "24"
+    ! A.fontFamily "monospace"
+    ! A.transform (fromString $ "rotate(90 "++ show (x + 8) ++","++ show (y + 24)  ++")")
+    $ renderText $ gateIdent g
 
   follow path
+
+place _ = pure ()
 
 
 follow :: Path -> S.Svg
