@@ -39,6 +39,8 @@ pnr (NetGraph _ pins _ gates wires) = do
   nodes <- Map.fromList <$> sequence (freeGatePolygon <$> toList gates)
   edges <- Map.fromList <$> sequence (freeWirePolygon <$> toList wires)
 
+  collision nodes
+
   liftSMT $ query $ do
     result <- checkSat
     case result of
@@ -72,19 +74,42 @@ pnr (NetGraph _ pins _ gates wires) = do
         pure $ Circuit2D [] []
 
 
+collision nodes = do
+  sequence_
+    [ liftSMT $ do
+
+        constrain $ fst topLeft1 .> fst bottomRight2 ||| fst topLeft2 .> fst bottomRight1
+
+        constrain $ snd topLeft1 .< snd bottomRight2 ||| snd topLeft2 .< snd bottomRight1
+
+    | (i, path1) <- [ 1 .. ] `zip` Map.elems nodes
+    ,     path2  <- i `drop` Map.elems nodes
+    , let _ : topLeft1 : _ : bottomRight1 : _ = path1
+    , let _ : topLeft2 : _ : bottomRight2 : _ = path2
+    ]
+
+
+
 freeGatePolygon gate = do
 
   (width, height) <- lookupDimensions gate <$> ask
 
   path <- freePolygon 4
 
-  let (x1, y1) : (x2, y2) : (x3, y3) : (x4, y4) : _ = path
+  let bottomLeft : topLeft : topRight : bottomRight : _ = path
 
   liftSMT $ constrain
-    $   y2 - y1 .== literal height
-    &&& y3 - y4 .== literal height
-    &&& x3 - x2 .== literal width
-    &&& x4 - x1 .== literal width  
+    $   snd topLeft - snd bottomLeft .== literal height
+    &&& fst topLeft .== fst bottomLeft
+
+    &&& snd topRight - snd bottomRight .== literal height
+    &&& fst topRight .== fst bottomRight
+
+    &&& fst topRight - fst topLeft .== literal width
+    &&& snd topRight .== snd topLeft
+
+    &&& fst bottomRight - fst bottomLeft .== literal width
+    &&& snd bottomRight .== snd bottomLeft
 
   pure (gate, path)
 
