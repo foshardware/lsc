@@ -42,7 +42,12 @@ place (g, path) = do
 
 
 follow :: Path -> S.Svg
-follow (Path ((x1, y1) : (x2, y2) : xs)) = do
+follow (Path (x : xs)) = follow' (Path ([x] ++ xs ++ [x]))
+follow _ = pure ()
+
+
+follow' :: Path -> S.Svg
+follow' (Path ((x1, y1) : (x2, y2) : xs)) = do
 
   S.line
     ! A.x1 (S.toValue x1)
@@ -53,9 +58,9 @@ follow (Path ((x1, y1) : (x2, y2) : xs)) = do
     ! A.fill "transparent"
     ! A.strokeWidth "3"
 
-  follow (Path ((x2, y2) : xs))
+  follow' (Path ((x2, y2) : xs))
 
-follow _ = pure ()
+follow' _ = pure ()
 
 
 scaleDown :: Integer -> Circuit2D -> Circuit2D
