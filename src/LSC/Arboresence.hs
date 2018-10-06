@@ -80,18 +80,10 @@ arboresence nodes edges = do
   sequence_
     [ do
 
-        pure $ hananGridIntersections nodes sinks
-
-        pure ()
+      pure ()
 
     | (net, path) <- Map.assocs edges
-    , let sinks = Map.assocs $ contacts net
-
-    -- , (gate, cs) <- Map.assocs $ contacts net
-    -- , (_,   pin) <- take 1 cs
-    -- , (tx, ty, _, _) <- take 1 $ portRects $ pinPort pin
-    -- , (x2, y2) <- maybe [] (take 1) (Map.lookup gate nodes)
-    -- , let target = (x2 + literal tx, y2 + literal ty)
+    , let ihs = hananGridIntersections nodes edges
     ]
 
 
@@ -110,16 +102,16 @@ collision nodes = do
     ]
 
 
-hananGridIntersections nodes sinks =
+hananGridIntersections nodes edges =
 
     [ (gx + literal px, gy + literal py)
 
-    | (gate1, cs1) <- sinks
+    | (gate1, cs1) <- Map.assocs edges
     , (gx, _) <- maybe [] (take 1) (Map.lookup gate1 nodes)
     , (_, pin1) <- take 1 cs1
     , (px, _, _, _) <- take 1 $ portRects $ pinPort pin1
 
-    , (gate2, cs2) <- sinks
+    , (gate2, cs2) <- Map.assocs edges
     , (_, gy) <- maybe [] (take 1) (Map.lookup gate2 nodes)
     , (_, pin2) <- take 1 cs2
     , (_, py, _, _) <- take 1 $ portRects $ pinPort pin2
