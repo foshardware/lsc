@@ -17,16 +17,16 @@ import LSC.Types
 
 
 
-plotStdout :: Circuit2D -> IO ()
+plotStdout :: Circuit2D a -> IO ()
 plotStdout = Lazy.putStr . plot
 
 
-plot :: Circuit2D -> Lazy.Text
+plot :: Circuit2D a -> Lazy.Text
 plot = renderSvg . svgDoc . scaleDown 100
 
 
-svgDoc :: Circuit2D -> S.Svg
-svgDoc (Circuit2D nodes edges) = S.docTypeSvg
+svgDoc :: Circuit2D a -> S.Svg
+svgDoc (Circuit2D nodes edges _) = S.docTypeSvg
   ! A.version "1.1"
   ! A.width "100000"
   ! A.height "100000"
@@ -63,8 +63,8 @@ follow (Path ((px, py) : xs)) = do
 follow _ = pure ()
 
 
-scaleDown :: Integer -> Circuit2D -> Circuit2D
-scaleDown n (Circuit2D nodes edges) = Circuit2D
+scaleDown :: Integer -> Circuit2D a -> Circuit2D a
+scaleDown n (Circuit2D nodes edges a) = Circuit2D
 
   [ (gate, Path [ (div x n, div y n) | (x, y) <- pos ])
   | (gate, Path pos) <- nodes
@@ -73,6 +73,8 @@ scaleDown n (Circuit2D nodes edges) = Circuit2D
   [ (net, Path [ (div x n, div y n) | (x, y) <- pos ])
   | (net, Path pos) <- edges
   ]
+
+  a
 
 
 renderText :: Text -> S.Svg

@@ -192,7 +192,9 @@ ask :: LSC Technology
 ask = lift $ LST Reader.ask
 
 
-data Circuit2D = Circuit2D [(Gate, Path)] [(Net, Path)]
+type Steiner = Map Net [(Integer, Integer)]
+
+data Circuit2D a = Circuit2D [(Gate, Path)] [(Net, Path)] a
   deriving (Eq, Show)
 
 newtype Path = Path [(Integer, Integer)]

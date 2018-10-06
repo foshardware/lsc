@@ -18,7 +18,7 @@ import LSC.Types
 import LSC.Exlining
 
 
-type Stage1 = Circuit2D
+type Stage1 = Circuit2D Steiner
 
 stage1 :: Int -> NetGraph -> LSC Stage1
 stage1 j
@@ -30,7 +30,7 @@ stage1 j
   . exline (repeat 20)
 
 
-pnr :: NetGraph -> LSC Circuit2D
+pnr :: NetGraph -> LSC Stage1
 pnr (NetGraph _ pins _ gates wires) = do
 
   liftSMT $ do
@@ -39,50 +39,58 @@ pnr (NetGraph _ pins _ gates wires) = do
   nodes <- Map.fromList <$> sequence (freeGatePolygon <$> toList gates)
   edges <- Map.fromList <$> sequence (freeWirePolygon <$> toList wires)
 
+  boundedSpace nodes
   collision nodes
+  connect nodes edges
+  rectilinear edges
+
+  computeInstance nodes edges
 
 
-  liftSMT $ query $ do
-    result <- checkSat
-    case result of
+connect nodes edges = do
+  sequence_
+    [ arboresence nodes net path
 
-      Sat -> Circuit2D
-
-        <$> sequence
-            [ fmap (gate, ) $ Path <$> sequence
-                [ (, ) <$> getValue x <*> getValue y | (x, y) <- path ]
-            | (gate, path) <- Map.assocs nodes
-            ]
-
-        <*> sequence
-            [ fmap (net, ) $ Path <$> sequence
-                [ (, ) <$> getValue x <*> getValue y | (x, y) <- path ]
-            | (net, path) <- Map.assocs edges
-            ]
-
-      Unsat -> do
-
-        unsat <- getUnsatCore
-        liftIO $ sequence_ $ hPutStrLn stderr <$> unsat
-
-        pure $ Circuit2D [] []
-
-      _ -> do
-
-        reason <- getUnknownReason
-        liftIO $ hPutStrLn stderr $ show reason
-
-        pure $ Circuit2D [] []
+    | (net, path) <- Map.assocs edges
+    ]
 
 
 arboresence nodes net path = do
 
-  let n = Map.size $ contacts net
-      ihs = hananGridIntersections nodes net
+  let n   = Map.size $ contacts net
+      hs  = hananGrid nodes net
+      ihs = hananGridIntersections hs
 
-  steinerNodes <- sequence $ replicate (n - 2) freePoint
+  if null hs
+  then pure mempty
 
-  pure steinerNodes
+  else do
+
+    steinerNodes <- sequence $ replicate (n - 2) freePoint
+
+    liftSMT $ do
+
+      constrain $ bAll (`sElem` ihs) steinerNodes
+
+    pure steinerNodes
+
+
+boundedSpace nodes = do
+  (w, h) <- padDimensions <$> ask
+  sequence_
+    [ liftSMT $ do
+        constrain $ x .> literal 0 &&& y .> literal 0
+        constrain $ x .< literal w &&& y .< literal h
+    | (x, y) <- join $ take 1 <$> Map.elems nodes
+    ]
+
+
+rectilinear edges = sequence_ [ rect path | path <- toList edges ]
+
+rect ((x1, y1) : (x2, y2) : xs) = do
+  liftSMT $ constrain $ x1 .== x2 ||| y1 .== y2
+  rect ((x2, y2) : xs)
+rect _ = pure ()
 
 
 collision nodes = do
@@ -100,18 +108,15 @@ collision nodes = do
     ]
 
 
-hananGridIntersections nodes net = [ (x, y) | (x, _) <- xs , (_, y) <- xs ]
-  where
-    xs =
-      [ (gx + literal px, gy + literal py)
-      | (gate, cs) <- Map.assocs $ contacts net
-      , (_, pin) <- take 1 cs
-      , (px, py, _, _) <- take 1 $ portRects $ pinPort pin
-      , (gx, gy) <- maybe [] (take 1) (Map.lookup gate nodes)
-      ]
+hananGridIntersections s = [ (x, y) | (x, _) <- s, (_, y) <- s ]
 
-
-freeSteinerNodes net sinks = pure ()
+hananGrid nodes net =
+    [ (gx + literal px, gy + literal py)
+    | (gate, cs) <- Map.assocs $ contacts net
+    , (_, pin) <- take 1 cs
+    , (px, py, _, _) <- take 1 $ portRects $ pinPort pin
+    , (gx, gy) <- maybe [] (take 1) (Map.lookup gate nodes)
+    ]
 
 
 freeGatePolygon gate = do
@@ -140,7 +145,8 @@ freeGatePolygon gate = do
 
 freeWirePolygon net = do
 
-  resolution <- wireResolution <$> ask
+  -- resolution <- wireResolution <$> ask
+  let resolution = 3 * Map.size (contacts net)
 
   path <- freePolygon resolution
 
@@ -151,4 +157,42 @@ freePolygon n = sequence $ replicate n freePoint
 
 
 freePoint = liftSMT $ (,) <$> free_ <*> free_
+
+
+computeInstance nodes edges = do
+
+  liftSMT $ query $ do
+    result <- checkSat
+    case result of
+
+      Sat -> Circuit2D
+
+        <$> sequence
+            [ fmap (gate, ) $ Path <$> sequence
+                [ (, ) <$> getValue x <*> getValue y | (x, y) <- path ]
+            | (gate, path) <- Map.assocs nodes
+            ]
+
+        <*> sequence
+            [ fmap (net, ) $ Path <$> sequence
+                [ (, ) <$> getValue x <*> getValue y | (x, y) <- path ]
+            | (net, path) <- Map.assocs edges
+            ]
+
+        <*> pure mempty
+
+      Unsat -> do
+
+        unsat <- getUnsatCore
+        liftIO $ sequence_ $ hPutStrLn stderr <$> unsat
+
+        pure $ Circuit2D mempty mempty mempty
+
+      _ -> do
+
+        reason <- getUnknownReason
+        liftIO $ hPutStrLn stderr $ show reason
+
+        pure $ Circuit2D mempty mempty mempty
+
 
