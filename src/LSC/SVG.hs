@@ -8,7 +8,7 @@ import qualified Data.Text as Text
 import qualified Data.Text.Lazy    as Lazy
 import qualified Data.Text.Lazy.IO as Lazy
 
-import Text.Blaze.Svg11 ((!), mkPath, m, h, v, z)
+import Text.Blaze.Svg11 ((!), mkPath, m, l, z)
 import qualified Text.Blaze.Svg11 as S
 import qualified Text.Blaze.Svg11.Attributes as A
 import Text.Blaze.Svg.Renderer.Text (renderSvg)
@@ -42,25 +42,15 @@ place (g, path) = do
 
 
 follow :: Path -> S.Svg
-follow (Path (x : xs)) = follow' (Path ([x] ++ xs ++ [x]))
-follow _ = pure ()
+follow (Path ((px, py) : xs)) = do
 
-
-follow' :: Path -> S.Svg
-follow' (Path ((x1, y1) : (x2, y2) : xs)) = do
-
-  S.line
-    ! A.x1 (S.toValue x1)
-    ! A.y1 (S.toValue y1)
-    ! A.x2 (S.toValue x2)
-    ! A.y2 (S.toValue y2)
-    ! A.stroke "darkblue"
+  S.path
+    ! A.d (mkPath $ m px py *> sequence [ l x y | (x, y) <- xs ] *> z)
+    ! A.stroke "black"
     ! A.fill "transparent"
-    ! A.strokeWidth "3"
+    ! A.strokeWidth "4"
 
-  follow' (Path ((x2, y2) : xs))
-
-follow' _ = pure ()
+follow _ = pure ()
 
 
 scaleDown :: Integer -> Circuit2D -> Circuit2D
