@@ -13,21 +13,7 @@ import Data.SBV
 import Data.SBV.Control
 import System.IO
 
-import LSC.NetGraph
 import LSC.Types
-import LSC.Exlining
-
-
-type Stage1 = Circuit2D Steiner
-
-stage1 :: Int -> NetGraph -> LSC Stage1
-stage1 j
-  = fmap head
-  . concLSC
-  . take j
-  . fmap pnr
-  . getLeaves
-  . exline (repeat 20)
 
 
 pnr :: NetGraph -> LSC Stage1
@@ -41,21 +27,22 @@ pnr (NetGraph _ pins _ gates wires) = do
 
   boundedSpace nodes
   collision nodes
-  connect nodes edges
   rectilinear edges
 
-  computeInstance nodes edges
+  steiner <- steinerTrees nodes edges
+
+  computeStage1 nodes edges steiner
 
 
-connect nodes edges = do
-  sequence_
-    [ arboresence nodes net path
+steinerTrees nodes edges = do
+  Map.fromAscList <$> sequence
+    [ (,) net <$> steinerTree nodes net path
 
     | (net, path) <- Map.assocs edges
     ]
 
 
-arboresence nodes net path = do
+steinerTree nodes net path = do
 
   let n   = Map.size $ contacts net
       hs  = hananGrid nodes net
@@ -159,7 +146,7 @@ freePolygon n = sequence $ replicate n freePoint
 freePoint = liftSMT $ (,) <$> free_ <*> free_
 
 
-computeInstance nodes edges = do
+computeStage1 nodes edges steiner = do
 
   liftSMT $ query $ do
     result <- checkSat
@@ -179,7 +166,11 @@ computeInstance nodes edges = do
             | (net, path) <- Map.assocs edges
             ]
 
-        <*> pure mempty
+        <*> (Map.fromAscList <$> sequence
+            [ fmap (net, ) $ sequence
+                [ (, ) <$> getValue x <*> getValue y | (x, y) <- xs ]
+            | (net, xs) <- Map.assocs steiner
+            ])
 
       Unsat -> do
 

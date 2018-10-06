@@ -20,7 +20,7 @@ import BLIF.Builder
 import BLIF.Parser
 import LEF.Parser
 
-import LSC.Arboresence
+import LSC
 import LSC.BLIF
 import LSC.LEF
 import LSC.SVG

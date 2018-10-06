@@ -200,3 +200,5 @@ data Circuit2D a = Circuit2D [(Gate, Path)] [(Net, Path)] a
 newtype Path = Path [(Integer, Integer)]
   deriving (Eq, Show)
 
+type Stage1 = Circuit2D Steiner
+
