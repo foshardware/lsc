@@ -86,6 +86,7 @@ library
       Liberty.Lexer,
 
       LSC,
+      LSC.Arboresence,
       LSC.BLIF,
       LSC.LEF,
       LSC.SVG,

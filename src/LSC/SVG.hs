@@ -31,30 +31,18 @@ svgDoc (Circuit2D nodes edges) = S.docTypeSvg
   ! A.width "100000"
   ! A.height "100000"
   $ do
-    mapM_ place  nodes
-    mapM_ follow edges
+    mapM_ place nodes
+    mapM_ follow $ snd <$> edges
 
 
-place :: (Gate, Rectangle) -> S.Svg
-place (g, (x, y, width, height)) = do
+place :: (Gate, Path) -> S.Svg
+place (g, path) = do
 
-  S.text_
-    ! A.x (S.toValue $ x + 42)
-    ! A.y (S.toValue $ y + 24)
-    ! A.fontSize "24"
-    ! A.fontFamily "monospace"
-    ! A.transform (fromString $ "rotate(90 "++ show (x + 8) ++","++ show (y + 24)  ++")")
-    $ renderText $ gateIdent g
-
-  S.path
-    ! A.d (mkPath $ m x y *> h (x + width) *> v (y + height) *> h x *> z)
-    ! A.stroke "black"
-    ! A.fill "transparent"
-    ! A.strokeWidth "4"
+  follow path
 
 
-follow :: (Net, Path) -> S.Svg
-follow (net, (Path ((x1, y1) : (x2, y2) : xs))) = do
+follow :: Path -> S.Svg
+follow (Path ((x1, y1) : (x2, y2) : xs)) = do
 
   S.line
     ! A.x1 (S.toValue x1)
@@ -65,7 +53,7 @@ follow (net, (Path ((x1, y1) : (x2, y2) : xs))) = do
     ! A.fill "transparent"
     ! A.strokeWidth "3"
 
-  follow (net, Path ((x2, y2) : xs))
+  follow (Path ((x2, y2) : xs))
 
 follow _ = pure ()
 
@@ -73,8 +61,8 @@ follow _ = pure ()
 scaleDown :: Integer -> Circuit2D -> Circuit2D
 scaleDown n (Circuit2D nodes edges) = Circuit2D
 
-  [ (gate, (div x n, div y n, div w' n, div h' n))
-  | (gate, (x, y, w', h')) <- nodes
+  [ (gate, Path [ (div x n, div y n) | (x, y) <- pos ])
+  | (gate, Path pos) <- nodes
   ]
 
   [ (net, Path [ (div x n, div y n) | (x, y) <- pos ])

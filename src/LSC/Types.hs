@@ -192,7 +192,7 @@ ask :: LSC Technology
 ask = lift $ LST Reader.ask
 
 
-data Circuit2D = Circuit2D [(Gate, Rectangle)] [(Net, Path)]
+data Circuit2D = Circuit2D [(Gate, Path)] [(Net, Path)]
   deriving (Eq, Show)
 
 newtype Path = Path [(Integer, Integer)]
