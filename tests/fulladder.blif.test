@@ -1,0 +1,10 @@
+
+.model top
+.inputs A B Cin
+.outputs S Cout
+.subckt XOR2X1 A=A B=B Y=XOR1
+.subckt XOR2X1 A=XOR1 B=Cin Y=S
+.subckt AND2X2 A=XOR1 B=Cin Y=C1
+.subckt AND2X2 A=A B=B Y=C2
+.subckt OR2X1 A=C1 B=C2 Y=Cout
+.end

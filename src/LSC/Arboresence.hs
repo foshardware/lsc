@@ -29,20 +29,20 @@ pnr (NetGraph _ pins _ gates wires) = do
   collision nodes
   rectilinear edges
 
-  steiner <- steinerTrees nodes edges
+  steiner <- arboresences nodes edges
 
   computeStage1 nodes edges steiner
 
 
-steinerTrees nodes edges = do
+arboresences nodes edges = do
   Map.fromAscList <$> sequence
-    [ (,) net <$> steinerTree nodes net path
+    [ (,) net <$> arboresence nodes net path
 
     | (net, path) <- Map.assocs edges
     ]
 
 
-steinerTree nodes net path = do
+arboresence nodes net path = do
 
   let n   = Map.size $ contacts net
       hs  = hananGrid nodes net
@@ -58,6 +58,7 @@ steinerTree nodes net path = do
     liftSMT $ do
 
       constrain $ bAll (`sElem` ihs) steinerNodes
+      constrain $ bnot $ bAny (`sElem` hs) steinerNodes
 
     pure steinerNodes
 
