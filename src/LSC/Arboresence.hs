@@ -120,10 +120,15 @@ rectangular ((x1, y1) : (x2, y2) : xs) = do
 rectangular _ = pure ()
 
 
+segments (x : y : xs) = (x, y) : segments (y : xs)
+segments _ = []
+
+
 uniform ((x1, y1) : (x2, y2) : (x3, y3) : xs) = do
   liftSMT $ do
-    constrain $ x1 - x2 .== 0 ||| (x3 - x2 .> 0) .== (x1 - x2 .> 0)
-    constrain $ y1 - y2 .== 0 ||| (y3 - y2 .> 0) .== (y1 - y2 .> 0)
+    constrain $ (x1, y1) .== (x2, y2)
+      ||| (x3 - x2 .> 0) .== (x1 - x2 .> 0)
+      &&& (y3 - y2 .> 0) .== (y1 - y2 .> 0)
   uniform ((x2, y2) : (x3, y3) : xs)
 uniform _ = pure ()
 
