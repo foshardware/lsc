@@ -35,38 +35,58 @@ pnr (NetGraph _ pins _ gates wires) = do
   computeStage1 nodes steiner
 
 
-arboresence pins nodes wires = Map.unions <$> sequence (arbor pins nodes <$> toList wires)
-
-arbor pins@(inputs, outputs, _) nodes net = Map.fromList <$> sequence
+arboresence pins@(inputs, _, _) nodes wires = concat <$>
+  sequence
     [ do
 
-      source@(sx, _) <- freePoint
+      source <- freePoint
 
-      when (netIdent net `elem` inputs) $ liftSMT $ do
-        constrain $ bAnd [ sx .< x | (x, _) : _ <- toList nodes ]
+      if name `elem` inputs
+      then do
+        liftSMT $ constrain $ bAnd [ fst source .< x | (x, _) : _ <- toList nodes ]
+      else do
+        liftSMT $ constrain $ bAnd
+          [ source .== (fst bottomLeft + literal px, snd bottomLeft + literal py)
+          | (gate, cs) <- Map.assocs $ contacts wire
+          , (_, pin) <- take 1 cs
+          , pinDir pin == Out
+          , (px, py, _, _) <- take 1 $ portRects $ pinPort pin
+          , bottomLeft <- maybe [] (take 1) $ Map.lookup gate nodes
+          ]
 
-      edge <- branch net gate pin source
+      tree <- arbor pins nodes wire source
+
+      pure tree
+
+    | wire <- toList wires
+    , let name = netIdent wire
+    ]
+
+arbor pins nodes net source = do
+  items <- sequence
+    [ do
+
+      (_, edge) <- freeWirePolygon net
+
+      rectangular edge
+
+      liftSMT $ do
+        constrain $ head edge .== source
+        constrain $ last edge .== target
 
       pure ((net, idn), edge)
 
-    | (gate, cs) <- Map.assocs (contacts net)
-                 <> mempty
-    , (idn, pin) <- cs
+    | (gate, cs) <- Map.assocs $ contacts net
+    , (idn, pin) <- take 1 cs
+    , pinDir pin == In
+    , (px, py, _, _) <- take 1 $ portRects $ pinPort pin
+    , bottomLeft <- maybe [] (take 1) $ Map.lookup gate nodes
+    , let target = (fst bottomLeft + literal px, snd bottomLeft + literal py)
     ]
+      -- when (netIdent net `elem` inputs) $ liftSMT $ do
+      --   constrain $ bAnd [ sx .< x | (x, _) : _ <- toList nodes ]
 
-
-branch net gate pin source = do
-
-    target <- freePoint
-
-    (_, edge) <- freeWirePolygon net
-
-    liftSMT $ do
-      constrain $ head edge .== source
-      constrain $ last edge .== target
-
-    pure edge
-
+  pure items
 
 manhattan :: (SInteger, SInteger) -> (SInteger, SInteger) -> SInteger
 manhattan (x1, y1) (x2, y2) = abs (x1 - x2) + abs (y1 - y2)
@@ -83,7 +103,7 @@ boundedSpace nodes = do
     ]
 
 
-rectilinear steiner = sequence_ [ rectangular edge | edge <- toList steiner ]
+rectilinear steiner = sequence_ [ rectangular edge | (_, edge) <- steiner ]
 
 rectangular ((x1, y1) : (x2, y2) : xs) = do
   liftSMT $ constrain $ x1 .== x2 ||| y1 .== y2
@@ -173,7 +193,7 @@ computeStage1 nodes steiner = do
         <*> sequence
             [ fmap (net, ) $ Path <$> sequence
                 [ (, ) <$> getValue x <*> getValue y | (x, y) <- xs ]
-            | (net, xs) <- Map.assocs steiner
+            | (net, xs) <- steiner
             ]
 
       Unsat -> do

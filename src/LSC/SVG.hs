@@ -31,22 +31,12 @@ svgDoc (Circuit2D nodes steiner) = S.docTypeSvg
   ! A.width "100000"
   ! A.height "100000"
   $ do
-    arbor `mapM_` fmap snd steiner
+    uncurry arbor `mapM_` steiner
     place `mapM_` nodes
 
 
-arbor :: Path -> S.Svg
-arbor (Path xs) = sequence_
-  [ S.circle
-    ! A.cx (S.toValue x)
-    ! A.cy (S.toValue y)
-    ! A.r "5"
-    ! A.stroke "black"
-    ! A.fill "transparent"
-    ! A.strokeWidth "4"
-       
-  | (x, y) <- xs
-  ]
+arbor :: (Net, Identifier) -> Path -> S.Svg
+arbor _ path = follow False path
 
 
 place :: (Gate, Path) -> S.Svg
