@@ -99,11 +99,17 @@ instance Eq Pin where
 instance Ord Pin where
   compare = compare `on` pinIdent
 
+instance Default Pin where
+  def = Pin mempty In def
+
 
 data Port = Port
   { portLayer :: Text
   , portRects :: [Rectangle]
   } deriving Show
+
+instance Default Port where
+  def = Port mempty [(0, 0, 0, 0)]
 
 type Rectangle = (Integer, Integer, Integer, Integer)
 

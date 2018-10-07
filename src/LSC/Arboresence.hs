@@ -7,6 +7,7 @@ module LSC.Arboresence where
 
 import Control.Monad
 import Control.Monad.Trans
+import Data.Default
 import Data.Foldable
 import qualified Data.Map as Map
 import Data.Monoid
@@ -41,7 +42,7 @@ arboresence pins@(inputs, _, _) nodes wires = concat <$>
 
       source <- freePoint
 
-      if name `elem` inputs
+      if netIdent wire `elem` inputs
       then do
         liftSMT $ constrain $ bAnd [ fst source .< x | (x, _) : _ <- toList nodes ]
       else do
@@ -59,16 +60,21 @@ arboresence pins@(inputs, _, _) nodes wires = concat <$>
       pure tree
 
     | wire <- toList wires
-    , let name = netIdent wire
     ]
 
-arbor pins nodes net source = do
-  items <- sequence
+arbor pins@(_, outputs, _) nodes net source = do
+  sequence
     [ do
 
       (_, edge) <- freeWirePolygon net
 
-      rectangular edge
+      target <- case Map.lookup gate nodes of
+        Just (bottomLeft : _) -> do
+          pure (fst bottomLeft + literal px, snd bottomLeft + literal py)
+        _ -> do
+          target <- freePoint
+          liftSMT $ constrain $ bAnd [ fst target .> x | _ : _ : (x, _) : _ <- toList nodes ]
+          pure target
 
       liftSMT $ do
         constrain $ head edge .== source
@@ -76,17 +82,13 @@ arbor pins nodes net source = do
 
       pure ((net, idn), edge)
 
-    | (gate, cs) <- Map.assocs $ contacts net
+    | (gate, cs) <- Map.assocs (contacts net)
+                 ++ [ (def, [(netIdent net, def)]) | netIdent net `elem` outputs ]
     , (idn, pin) <- take 1 cs
     , pinDir pin == In
     , (px, py, _, _) <- take 1 $ portRects $ pinPort pin
-    , bottomLeft <- maybe [] (take 1) $ Map.lookup gate nodes
-    , let target = (fst bottomLeft + literal px, snd bottomLeft + literal py)
     ]
-      -- when (netIdent net `elem` inputs) $ liftSMT $ do
-      --   constrain $ bAnd [ sx .< x | (x, _) : _ <- toList nodes ]
 
-  pure items
 
 manhattan :: (SInteger, SInteger) -> (SInteger, SInteger) -> SInteger
 manhattan (x1, y1) (x2, y2) = abs (x1 - x2) + abs (y1 - y2)
