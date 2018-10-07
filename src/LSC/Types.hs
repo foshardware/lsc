@@ -19,7 +19,11 @@ import Control.Monad.Reader (ReaderT(..), Reader, runReader)
 import qualified Control.Monad.Reader as Reader
 import Control.Monad.State
 
+import Data.Time.Clock.POSIX
+
 import Data.SBV
+
+import System.IO
 
 
 data NetGraph = NetGraph
@@ -118,15 +122,16 @@ data Dir = In | Out | InOut
 
 
 data Technology = Technology
-  { padDimensions :: (Integer, Integer)
+  { padDimensions  :: (Integer, Integer)
   , wireResolution :: Int
-  , wireWidth :: Integer
-  , scaleFactor :: Double
-  , components :: Map Text Component
+  , wireWidth      :: Integer
+  , scaleFactor    :: Double
+  , components     :: Map Text Component
+  , enableDebug    :: Bool
   } deriving Show
 
 instance Default Technology where
-  def = Technology (10^6, 10^6) 12 1 1 mempty
+  def = Technology (10^6, 10^6) 12 1 1 mempty True
 
 lookupDimensions :: Gate -> Technology -> (Integer, Integer)
 lookupDimensions g tech
@@ -196,6 +201,13 @@ liftSMT = lift . LST . lift
 
 ask :: LSC Technology
 ask = lift $ LST Reader.ask
+
+debug :: [String] -> LSC ()
+debug msg = do
+  enabled <- enableDebug <$> ask
+  when enabled $ liftIO $ do
+    timestamp <- show . round <$> getPOSIXTime
+    hPutStrLn stderr $ unwords $ timestamp : "-" : msg
 
 
 type Stage1 = Circuit2D Arboresence

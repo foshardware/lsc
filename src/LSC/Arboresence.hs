@@ -5,21 +5,26 @@
 
 module LSC.Arboresence where
 
-import Control.Monad
 import Control.Monad.Trans
 import Data.Default
 import Data.Foldable
 import qualified Data.Map as Map
-import Data.Monoid
 import Data.SBV
 import Data.SBV.Control
+import Data.Text (unpack)
 import System.IO
 
 import LSC.Types
 
 
 pnr :: NetGraph -> LSC Stage1
-pnr (NetGraph _ pins _ gates wires) = do
+pnr (NetGraph name pins _ gates wires) = do
+
+  debug
+    [ "start pnr @ module", unpack name
+    , "-", show $ length gates, "gates"
+    , "-", show $ length wires, "nets"
+    ]
 
   liftSMT $ do
     setOption $ ProduceUnsatCores True
@@ -33,7 +38,11 @@ pnr (NetGraph _ pins _ gates wires) = do
 
   rectilinear steiner
 
-  computeStage1 nodes steiner
+  result <- computeStage1 nodes steiner
+
+  debug ["stop  pnr @ module", unpack name]
+
+  pure result
 
 
 arboresence pins@(inputs, _, _) nodes wires = concat <$>

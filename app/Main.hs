@@ -64,14 +64,14 @@ program = do
     lef_ <- liftIO $ Text.readFile $ head lefFiles
     net_ <- liftIO $ Text.readFile $ head blifFiles
 
-    bootstr <- lift $ either
+    tech <- lift $ either
         (ioError . userError . show)
         (pure . fromLEF)
         (parseLEF lef_)
 
     netlist <- lift $ either
         (ioError . userError . show)
-        (pure . gnostic bootstr . fromBLIF)
+        (pure . gnostic tech . fromBLIF)
         (parseBLIF net_)
 
     -- print exlined blif to stdout
@@ -82,15 +82,17 @@ program = do
 
     -- print debug info
     when (Debug `elem` fmap fst opts)
-      $ do
-        liftIO $ hPutStrLn stderr $ show netlist
-        exit
+      $ lift $ runLSC tech $ debug ["start debug output on stderr"]
 
     -- use concurrency
     let j = maybe 1 read $ lookup Cores opts
 
     -- svg output
-    circuit2d <- lift $ bootstr `runLSC` stage1 j netlist
+    circuit2d <- lift $ runLSC
+      ( do
+        tech
+        bootstrap $ \ t -> t { enableDebug = Debug `elem` fmap fst opts } )
+      ( stage1 j netlist )
 
     when (Compile `elem` fmap fst opts)
       $ do
