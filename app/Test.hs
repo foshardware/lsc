@@ -68,8 +68,8 @@ it_ desc b = it desc b $ pure ()
 
 
 rotFile :: Text
-rotFile = decodeUtf8 $(embedFile "tests/rot.blif.test")
+rotFile = decodeUtf8 $(embedFile "tests/rot.blif")
 
 osu035File :: Text
-osu035File = decodeUtf8 $(embedFile "tests/osu035.lef.test")
+osu035File = decodeUtf8 $(embedFile "tests/osu035.lef")
 
