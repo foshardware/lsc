@@ -17,27 +17,26 @@ import LSC.Types
 
 
 
-plotStdout :: Circuit2D Steiner -> IO ()
+plotStdout :: Stage1 -> IO ()
 plotStdout = Lazy.putStr . plot
 
 
-plot :: Circuit2D Steiner -> Lazy.Text
+plot :: Stage1 -> Lazy.Text
 plot = renderSvg . svgDoc . scaleDown 100
 
 
-svgDoc :: Circuit2D Steiner -> S.Svg
-svgDoc (Circuit2D nodes edges steiner) = S.docTypeSvg
+svgDoc :: Stage1 -> S.Svg
+svgDoc (Circuit2D nodes steiner) = S.docTypeSvg
   ! A.version "1.1"
   ! A.width "100000"
   ! A.height "100000"
   $ do
-    arbor `mapM_` steiner
+    arbor `mapM_` fmap snd steiner
     place `mapM_` nodes
-    follow False `mapM_` fmap snd edges
 
 
-arbor :: [(Integer, Integer)] -> S.Svg
-arbor xs = sequence_
+arbor :: Path -> S.Svg
+arbor (Path xs) = sequence_
   [ S.circle
     ! A.cx (S.toValue x)
     ! A.cy (S.toValue y)
@@ -80,18 +79,16 @@ follow finish (Path ((px, py) : xs)) = do
 follow _ _ = pure ()
 
 
-scaleDown :: Integer -> Circuit2D Steiner -> Circuit2D Steiner
-scaleDown n (Circuit2D nodes edges steiner) = Circuit2D
+scaleDown :: Integer -> Stage1 -> Stage1
+scaleDown n (Circuit2D nodes steiner) = Circuit2D
 
   [ (gate, Path [ (div x n, div y n) | (x, y) <- pos ])
   | (gate, Path pos) <- nodes
   ]
 
   [ (net, Path [ (div x n, div y n) | (x, y) <- pos ])
-  | (net, Path pos) <- edges
+  | (net, Path pos) <- steiner
   ]
-
-  (fmap ( \ pos -> [ (div x n, div y n) | (x, y) <- pos ]) steiner)
 
 
 renderText :: Text -> S.Svg

@@ -9,6 +9,7 @@ import Control.Monad
 import Control.Monad.Trans
 import Data.Foldable
 import qualified Data.Map as Map
+import Data.Monoid
 import Data.SBV
 import Data.SBV.Control
 import System.IO
@@ -23,53 +24,48 @@ pnr (NetGraph _ pins _ gates wires) = do
     setOption $ ProduceUnsatCores True
 
   nodes <- Map.fromList <$> sequence (freeGatePolygon <$> toList gates)
-  edges <- Map.fromList <$> sequence (freeWirePolygon <$> toList wires)
 
   boundedSpace nodes
   collision nodes
-  rectilinear edges
 
-  steiner <- arboresences pins nodes edges
+  steiner <- arboresence pins nodes wires
 
-  computeStage1 nodes edges steiner
+  rectilinear steiner
+
+  computeStage1 nodes steiner
 
 
-arboresences pins nodes edges = do
-  Map.fromAscList <$> sequence
-    [ (,) net <$> arboresence pins nodes net path
+arboresence pins nodes wires = Map.unions <$> sequence (arbor pins nodes <$> toList wires)
 
-    | (net, path) <- Map.assocs edges
+arbor pins@(inputs, outputs, _) nodes net = Map.fromList <$> sequence
+    [ do
+
+      source@(sx, _) <- freePoint
+
+      when (netIdent net `elem` inputs) $ liftSMT $ do
+        constrain $ bAnd [ sx .< x | (x, _) : _ <- toList nodes ]
+
+      edge <- branch net gate pin source
+
+      pure ((net, idn), edge)
+
+    | (gate, cs) <- Map.assocs (contacts net)
+                 <> mempty
+    , (idn, pin) <- cs
     ]
 
 
-arboresence (inputs, outputs, _) nodes net path = do
+branch net gate pin source = do
 
-    let hs = hananGrid nodes net
-
-    source <- freePoint
     target <- freePoint
 
+    (_, edge) <- freeWirePolygon net
+
     liftSMT $ do
+      constrain $ head edge .== source
+      constrain $ last edge .== target
 
-      constrain $ source .== head path
-      constrain $ target .== last path
-
-      constrain $ bAnd [ p .== source   | (dir, p) <- hs, dir == Out ]
-      constrain $ bAnd [ p `sElem` path | (dir, p) <- hs, dir == In  ]
-      constrain $ allEqual [ manhattan source p | (dir, p) <- hs, dir == In ]
-
-      when (netIdent net `elem` inputs) $ do
-        let (x, y) = source
-        constrain $ bAnd [ x + 2000 .< v | rect <- toList nodes, let (v, w) : _ = rect ]
-
-      when (netIdent net `elem` outputs) $ do
-        let (x, y) = target
-        constrain $ bAnd [ v + 2000 .< x | rect <- toList nodes, let _ : _ : (v, w) : _ = rect ]
-
-    let (x1, y1) : (x2, y2) : _ = path
-    let (x1, y1) : (x2, y2) : _ = path
-
-    pure $ [source | netIdent net `elem` inputs] ++ [target | netIdent net `elem` outputs]
+    pure edge
 
 
 manhattan :: (SInteger, SInteger) -> (SInteger, SInteger) -> SInteger
@@ -80,18 +76,19 @@ boundedSpace nodes = do
   (w, h) <- padDimensions <$> ask
   sequence_
     [ liftSMT $ do
-        constrain $ x .> literal 2000 &&& y .> literal 2000
+        constrain $ x .> literal 0 &&& y .> literal 0
         constrain $ x .< literal w &&& y .< literal h
-    | (x, y) <- join $ take 1 <$> Map.elems nodes
+    | rect <- Map.elems nodes
+    , (x, y) <- take 1 rect
     ]
 
 
-rectilinear edges = sequence_ [ rect path | path <- toList edges ]
+rectilinear steiner = sequence_ [ rectangular edge | edge <- toList steiner ]
 
-rect ((x1, y1) : (x2, y2) : xs) = do
+rectangular ((x1, y1) : (x2, y2) : xs) = do
   liftSMT $ constrain $ x1 .== x2 ||| y1 .== y2
-  rect ((x2, y2) : xs)
-rect _ = pure ()
+  rectangular ((x2, y2) : xs)
+rectangular _ = pure ()
 
 
 collision nodes = do
@@ -146,8 +143,7 @@ freeGatePolygon gate = do
 
 freeWirePolygon net = do
 
-  -- resolution <- wireResolution <$> ask
-  let resolution = 3 * Map.size (contacts net)
+  resolution <- wireResolution <$> ask
 
   path <- freePolygon resolution
 
@@ -160,7 +156,7 @@ freePolygon n = sequence $ replicate n freePoint
 freePoint = liftSMT $ (,) <$> free_ <*> free_
 
 
-computeStage1 nodes edges steiner = do
+computeStage1 nodes steiner = do
 
   liftSMT $ query $ do
     result <- checkSat
@@ -170,34 +166,28 @@ computeStage1 nodes edges steiner = do
 
         <$> sequence
             [ fmap (gate, ) $ Path <$> sequence
-                [ (, ) <$> getValue x <*> getValue y | (x, y) <- path ]
-            | (gate, path) <- Map.assocs nodes
+                [ (, ) <$> getValue x <*> getValue y | (x, y) <- xs ]
+            | (gate, xs) <- Map.assocs nodes
             ]
 
         <*> sequence
             [ fmap (net, ) $ Path <$> sequence
-                [ (, ) <$> getValue x <*> getValue y | (x, y) <- path ]
-            | (net, path) <- Map.assocs edges
-            ]
-
-        <*> (Map.fromAscList <$> sequence
-            [ fmap (net, ) $ sequence
                 [ (, ) <$> getValue x <*> getValue y | (x, y) <- xs ]
             | (net, xs) <- Map.assocs steiner
-            ])
+            ]
 
       Unsat -> do
 
         unsat <- getUnsatCore
         liftIO $ sequence_ $ hPutStrLn stderr <$> unsat
 
-        pure $ Circuit2D mempty mempty mempty
+        pure $ Circuit2D mempty mempty
 
       _ -> do
 
         reason <- getUnknownReason
         liftIO $ hPutStrLn stderr $ show reason
 
-        pure $ Circuit2D mempty mempty mempty
+        pure $ Circuit2D mempty mempty
 
 

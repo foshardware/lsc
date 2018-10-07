@@ -192,13 +192,15 @@ ask :: LSC Technology
 ask = lift $ LST Reader.ask
 
 
-type Steiner = Map Net [(Integer, Integer)]
+type Stage1 = Circuit2D Arboresence
 
-data Circuit2D a = Circuit2D [(Gate, Path)] [(Net, Path)] a
+type Arboresence = [((Net, Identifier), Path)]
+
+data Circuit2D a = Circuit2D [(Gate, Path)] a
   deriving (Eq, Show)
 
 newtype Path = Path [(Integer, Integer)]
   deriving (Eq, Show)
 
-type Stage1 = Circuit2D Steiner
+type SPath = [(SInteger, SInteger)]
 
