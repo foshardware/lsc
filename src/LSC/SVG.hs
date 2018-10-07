@@ -31,13 +31,13 @@ svgDoc (Circuit2D nodes edges steiner) = S.docTypeSvg
   ! A.width "100000"
   ! A.height "100000"
   $ do
-    mapM_ mst steiner
-    mapM_ place nodes
-    mapM_ follow $ snd <$> edges
+    arbor `mapM_` steiner
+    place `mapM_` nodes
+    follow False `mapM_` fmap snd edges
 
 
-mst :: [(Integer, Integer)] -> S.Svg
-mst xs = sequence_
+arbor :: [(Integer, Integer)] -> S.Svg
+arbor xs = sequence_
   [ S.circle
     ! A.cx (S.toValue x)
     ! A.cy (S.toValue y)
@@ -61,21 +61,23 @@ place (g, path@(Path ((x, y) : _))) = do
     ! A.transform (fromString $ "rotate(90 "++ show (x + 8) ++","++ show (y + 24)  ++")")
     $ renderText $ gateIdent g
 
-  follow path
+  follow True path
 
 place _ = pure ()
 
 
-follow :: Path -> S.Svg
-follow (Path ((px, py) : xs)) = do
+follow :: Bool -> Path -> S.Svg
+follow finish (Path ((px, py) : xs)) = do
+
+  let z' = if finish then z else pure ()
 
   S.path
-    ! A.d (mkPath $ m px py *> sequence [ l x y | (x, y) <- xs ] *> z)
+    ! A.d (mkPath $ m px py *> sequence [ l x y | (x, y) <- xs ] *> z')
     ! A.stroke "black"
     ! A.fill "transparent"
     ! A.strokeWidth "4"
 
-follow _ = pure ()
+follow _ _ = pure ()
 
 
 scaleDown :: Integer -> Circuit2D Steiner -> Circuit2D Steiner

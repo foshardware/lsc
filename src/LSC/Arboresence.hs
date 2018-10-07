@@ -29,45 +29,58 @@ pnr (NetGraph _ pins _ gates wires) = do
   collision nodes
   rectilinear edges
 
-  steiner <- arboresences nodes edges
+  steiner <- arboresences pins nodes edges
 
   computeStage1 nodes edges steiner
 
 
-arboresences nodes edges = do
+arboresences pins nodes edges = do
   Map.fromAscList <$> sequence
-    [ (,) net <$> arboresence nodes net path
+    [ (,) net <$> arboresence pins nodes net path
 
     | (net, path) <- Map.assocs edges
     ]
 
 
-arboresence nodes net path = do
+arboresence (inputs, outputs, _) nodes net path = do
 
-  let n   = Map.size $ contacts net
-      hs  = hananGrid nodes net
-      ihs = hananGridIntersections hs
+    let hs = hananGrid nodes net
 
-  if null hs
-  then pure mempty
-
-  else do
-
-    steinerNodes <- sequence $ replicate (n - 2) freePoint
+    source <- freePoint
+    target <- freePoint
 
     liftSMT $ do
 
-      constrain $ bAll (`sElem` ihs) steinerNodes
-      constrain $ bnot $ bAny (`sElem` hs) steinerNodes
+      constrain $ source .== head path
+      constrain $ target .== last path
 
-    pure steinerNodes
+      constrain $ bAnd [ p .== source   | (dir, p) <- hs, dir == Out ]
+      constrain $ bAnd [ p `sElem` path | (dir, p) <- hs, dir == In  ]
+      constrain $ allEqual [ manhattan source p | (dir, p) <- hs, dir == In ]
+
+      when (netIdent net `elem` inputs) $ do
+        let (x, y) = source
+        constrain $ bAnd [ x + 2000 .< v | rect <- toList nodes, let (v, w) : _ = rect ]
+
+      when (netIdent net `elem` outputs) $ do
+        let (x, y) = target
+        constrain $ bAnd [ v + 2000 .< x | rect <- toList nodes, let _ : _ : (v, w) : _ = rect ]
+
+    let (x1, y1) : (x2, y2) : _ = path
+    let (x1, y1) : (x2, y2) : _ = path
+
+    pure $ [source | netIdent net `elem` inputs] ++ [target | netIdent net `elem` outputs]
+
+
+manhattan :: (SInteger, SInteger) -> (SInteger, SInteger) -> SInteger
+manhattan (x1, y1) (x2, y2) = abs (x1 - x2) + abs (y1 - y2)
 
 
 boundedSpace nodes = do
   (w, h) <- padDimensions <$> ask
   sequence_
     [ liftSMT $ do
-        constrain $ x .> literal 0 &&& y .> literal 0
+        constrain $ x .> literal 2000 &&& y .> literal 2000
         constrain $ x .< literal w &&& y .< literal h
     | (x, y) <- join $ take 1 <$> Map.elems nodes
     ]
@@ -99,7 +112,7 @@ collision nodes = do
 hananGridIntersections s = [ (x, y) | (x, _) <- s, (_, y) <- s ]
 
 hananGrid nodes net =
-    [ (gx + literal px, gy + literal py)
+    [ (pinDir pin, (gx + literal px, gy + literal py))
     | (gate, cs) <- Map.assocs $ contacts net
     , (_, pin) <- take 1 cs
     , (px, py, _, _) <- take 1 $ portRects $ pinPort pin
