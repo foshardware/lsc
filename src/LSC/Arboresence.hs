@@ -57,10 +57,13 @@ arboresence pins@(inputs, _, _) nodes wires = concat <$>
 
       tree <- arbor pins nodes wire source
 
+      liftSMT $ constrain $ allEqual $ manhattan . snd <$> tree
+
       pure tree
 
     | wire <- toList wires
     ]
+
 
 arbor pins@(_, outputs, _) nodes net source = do
   sequence
@@ -90,8 +93,12 @@ arbor pins@(_, outputs, _) nodes net source = do
     ]
 
 
-manhattan :: (SInteger, SInteger) -> (SInteger, SInteger) -> SInteger
-manhattan (x1, y1) (x2, y2) = abs (x1 - x2) + abs (y1 - y2)
+manhattan :: [(SInteger, SInteger)] -> SInteger
+manhattan ((x1, y1) : (x2, y2) : xs)
+  = abs (x1 - x2)
+  + abs (y1 - y2)
+  + manhattan ((x2, y2) : xs)
+manhattan _ = 0
 
 
 boundedSpace nodes = do
@@ -105,12 +112,20 @@ boundedSpace nodes = do
     ]
 
 
-rectilinear steiner = sequence_ [ rectangular edge | (_, edge) <- steiner ]
+rectilinear steiner = sequence_ [ uniform edge *> rectangular edge | (_, edge) <- steiner ]
 
 rectangular ((x1, y1) : (x2, y2) : xs) = do
   liftSMT $ constrain $ x1 .== x2 ||| y1 .== y2
   rectangular ((x2, y2) : xs)
 rectangular _ = pure ()
+
+
+uniform ((x1, y1) : (x2, y2) : (x3, y3) : xs) = do
+  liftSMT $ do
+    constrain $ x1 - x2 .== 0 ||| (x3 - x2 .> 0) .== (x1 - x2 .> 0)
+    constrain $ y1 - y2 .== 0 ||| (y3 - y2 .> 0) .== (y1 - y2 .> 0)
+  uniform ((x2, y2) : (x3, y3) : xs)
+uniform _ = pure ()
 
 
 collision nodes = do
@@ -125,17 +140,6 @@ collision nodes = do
     ,     path2  <- i `drop` Map.elems nodes
     , let _ : topLeft1 : _ : bottomRight1 : _ = path1
     , let _ : topLeft2 : _ : bottomRight2 : _ = path2
-    ]
-
-
-hananGridIntersections s = [ (x, y) | (x, _) <- s, (_, y) <- s ]
-
-hananGrid nodes net =
-    [ (pinDir pin, (gx + literal px, gy + literal py))
-    | (gate, cs) <- Map.assocs $ contacts net
-    , (_, pin) <- take 1 cs
-    , (px, py, _, _) <- take 1 $ portRects $ pinPort pin
-    , (gx, gy) <- maybe [] (take 1) (Map.lookup gate nodes)
     ]
 
 
