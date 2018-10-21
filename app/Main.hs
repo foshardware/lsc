@@ -25,6 +25,7 @@ import LSC.BLIF
 import LSC.LEF
 import LSC.SVG
 import LSC.Exlining
+import LSC.NetGraph
 import LSC.Types
 
 versionString :: String
@@ -73,6 +74,12 @@ program = do
         (ioError . userError . show)
         (pure . gnostic tech . fromBLIF)
         (parseBLIF net_)
+
+    -- print exlined blif to stdout
+    when (Debug `elem` fmap fst opts && Exline `elem` fmap fst opts)
+      $ do
+        liftIO $ hPutStrLn stderr $ showGraph $ exline (replicate 3 4) netlist
+        exit
 
     -- print exlined blif to stdout
     when (Exline `elem` fmap fst opts)
