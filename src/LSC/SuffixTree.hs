@@ -18,6 +18,7 @@ import Data.Vector
 import qualified Data.Vector.Unboxed as Unboxed
 import qualified Data.Vector.Algorithms.Intro as Intro
 import qualified Data.Vector.Algorithms.Radix as Radix
+import Data.Vector.Algorithms.Radix (radix)
 import Prelude hiding (reverse, drop)
 
 
@@ -40,7 +41,7 @@ constructSuffixTree goedel string = SuffixTree string suffixArray lcp
   where
 
     suffixArray
-      = radixSortBy (compare `on` snd)
+      = smartSortBy (compare `on` snd)
       $ generate (length string + 1)
       $ \ k -> (k + 1, Unboxed.generate (length string - k) (drop k (goedel <$> string) !))
 
@@ -94,7 +95,7 @@ findmaxr goedel string ml = do
   -- discard all positions where length of least common prefix < ml
   _S <- newSTRef $ Set.fromList [ u | u <- [1 .. n-1], snd (lcp! u) < ml ]
 
-  let _I = radixSortBy (compare `on` snd . (lcp!)) $ generate n id
+  let _I = radixSortBy (snd . (lcp!)) $ generate n id
 
   let initial = minimum $ n: [ t | t <- toList _I, snd (lcp! (_I! t)) >= ml ]
 
@@ -142,8 +143,15 @@ longestSubString (SuffixTree _ _ lcp)
   = maximumBy ( \ a b -> snd a `compare` snd b ) lcp
 
 
-radixSortBy :: (a -> a -> Ordering) -> Vector a -> Vector a
+radixSortBy :: (a -> Int) -> Vector a -> Vector a
 radixSortBy f v = runST $ do
+  m <- thaw v
+  Radix.sortBy 8 256 (\ i e -> radix i $ f e) m
+  unsafeFreeze m 
+
+
+smartSortBy :: (a -> a -> Ordering) -> Vector a -> Vector a
+smartSortBy f v = runST $ do
   m <- thaw v
   Intro.sortBy f m
   unsafeFreeze m 

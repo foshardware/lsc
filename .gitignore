@@ -1,6 +1,7 @@
 dist/
 
 *.svg
+*.prof
 
 .stack-work/
 
