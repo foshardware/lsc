@@ -34,7 +34,7 @@ data NetGraph = NetGraph
   , netMapping :: Map Identifier Net
   } deriving Show
 
-instance Semigroup where
+instance Semigroup NetGraph where
   net1 <> net2 = NetGraph
     (modelName  net1 `mappend` modelName  net2)
     (modelPins  net1 `mappend` modelPins  net2)
