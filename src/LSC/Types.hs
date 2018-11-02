@@ -34,14 +34,17 @@ data NetGraph = NetGraph
   , netMapping :: Map Identifier Net
   } deriving Show
 
-instance Monoid NetGraph where
-  mempty = NetGraph mempty mempty mempty mempty mempty
-  net1 `mappend` net2 = NetGraph
+instance Semigroup where
+  net1 <> net2 = NetGraph
     (modelName  net1 `mappend` modelName  net2)
     (modelPins  net1 `mappend` modelPins  net2)
     (subModels  net1 `mappend` subModels  net2)
     (gateVector net1 `mappend` gateVector net2)
     (netMapping net1 `mappend` netMapping net2)
+
+instance Monoid NetGraph where
+  mempty = NetGraph mempty mempty mempty mempty mempty
+  mappend = (<>)
 
 
 type Contact = (Identifier, Pin)
@@ -58,9 +61,12 @@ instance Eq Net where
 instance Ord Net where
   w `compare` v = netIndex w `compare` netIndex v
 
+instance Semigroup Net where
+  Net i as k <> Net _ bs _ = Net i (Map.unionWith mappend as bs) k
+
 instance Monoid Net where
   mempty = Net mempty mempty def
-  Net i as k `mappend` Net _ bs _ = Net i (Map.unionWith mappend as bs) k
+  mappend = (<>)
 
 
 type Wire = Text
