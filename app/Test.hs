@@ -56,9 +56,9 @@ tests = do
 
 it :: String -> Bool -> Test () -> Test ()
 it desc True _ = do
-  liftIO $ hPutStrLn stderr $ unwords ["  ✔", "\tit", desc]
+  liftIO $ hPutStrLn stderr $ unwords ["  v", "\tit", desc]
 it desc b action = do
-  liftIO $ hPutStrLn stderr $ unwords ["\n  ✖", "\tFAIL:", desc, "\n\n"]
+  liftIO $ hPutStrLn stderr $ unwords ["\n  x", "\tFAIL:", desc, "\n\n"]
   action
   guard b
 
