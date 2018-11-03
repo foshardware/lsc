@@ -44,7 +44,7 @@ exline suffixTree (k : ks) top@(NetGraph name pins subs nodes edges)
 
   newGateVector
 
-  newNetMapping
+  edges
 
   where
 
@@ -75,8 +75,6 @@ exline suffixTree (k : ks) top@(NetGraph name pins subs nodes edges)
       | p <- fmap (+ len) pos <> pure 0
       | q <- length nodes : pos
       ]
-
-    newNetMapping = edges
 
 exline _ _ top = top
 
