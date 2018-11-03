@@ -19,6 +19,7 @@ import Data.Vector
   , concat
   )
 import qualified Data.Vector.Unboxed as Unboxed
+import qualified Data.Vector.Unboxed as U
 import qualified Data.Vector.Algorithms.Intro as Intro
 import qualified Data.Vector.Algorithms.Radix as Radix
 import Data.Vector.Algorithms.Radix (radix)
@@ -34,26 +35,27 @@ type SuffixArray = Vector (Position, Suffix)
 type LCP = Vector (Position, Length)
 
 type Position = Int
-type Suffix = Unboxed.Vector Int
+type Suffix = U.Vector Int
 
 type Length = Int
 
 
-divideSuffixTree :: Int -> [Int] -> Vector a -> SuffixTree a -> SuffixTree a
-divideSuffixTree len pos string (SuffixTree _ suffixArray _) = SuffixTree string array lcp
+divideSuffixTree :: Int -> [Int] -> Int -> Vector a -> SuffixTree a -> SuffixTree a
+divideSuffixTree len pos e string (SuffixTree _ suffixArray _) = SuffixTree string array lcp
   where
-    array = foldr (cutSuffixArray len) suffixArray pos
+    array = foldr (cutSuffixArray e len) suffixArray pos
     lcp = constructLcp array
 
-cutSuffixArray :: Int -> Int -> SuffixArray -> SuffixArray
-cutSuffixArray len pos = fmap cutSuffix . filter cutArray
+cutSuffixArray :: Int -> Int -> Int -> SuffixArray -> SuffixArray
+cutSuffixArray element len pos  = fmap transformSuffix . filter cutArray
 
   where
 
-    cutArray (p, _) = p < succ pos || p >= succ pos + len
+    cutArray (p, _) = p <= succ pos || p >= succ pos + len
 
-    cutSuffix (p, s) | p >= succ pos + len = (p - len + 1, s)
-    cutSuffix (p, s) = (p, Unboxed.take (succ pos - p) s <> Unboxed.singleton 0 <> Unboxed.drop (succ pos - p + len) s)
+    transformSuffix (p, s) | p == succ pos = (p, element `U.cons` U.drop len s)
+    transformSuffix (p, s) | p >= succ pos + len = (p - len + 1, s)
+    transformSuffix (p, s) = (p, U.take (succ pos - p) s <> U.singleton element <> U.drop (succ pos - p + len) s)
 
 
 constructSuffixTree :: (a -> Int) -> Vector a -> SuffixTree a
@@ -66,11 +68,11 @@ constructSuffixArray :: (a -> Int) -> Vector a -> SuffixArray
 constructSuffixArray goedel string
   = smartSortBy (compare `on` snd)
   $ generate (length string + 1)
-  $ \ k -> (k + 1, Unboxed.generate (length string - k) (drop k (goedel <$> string) !))
+  $ \ k -> (k + 1, U.generate (length string - k) (drop k (goedel <$> string) !))
 
 constructLcp :: SuffixArray -> LCP
 constructLcp suffixArray = generate (length suffixArray) gen where
-  gen k = (i, Unboxed.foldr commonPrefix 0 $ Unboxed.zip x y) where
+  gen k = (i, U.foldr commonPrefix 0 $ U.zip x y) where
     (i, x) = suffixArray ! k
     (_, y) = case k of
       0 -> (undefined, mempty)
