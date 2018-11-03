@@ -2,8 +2,10 @@
 module LSC.NetGraph where
 
 import Data.Foldable
+import qualified Data.Map as Map
 import Data.Map.Internal.Debug
 import Data.Text (unpack)
+import qualified Data.Vector as Vector
 
 import LSC.Types
 
@@ -20,3 +22,14 @@ showGraph netlist = showTreeWith
   True
   (subModels netlist)
 
+showNetHierarchy :: NetGraph -> String
+showNetHierarchy netlist = unlines
+  [ mempty
+  , "model: " ++ unpack (modelName netlist)
+  , mempty
+  , "Total: " ++ show (Vector.length $ gateVector netlist)
+  ]
+  ++ unlines [ unpack g ++ ": " ++ show c | (g, c) <- Map.assocs gates ]
+  ++ unlines [ showNetHierarchy m | m <- toList $ subModels netlist ]
+  where
+    gates = Map.fromListWith (+) [ (gateIdent g, 1 :: Int) | g <- toList $ gateVector netlist ]
