@@ -43,7 +43,7 @@ tests = do
     (pure . gnostic lefOsu035 . fromBLIF)
     (parseBLIF picorv32File)
 
-  let exlined = exline (replicate 16 8) blifPicorv32
+  let exlined = exline (replicate 32 8) blifPicorv32
   let inlined = inlineAll exlined
   liftIO $ printBLIF $ toBLIF $ exlined
   -- liftIO $ showNetHierarchy $ exlined
