@@ -20,12 +20,8 @@ import Data.Monoid
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Vector (Vector, slice, concat, (!), generate, cons)
-<<<<<<< HEAD
-import Data.Text (Text, pack)
-=======
 import Data.Text (Text)
 import qualified Data.Text as T
->>>>>>> awesterwick-work
 import Prelude hiding (concat)
 import TextShow
 
