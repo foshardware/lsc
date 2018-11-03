@@ -20,7 +20,12 @@ import Data.Monoid
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Vector (Vector, slice, concat, (!), generate, cons)
+<<<<<<< HEAD
 import Data.Text (Text, pack)
+=======
+import Data.Text (Text)
+import qualified Data.Text as T
+>>>>>>> awesterwick-work
 import Prelude hiding (concat)
 import TextShow
 
@@ -37,7 +42,7 @@ exline_ ks netlist = exline
 exline :: SuffixTree Gate -> [Int] -> NetGraph -> NetGraph
 exline suffixTree (k : ks) top@(NetGraph name pins subs nodes edges)
   | not $ null isomorphicGates
-  = exline_ ks
+  = exline (divideSuffixTree len pos (hash $ modelName netlist) newGateVector suffixTree) ks
   $ NetGraph name pins
 
   (Map.insert (modelName netlist) netlist subs)
@@ -48,11 +53,15 @@ exline suffixTree (k : ks) top@(NetGraph name pins subs nodes edges)
 
   where
 
-    isomorphicGates@((len, pos@(p1 : _), _) : _)
-      = filter ( \ (_, _, score) -> score > 0)
+    ((len, pos@(p1 : _), _) : _) = isomorphicGates
+    isomorphicGates
+      = filter ( \ (l, p : _, _) -> primitive `all` slice p l nodes)
+      $ filter ( \ (_, _, score) -> score > 0)
       $ fmap (rescore nodes)
       $ sortBy ( \ (l, _, x) (m, _, y) -> compare (y, m) (x, l)) 
       $ maximalRepeatsDisjoint suffixTree (hash . gateIdent) k
+
+    primitive g = name /= T.take (T.length name) (gateIdent g)
 
     gate p = Gate (modelName netlist) (wires p) (maps p) 0
     wires p = Map.fromList
