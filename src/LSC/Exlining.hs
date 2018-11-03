@@ -20,11 +20,12 @@ import Data.Monoid
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Vector (Vector, slice, concat, (!), generate, cons)
-import Data.Text (Text)
+import Data.Text (Text, pack)
 import Prelude hiding (concat)
 import TextShow
 
 import LSC.Types
+import LSC.NetGraph
 import LSC.SuffixTree
 
 
@@ -43,7 +44,7 @@ exline suffixTree (k : ks) top@(NetGraph name pins subs nodes edges)
 
   newGateVector
 
-  edges
+  newNetMapping
 
   where
 
@@ -75,11 +76,13 @@ exline suffixTree (k : ks) top@(NetGraph name pins subs nodes edges)
       | q <- length nodes : pos
       ]
 
+    newNetMapping = edges
+
 exline _ _ top = top
 
 
 createSublist :: Length -> [Position] -> NetGraph -> (Map Position Closure, NetGraph)
-createSublist len pos@(p1 : _) (NetGraph name (inputList, outputList, _) _ nodes edges)
+createSublist len pos@(p1 : _) (NetGraph name (inputList, outputList, _) subs nodes edges)
   = (,) closures
   $ NetGraph (name <> buildName scope)
 
@@ -116,7 +119,7 @@ createSublist len pos@(p1 : _) (NetGraph name (inputList, outputList, _) _ nodes
       [ (wireName w, dir)
       | (v, w@(_, (k, g))) <- maybe [] Map.assocs $ Map.lookup p1 closures
       , dir <- maybe [] pure $ direction g k v edges <|> Map.lookup v modelDirs
-      ] 
+      ]
 
     modelDirs = Map.fromList $ fmap (, In) inputList <> fmap (, Out) outputList
 
@@ -174,7 +177,7 @@ scopeWires nodes = Map.fromList $ reverse
 
 
 wireName :: (Int, (Wire, Gate)) -> Text
-wireName (i, (k, _)) = k <> showt i
+wireName (i, (k, _)) = k <> pack "_" <> showt i
 
 
 buildName :: (Functor f, Foldable f) => f Gate -> Identifier
