@@ -22,6 +22,7 @@ import LSC.BLIF
 import LSC.LEF
 import LSC.Inlining
 import LSC.Exlining
+import LSC.NetGraph
 import LSC.Types
 
 
@@ -45,8 +46,8 @@ tests = do
 
   let exlined = exline (replicate 32 8) blifPicorv32
   let inlined = inlineAll exlined
-  liftIO $ printBLIF $ toBLIF $ exlined
-  -- liftIO $ showNetHierarchy $ exlined
+  -- liftIO $ printBLIF $ toBLIF $ exlined
+  liftIO $ hPutStrLn stderr $ showNetHierarchy $ exlined
   it "inlines correctly" (reprBlif inlined == reprBlif blifPicorv32)
     $ liftIO $ printBLIF $ toBLIF $ inlined
 
