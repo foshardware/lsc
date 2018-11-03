@@ -44,20 +44,23 @@ divideSuffixTree = undefined
 
 constructSuffixTree :: (a -> Int) -> Vector a -> SuffixTree a
 constructSuffixTree goedel string = SuffixTree string suffixArray lcp
-  
   where
+    suffixArray = constructSuffixArray goedel string
+    lcp = constructLcp suffixArray
 
-    suffixArray
-      = smartSortBy (compare `on` snd)
-      $ generate (length string + 1)
-      $ \ k -> (k + 1, Unboxed.generate (length string - k) (drop k (goedel <$> string) !))
+constructSuffixArray :: (a -> Int) -> Vector a -> SuffixArray
+constructSuffixArray goedel string
+  = smartSortBy (compare `on` snd)
+  $ generate (length string + 1)
+  $ \ k -> (k + 1, Unboxed.generate (length string - k) (drop k (goedel <$> string) !))
 
-    lcp = generate (length suffixArray) gen where
-      gen k = (i, Unboxed.foldr commonPrefix 0 $ Unboxed.zip x y) where
-        (i, x) = suffixArray ! k
-        (_, y) = case k of
-            0 -> (undefined, mempty)
-            _ -> suffixArray ! (k-1)
+constructLcp :: SuffixArray -> LCP
+constructLcp suffixArray = generate (length suffixArray) gen where
+  gen k = (i, Unboxed.foldr commonPrefix 0 $ Unboxed.zip x y) where
+    (i, x) = suffixArray ! k
+    (_, y) = case k of
+      0 -> (undefined, mempty)
+      _ -> suffixArray ! (k-1)
 
 
 maximalRepeatsDisjoint

@@ -21,6 +21,7 @@ import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Vector (Vector, slice, concat, (!), generate, cons)
 import Data.Text (Text)
+import qualified Data.Text as T
 import Prelude hiding (concat)
 import TextShow
 
@@ -48,10 +49,13 @@ exline suffixTree (k : ks) top@(NetGraph name pins subs nodes edges)
   where
 
     isomorphicGates@((len, pos@(p1 : _), _) : _)
-      = filter ( \ (_, _, score) -> score > 0)
+      = filter ( \ (l, p : _, _) -> primitive `all` slice p l nodes)
+      $ filter ( \ (_, _, score) -> score > 0)
       $ fmap (rescore nodes)
       $ sortBy ( \ (l, _, x) (m, _, y) -> compare (y, m) (x, l)) 
       $ maximalRepeatsDisjoint suffixTree (hash . gateIdent) k
+
+    primitive g = name /= T.take (T.length name) (gateIdent g)
 
     gate p = Gate (modelName netlist) (wires p) (maps p) 0
     wires p = Map.fromList
