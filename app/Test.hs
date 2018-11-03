@@ -43,7 +43,7 @@ tests = do
     (pure . gnostic lefOsu035 . fromBLIF)
     (parseBLIF rotFile)
 
-  let exlined = exline (repeat 20) blifRot
+  let exlined = exline (replicate 4 8) blifRot
   let inlined = inlineAll exlined
   liftIO $ printBLIF $ toBLIF $ exlined
   it "inlines correctly" (reprBlif inlined == reprBlif blifRot)
@@ -68,7 +68,7 @@ it_ desc b = it desc b $ pure ()
 
 
 rotFile :: Text
-rotFile = decodeUtf8 $(embedFile "tests/rot.blif")
+rotFile = decodeUtf8 $(embedFile "tests/picorv32.blif")
 
 osu035File :: Text
 osu035File = decodeUtf8 $(embedFile "tests/osu035.lef")
