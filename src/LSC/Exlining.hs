@@ -20,11 +20,17 @@ import Data.Monoid
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Vector (Vector, slice, concat, (!), generate, cons)
+<<<<<<< HEAD
+import Data.Text (Text, pack)
+=======
 import Data.Text (Text)
+import qualified Data.Text as T
+>>>>>>> awesterwick-work
 import Prelude hiding (concat)
 import TextShow
 
 import LSC.Types
+import LSC.NetGraph
 import LSC.SuffixTree
 
 
@@ -36,7 +42,7 @@ exline_ ks netlist = exline
 exline :: SuffixTree Gate -> [Int] -> NetGraph -> NetGraph
 exline suffixTree (k : ks) top@(NetGraph name pins subs nodes edges)
   | not $ null isomorphicGates
-  = exline_ ks
+  = exline (divideSuffixTree len pos (hash $ modelName netlist) newGateVector suffixTree) ks
   $ NetGraph name pins
 
   (Map.insert (modelName netlist) netlist subs)
@@ -47,11 +53,15 @@ exline suffixTree (k : ks) top@(NetGraph name pins subs nodes edges)
 
   where
 
-    isomorphicGates@((len, pos@(p1 : _), _) : _)
-      = filter ( \ (_, _, score) -> score > 0)
+    ((len, pos@(p1 : _), _) : _) = isomorphicGates
+    isomorphicGates
+      = filter ( \ (l, p : _, _) -> primitive `all` slice p l nodes)
+      $ filter ( \ (_, _, score) -> score > 0)
       $ fmap (rescore nodes)
       $ sortBy ( \ (l, _, x) (m, _, y) -> compare (y, m) (x, l)) 
       $ maximalRepeatsDisjoint suffixTree (hash . gateIdent) k
+
+    primitive g = name /= T.take (T.length name) (gateIdent g)
 
     gate p = Gate (modelName netlist) (wires p) (maps p) 0
     wires p = Map.fromList
@@ -79,7 +89,7 @@ exline _ _ top = top
 
 
 createSublist :: Length -> [Position] -> NetGraph -> (Map Position Closure, NetGraph)
-createSublist len pos@(p1 : _) (NetGraph name (inputList, outputList, _) _ nodes edges)
+createSublist len pos@(p1 : _) (NetGraph name (inputList, outputList, _) subs nodes edges)
   = (,) closures
   $ NetGraph (name <> buildName scope)
 
@@ -116,7 +126,7 @@ createSublist len pos@(p1 : _) (NetGraph name (inputList, outputList, _) _ nodes
       [ (wireName w, dir)
       | (v, w@(_, (k, g))) <- maybe [] Map.assocs $ Map.lookup p1 closures
       , dir <- maybe [] pure $ direction g k v edges <|> Map.lookup v modelDirs
-      ] 
+      ]
 
     modelDirs = Map.fromList $ fmap (, In) inputList <> fmap (, Out) outputList
 
@@ -174,7 +184,7 @@ scopeWires nodes = Map.fromList $ reverse
 
 
 wireName :: (Int, (Wire, Gate)) -> Text
-wireName (i, (k, _)) = k <> showt i
+wireName (i, (k, _)) = k <> pack "_" <> showt i
 
 
 buildName :: (Functor f, Foldable f) => f Gate -> Identifier
