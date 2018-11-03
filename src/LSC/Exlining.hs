@@ -28,10 +28,15 @@ import LSC.Types
 import LSC.SuffixTree
 
 
-exline :: [Int] -> NetGraph -> NetGraph
-exline (k : ks) top@(NetGraph name pins subs nodes edges)
+exline_ :: [Int] -> NetGraph -> NetGraph
+exline_ ks netlist = exline 
+  (constructSuffixTree (hash . gateIdent) (gateVector netlist))
+  ks netlist
+
+exline :: SuffixTree Gate -> [Int] -> NetGraph -> NetGraph
+exline suffixTree (k : ks) top@(NetGraph name pins subs nodes edges)
   | not $ null isomorphicGates
-  = exline ks
+  = exline (constructSuffixTree (hash . gateIdent) newGateVector) ks
   $ NetGraph name pins
 
   (Map.insert (modelName netlist) netlist subs)
@@ -46,7 +51,7 @@ exline (k : ks) top@(NetGraph name pins subs nodes edges)
       = filter ( \ (_, _, score) -> score > 0)
       $ fmap (rescore nodes)
       $ sortBy ( \ (l, _, x) (m, _, y) -> compare (y, m) (x, l)) 
-      $ maximalRepeatsDisjoint (hash . gateIdent) nodes k
+      $ maximalRepeatsDisjoint suffixTree (hash . gateIdent) k
 
     gate p = Gate (modelName netlist) (wires p) (maps p) 0
     wires p = Map.fromList
@@ -70,7 +75,7 @@ exline (k : ks) top@(NetGraph name pins subs nodes edges)
       | q <- length nodes : pos
       ]
 
-exline _ top = top
+exline _ _ top = top
 
 
 createSublist :: Length -> [Position] -> NetGraph -> (Map Position Closure, NetGraph)

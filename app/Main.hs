@@ -78,13 +78,13 @@ program = do
     -- print exlined blif to stdout
     when (Debug `elem` fmap fst opts && Exline `elem` fmap fst opts)
       $ do
-        liftIO $ hPutStrLn stderr $ showGraph $ exline (replicate 3 4) netlist
+        liftIO $ hPutStrLn stderr $ showGraph $ exline_ (replicate 3 4) netlist
         exit
 
     -- print exlined blif to stdout
     when (Exline `elem` fmap fst opts)
       $ do
-        liftIO $ printBLIF $ toBLIF $ exline (replicate 4 8) netlist
+        liftIO $ printBLIF $ toBLIF $ exline_ (replicate 4 8) netlist
         exit
 
     -- print debug info

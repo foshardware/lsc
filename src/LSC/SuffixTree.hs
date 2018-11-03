@@ -1,7 +1,6 @@
 
 module LSC.SuffixTree where
 
-import qualified Data.Foldable as Fold
 import Control.Monad.ST
 import Data.Foldable
 import Data.Function (on)
@@ -13,7 +12,6 @@ import Data.Vector
   , unsafeFreeze, thaw
   , generate, (!)
   , reverse, drop
-  , fromList
   )
 import qualified Data.Vector.Unboxed as Unboxed
 import qualified Data.Vector.Algorithms.Intro as Intro
@@ -54,24 +52,21 @@ constructSuffixTree goedel string = SuffixTree string suffixArray lcp
 
 
 maximalRepeatsDisjoint
-  :: Foldable f
-  => (a -> Int)
-  -> f a
+  :: SuffixTree a
+  -> (a -> Int)
   -> Int
   -> [(Length, [Position], Int)]
-maximalRepeatsDisjoint goedel xs ml
+maximalRepeatsDisjoint suffixTree goedel ml
   = sortBy ( \ (k, _, x) (l, _, y) -> compare (y, l) (x, k))
 
   [ (new, ys, new * length ys)
-  | (len, rs) <- runST $ findmaxr goedel string ml
+  | (len, rs) <- runST $ findmaxr suffixTree goedel ml
   , let (new, ys) = if snd $ foldr unary (minBound, True) rs
           then (length rs - 1 + len, [last rs])
           else (len, foldr (disjoint len) [] rs)
   ]
 
   where
-
-    string = fromList $ Fold.toList xs
 
     disjoint l p (y : ys) | y + l > p = y : ys
     disjoint _ p ys = p : ys
@@ -82,10 +77,10 @@ maximalRepeatsDisjoint goedel xs ml
     unary n (_, _) = (n, False)
 
 
-findmaxr :: (a -> Int) -> Vector a -> Int -> ST s [(Length, [Position])]
-findmaxr goedel string ml = do
+findmaxr :: SuffixTree a -> (a -> Int) -> Int -> ST s [(Length, [Position])]
+findmaxr suffixTree goedel ml = do
 
-  let SuffixTree w r lcp = constructSuffixTree goedel string
+  let SuffixTree w r lcp = suffixTree
 
   result <- newSTRef []
 
