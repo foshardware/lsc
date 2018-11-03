@@ -46,6 +46,7 @@ tests = do
   let exlined = exline (replicate 16 8) blifPicorv32
   let inlined = inlineAll exlined
   liftIO $ printBLIF $ toBLIF $ exlined
+  -- liftIO $ showNetHierarchy $ exlined
   it "inlines correctly" (reprBlif inlined == reprBlif blifPicorv32)
     $ liftIO $ printBLIF $ toBLIF $ inlined
 
