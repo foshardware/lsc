@@ -42,11 +42,11 @@ exline (k : ks) top@(NetGraph name pins subs nodes edges)
 
   where
 
-    ((len, pos@(p1 : _), _) : _) = isomorphicGates
-    isomorphicGates
-      = sortBy ( \ (l, _, x) (m, _, y) -> compare (y, m) (x, l))
-      $ filter ( \ (_, _, score) -> score > 0)
-      $ rescore nodes <$> maximalRepeatsDisjoint (hash . gateIdent) nodes k
+    isomorphicGates@((len, pos@(p1 : _), _) : _)
+      = filter ( \ (_, _, score) -> score > 0)
+      $ fmap (rescore nodes)
+      $ sortBy ( \ (l, _, x) (m, _, y) -> compare (y, m) (x, l)) 
+      $ maximalRepeatsDisjoint (hash . gateIdent) nodes k
 
     gate p = Gate (modelName netlist) (wires p) (maps p) 0
     wires p = Map.fromList
@@ -173,7 +173,7 @@ wireName (i, (k, _)) = k <> showt i
 
 
 buildName :: (Functor f, Foldable f) => f Gate -> Identifier
-buildName = showt . abs . hash . foldr mappend mempty . fmap gateIdent
+buildName = showt . abs . hash . foldr mappend mempty . fmap (foldr mappend mempty . gateWires)
 
 
 direction :: Gate -> Identifier -> Identifier -> Map Identifier Net -> Maybe Dir
