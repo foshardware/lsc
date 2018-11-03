@@ -20,6 +20,7 @@ import Data.Vector
   )
 import qualified Data.Vector.Unboxed as U
 import qualified Data.Vector.Algorithms.Insertion as Insertion
+import qualified Data.Vector.Algorithms.Intro as Intro
 import qualified Data.Vector.Algorithms.Radix as Radix
 import qualified Data.Vector.Algorithms.Tim as Tim
 import Data.Vector.Algorithms.Radix (radix)
@@ -48,7 +49,7 @@ divideSuffixTree len pos e string (SuffixTree _ suffixArray _) = SuffixTree stri
 
 cutSuffixArray :: Int -> Int -> Int -> SuffixArray -> SuffixArray
 cutSuffixArray element len pos
-  = insertionSortBy (compare `on` snd)
+  = introSortBy (compare `on` snd)
   . fmap transformSuffix
   . filter cutArray
 
@@ -179,12 +180,12 @@ radixSortBy f v = runST $ do
 suffixArraySortBy :: (a -> a -> Ordering) -> Vector a -> Vector a
 suffixArraySortBy f v = runST $ do
   m <- thaw v
-  Tim.sortBy f m
+  Intro.sortBy f m
   unsafeFreeze m 
 
 
-insertionSortBy :: (a -> a -> Ordering) -> Vector a -> Vector a
-insertionSortBy f v = runST $ do
+introSortBy :: (a -> a -> Ordering) -> Vector a -> Vector a
+introSortBy f v = runST $ do
   m <- thaw v
-  Insertion.sortBy f m
+  Intro.sortBy f m
   unsafeFreeze m 
