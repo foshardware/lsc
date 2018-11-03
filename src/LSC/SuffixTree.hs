@@ -18,10 +18,10 @@ import Data.Vector
   , slice, cons
   , concat
   )
-import qualified Data.Vector.Unboxed as Unboxed
 import qualified Data.Vector.Unboxed as U
-import qualified Data.Vector.Algorithms.Intro as Intro
+import qualified Data.Vector.Algorithms.Insertion as Insertion
 import qualified Data.Vector.Algorithms.Radix as Radix
+import qualified Data.Vector.Algorithms.Tim as Tim
 import Data.Vector.Algorithms.Radix (radix)
 import Data.Semigroup
 import Prelude hiding (reverse, drop, take, filter, concat)
@@ -47,7 +47,10 @@ divideSuffixTree len pos e string (SuffixTree _ suffixArray _) = SuffixTree stri
     lcp = constructLcp array
 
 cutSuffixArray :: Int -> Int -> Int -> SuffixArray -> SuffixArray
-cutSuffixArray element len pos  = fmap transformSuffix . filter cutArray
+cutSuffixArray element len pos
+  = insertionSortBy (compare `on` snd)
+  . fmap transformSuffix
+  . filter cutArray
 
   where
 
@@ -66,7 +69,7 @@ constructSuffixTree goedel string = SuffixTree string array lcp
 
 constructSuffixArray :: (a -> Int) -> Vector a -> SuffixArray
 constructSuffixArray goedel string
-  = smartSortBy (compare `on` snd)
+  = suffixArraySortBy (compare `on` snd)
   $ generate (length string + 1)
   $ \ k -> (k + 1, U.generate (length string - k) (drop k (goedel <$> string) !))
 
@@ -173,9 +176,15 @@ radixSortBy f v = runST $ do
   unsafeFreeze m 
 
 
-smartSortBy :: (a -> a -> Ordering) -> Vector a -> Vector a
-smartSortBy f v = runST $ do
+suffixArraySortBy :: (a -> a -> Ordering) -> Vector a -> Vector a
+suffixArraySortBy f v = runST $ do
   m <- thaw v
-  Intro.sortBy f m
+  Tim.sortBy f m
   unsafeFreeze m 
 
+
+insertionSortBy :: (a -> a -> Ordering) -> Vector a -> Vector a
+insertionSortBy f v = runST $ do
+  m <- thaw v
+  Insertion.sortBy f m
+  unsafeFreeze m 
