@@ -42,11 +42,11 @@ exline (k : ks) top@(NetGraph name pins subs nodes edges)
 
   where
 
-    ((len, pos@(p1 : _), _) : _) = isomorphicGates
-    isomorphicGates
-      = sortBy ( \ (l, _, x) (m, _, y) -> compare (y, m) (x, l))
-      $ filter ( \ (_, _, score) -> score > 0)
-      $ rescore nodes <$> maximalRepeatsDisjoint (hash . gateIdent) nodes k
+    isomorphicGates@((len, pos@(p1 : _), _) : _)
+      = filter ( \ (_, _, score) -> score > 0)
+      $ fmap (rescore nodes)
+      $ sortBy ( \ (l, _, x) (m, _, y) -> compare (y, m) (x, l)) 
+      $ maximalRepeatsDisjoint (hash . gateIdent) nodes k
 
     gate p = Gate (modelName netlist) (wires p) (maps p) 0
     wires p = Map.fromList

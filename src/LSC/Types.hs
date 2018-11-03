@@ -9,6 +9,7 @@ import Data.Default
 import Data.Function (on)
 import Data.Map (Map)
 import qualified Data.Map as Map
+import Data.Semigroup
 import Data.Text (Text)
 import Data.Vector (Vector)
 
