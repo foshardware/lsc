@@ -19,10 +19,8 @@ import Data.Vector
   , concat
   )
 import qualified Data.Vector.Unboxed as U
-import qualified Data.Vector.Algorithms.Insertion as Insertion
 import qualified Data.Vector.Algorithms.Intro as Intro
 import qualified Data.Vector.Algorithms.Radix as Radix
-import qualified Data.Vector.Algorithms.Tim as Tim
 import Data.Vector.Algorithms.Radix (radix)
 import Data.Semigroup
 import Prelude hiding (reverse, drop, take, filter, concat)
