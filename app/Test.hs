@@ -43,10 +43,11 @@ tests = do
     (pure . gnostic lefOsu035 . fromBLIF)
     (parseBLIF picorv32File)
 
-  let exlined = exline (replicate 8 8) blifPicorv32
+  let exlined = exline (replicate 16 8) blifPicorv32
   let inlined = inlineAll exlined
+  liftIO $ printBLIF $ toBLIF $ exlined
   it "inlines correctly" (reprBlif inlined == reprBlif blifPicorv32)
-    $ liftIO $ printBLIF $ toBLIF $ exlined
+    $ liftIO $ printBLIF $ toBLIF $ inlined
 
   where
 
