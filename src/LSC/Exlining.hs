@@ -173,7 +173,7 @@ wireName (i, (k, _)) = k <> showt i
 
 
 buildName :: (Functor f, Foldable f) => f Gate -> Identifier
-buildName = showt . abs . hash . foldr mappend mempty . fmap gateIdent
+buildName = showt . abs . hash . foldr mappend mempty . fmap (foldr mappend mempty . gateWires)
 
 
 direction :: Gate -> Identifier -> Identifier -> Map Identifier Net -> Maybe Dir

@@ -38,16 +38,15 @@ tests = do
     (pure . fromLEF)
     (parseLEF osu035File)
 
-  blifRot <- lift $ either
+  blifPicorv32 <- lift $ either
     (ioError . userError . show)
     (pure . gnostic lefOsu035 . fromBLIF)
-    (parseBLIF rotFile)
+    (parseBLIF picorv32File)
 
-  let exlined = exline (replicate 4 8) blifRot
+  let exlined = exline (replicate 8 8) blifPicorv32
   let inlined = inlineAll exlined
-  liftIO $ printBLIF $ toBLIF $ exlined
-  it "inlines correctly" (reprBlif inlined == reprBlif blifRot)
-    $ liftIO $ printBLIF $ toBLIF $ inlined
+  it "inlines correctly" (reprBlif inlined == reprBlif blifPicorv32)
+    $ liftIO $ printBLIF $ toBLIF $ exlined
 
   where
 
@@ -67,8 +66,8 @@ it_ :: String -> Bool -> Test ()
 it_ desc b = it desc b $ pure ()
 
 
-rotFile :: Text
-rotFile = decodeUtf8 $(embedFile "tests/picorv32.blif")
+picorv32File :: Text
+picorv32File = decodeUtf8 $(embedFile "tests/picorv32.blif")
 
 osu035File :: Text
 osu035File = decodeUtf8 $(embedFile "tests/osu035.lef")
