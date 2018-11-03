@@ -1,8 +1,9 @@
+{-# LANGUAGE ParallelListComp #-}
 
 module LSC.SuffixTree where
 
 import Control.Monad.ST
-import Data.Foldable
+import Data.Foldable hiding (concat)
 import Data.Function (on)
 import Data.List (sortBy)
 import Data.STRef
@@ -12,12 +13,16 @@ import Data.Vector
   , unsafeFreeze, thaw
   , generate, (!)
   , reverse, drop
+  , filter
+  , slice, cons
+  , concat
   )
 import qualified Data.Vector.Unboxed as Unboxed
 import qualified Data.Vector.Algorithms.Intro as Intro
 import qualified Data.Vector.Algorithms.Radix as Radix
 import Data.Vector.Algorithms.Radix (radix)
-import Prelude hiding (reverse, drop)
+import Data.Semigroup
+import Prelude hiding (reverse, drop, filter, concat)
 
 
 data SuffixTree a = SuffixTree (Vector a) SuffixArray LCP
@@ -31,6 +36,10 @@ type Position = Int
 type Suffix = Unboxed.Vector Int
 
 type Length = Int
+
+
+divideSuffixTree :: Int -> [Int] -> a -> SuffixTree a -> SuffixTree a
+divideSuffixTree = undefined
 
 
 constructSuffixTree :: (a -> Int) -> Vector a -> SuffixTree a
