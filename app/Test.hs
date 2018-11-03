@@ -44,15 +44,9 @@ tests = do
     (pure . gnostic lefOsu035 . fromBLIF)
     (parseBLIF picorv32File)
 
-<<<<<<< HEAD
-  let exlined = exline_ (replicate 16 8) blifPicorv32
-  let inlined = inlineCount 1 exlined
-  -- liftIO $ printBLIF $ toBLIF $ exlined
-=======
   let exlined = exline_ (replicate 128 8) blifPicorv32
   let inlined = inlineAll exlined
   liftIO $ printBLIF $ toBLIF $ exlined
->>>>>>> awesterwick-work
   liftIO $ hPutStrLn stderr $ showNetHierarchy $ exlined
   it "inlines correctly" (reprBlif inlined == reprBlif blifPicorv32)
     $ liftIO $ printBLIF $ toBLIF $ inlined
