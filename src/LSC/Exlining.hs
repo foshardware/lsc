@@ -37,7 +37,7 @@ exline_ ks netlist = exline
 exline :: SuffixTree Gate -> [Int] -> NetGraph -> NetGraph
 exline suffixTree (k : ks) top@(NetGraph name pins subs nodes edges)
   | not $ null isomorphicGates
-  = exline_ ks
+  = exline (divideSuffixTree len pos newGateVector suffixTree) ks
   $ NetGraph name pins
 
   (Map.insert (modelName netlist) netlist subs)
@@ -48,7 +48,8 @@ exline suffixTree (k : ks) top@(NetGraph name pins subs nodes edges)
 
   where
 
-    isomorphicGates@((len, pos@(p1 : _), _) : _)
+    ((len, pos@(p1 : _), _) : _) = isomorphicGates
+    isomorphicGates
       = filter ( \ (l, p : _, _) -> primitive `all` slice p l nodes)
       $ filter ( \ (_, _, score) -> score > 0)
       $ fmap (rescore nodes)
