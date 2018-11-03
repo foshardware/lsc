@@ -12,8 +12,7 @@ import Data.Vector
   ( Vector
   , unsafeFreeze, thaw
   , generate, (!)
-  , reverse
-  , drop, take
+  , reverse, drop
   , filter
   , slice, cons
   , concat
@@ -23,7 +22,7 @@ import qualified Data.Vector.Algorithms.Intro as Intro
 import qualified Data.Vector.Algorithms.Radix as Radix
 import Data.Vector.Algorithms.Radix (radix)
 import Data.Semigroup
-import Prelude hiding (reverse, drop, take, filter, concat)
+import Prelude hiding (reverse, drop, filter, concat)
 
 
 data SuffixTree a = SuffixTree (Vector a) SuffixArray LCP
@@ -39,28 +38,15 @@ type Suffix = Unboxed.Vector Int
 type Length = Int
 
 
-divideSuffixTree :: Int -> [Int] -> Vector a -> SuffixTree a -> SuffixTree a
-divideSuffixTree len pos string (SuffixTree _ suffixArray _) = SuffixTree string array lcp
-  where
-    array = foldr (cutSuffixArray len) suffixArray pos
-    lcp = constructLcp array
-
-cutSuffixArray :: Int -> Int -> SuffixArray -> SuffixArray
-cutSuffixArray len pos = fmap cutSuffix . filter cutArray
-
-  where
-
-    cutArray (p, _) = p < succ pos || p >= succ pos + len
-
-    cutSuffix (p, s) | p >= succ pos + len = (p - len + 1, s)
-    cutSuffix (p, s) = (p, Unboxed.take (succ pos - p) s <> Unboxed.singleton 0 <> Unboxed.drop (succ pos - p + len) s)
+divideSuffixTree :: Int -> [Int] -> a -> SuffixTree a -> SuffixTree a
+divideSuffixTree = undefined
 
 
 constructSuffixTree :: (a -> Int) -> Vector a -> SuffixTree a
-constructSuffixTree goedel string = SuffixTree string array lcp
+constructSuffixTree goedel string = SuffixTree string suffixArray lcp
   where
-    array = constructSuffixArray goedel string
-    lcp = constructLcp array
+    suffixArray = constructSuffixArray goedel string
+    lcp = constructLcp suffixArray
 
 constructSuffixArray :: (a -> Int) -> Vector a -> SuffixArray
 constructSuffixArray goedel string
