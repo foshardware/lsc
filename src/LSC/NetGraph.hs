@@ -23,13 +23,13 @@ showGraph netlist = showTreeWith
   (subModels netlist)
 
 showNetHierarchy :: NetGraph -> String
-showNetHierarchy netlist = unlines
+showNetHierarchy netlist = unlines [ showNetHierarchy m | m <- toList $ subModels netlist ]
+  ++ unlines
   [ mempty
   , "model: " ++ unpack (modelName netlist)
   , mempty
   , "Total: " ++ show (Vector.length $ gateVector netlist)
   ]
   ++ unlines [ unpack g ++ ": " ++ show c | (g, c) <- Map.assocs gates ]
-  ++ unlines [ showNetHierarchy m | m <- toList $ subModels netlist ]
   where
     gates = Map.fromListWith (+) [ (gateIdent g, 1 :: Int) | g <- toList $ gateVector netlist ]
