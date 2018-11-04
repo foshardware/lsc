@@ -1,10 +1,13 @@
+{-# LANGUAGE ParallelListComp #-}
 
 module LSC.NetGraph where
 
 import Data.Foldable
 import qualified Data.Map as Map
 import Data.Map.Internal.Debug
+import Data.Map (Map)
 import Data.Text (unpack)
+import Data.Vector (Vector)
 import qualified Data.Vector as Vector
 
 import LSC.Types
