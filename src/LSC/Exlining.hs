@@ -51,7 +51,7 @@ exline suffixTree (k : ks) top@(NetGraph name pins subs nodes edges)
     ((len, pos@(p1 : _), _) : _) = isomorphicGates
     isomorphicGates
       = sortBy ( \ (l, _, x) (m, _, y) -> compare (y, m) (x, l))
-      $ take 1
+      $ take 4
       $ filter ( \ (l, p : _, _) -> primitive `all` slice p l nodes)
       $ filter ( \ (_, _, score) -> score > 0)
       $ fmap (rescore nodes)
