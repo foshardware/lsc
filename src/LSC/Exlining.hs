@@ -122,7 +122,7 @@ createSublist len pos@(p1 : _) (NetGraph name (inputList, outputList, _) _ nodes
       [ (wireName w, dir)
       | (v, w@(_, (k, g))) <- maybe [] Map.assocs $ Map.lookup p1 closures
       , dir <- maybe [] pure $ direction g k v edges <|> Map.lookup v modelDirs
-      ] 
+      ]
 
     modelDirs = Map.fromList $ fmap (, In) inputList <> fmap (, Out) outputList
 
