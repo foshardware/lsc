@@ -20,13 +20,12 @@ import Data.Monoid
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Vector (Vector, slice, concat, (!), generate, cons)
-import Data.Text (Text, pack)
+import Data.Text (Text)
 import qualified Data.Text as T
 import Prelude hiding (concat)
 import TextShow
 
 import LSC.Types
-import LSC.NetGraph
 import LSC.SuffixTree
 
 
@@ -86,7 +85,7 @@ exline _ _ top = top
 
 
 createSublist :: Length -> [Position] -> NetGraph -> (Map Position Closure, NetGraph)
-createSublist len pos@(p1 : _) (NetGraph name (inputList, outputList, _) subs nodes edges)
+createSublist len pos@(p1 : _) (NetGraph name (inputList, outputList, _) _ nodes edges)
   = (,) closures
   $ NetGraph (name <> buildName scope)
 
