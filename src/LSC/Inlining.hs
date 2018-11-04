@@ -10,17 +10,12 @@ import Prelude hiding (concat)
 import LSC.Types
 
 
-inlineCount :: Int -> NetGraph -> NetGraph
-inlineCount 0 netlist = netlist
-inlineCount k netlist = inlineCount (k - 1) (inlineAll netlist)
-
-
 inlineAll :: NetGraph -> NetGraph
 inlineAll (NetGraph name pins subs nodes edges) = NetGraph name
 
   pins
 
-  subs
+  mempty
 
   (foldr build nodes subs)
 

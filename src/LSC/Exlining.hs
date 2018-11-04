@@ -181,7 +181,7 @@ scopeWires nodes = Map.fromList $ reverse
 
 
 wireName :: (Int, (Wire, Gate)) -> Text
-wireName (i, (k, _)) = k <> pack "_" <> showt i
+wireName (i, (k, _)) = k <> showt i
 
 
 buildName :: (Functor f, Foldable f) => f Gate -> Identifier
