@@ -4,6 +4,7 @@ module LSC.Inlining where
 import Control.Applicative
 import qualified Data.Map as Map
 import Data.Foldable hiding (concat)
+import Data.Monoid
 import Data.Vector (Vector, concat, singleton, (!), generate)
 import Prelude hiding (concat)
 
