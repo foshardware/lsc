@@ -86,6 +86,11 @@ library
       Liberty.Tokens,
       Liberty.Lexer,
 
+      Verilog.Parser,
+      Verilog.Syntax,
+      Verilog.Tokens,
+      Verilog.Lexer,
+
       LSC,
       LSC.Arboresence,
       LSC.BLIF,
