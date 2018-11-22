@@ -3,8 +3,9 @@
 module Verilog.Parser where
 
 import Control.Applicative hiding (Const, many, (<|>))
+import Data.Maybe
 import Data.Text (Text)
-import Text.Parsec
+import Text.Parsec hiding (optional, noneOf)
 import Text.Parsec.Pos
 import Text.Parsec.String (GenParser)
 import Prelude hiding (null)
@@ -15,36 +16,14 @@ import Verilog.Syntax
 
 type Parser = GenParser (Lexer Token) ()
 
-parseAST :: Text -> Either ParseError Verilog
-parseAST = parse ast [] . lexer []
+parseVerilog :: Text -> Either ParseError Verilog
+parseVerilog = parse ast [] . lexer []
 
 ast :: Parser Verilog
 ast = Verilog <$> many1 module'
 
 module' :: Parser Module
-module' = module_ >> Module
-  <$> ident
-  <*> between lparen rparen (wireDeclaration `sepBy` comma)
-  <*> many expression
-  <?> "module"
-
-expression :: Parser Expression
-expression = (moduleReference <|> incomprehensible) <* semi
-  <?> "expression"
-
-moduleReference :: Parser Expression
-moduleReference = ModuleReference
-  <$> ident
-  <*> ident
-  <*> between lparen rparen (wireDeclaration `sepBy` comma)
-  <*  semi
-  <?> "module_reference"
-
-wireDeclaration :: Parser WireDeclaration
-wireDeclaration = WireDeclaration () <$ incomprehensible
-
-incomprehensible :: Parser Expression
-incomprehensible = Incomprehensible () <$ many anyToken
+module' = Module <$> file
 
 -- --
 --
@@ -56,9 +35,12 @@ maybeToken test = token showT posT testT
   testT (L _ t) = test t
   pos2sourcePos (l, c) = newPos "" l c
 
-ident :: Parser Ident
-ident = maybeToken q
-  where q (Tok_Ident t) = Just t
+noneOf :: [Token] -> Parser Token
+noneOf ts = maybeToken $ \ r -> if r `elem` ts then Nothing else Just r
+
+file :: Parser Text
+file = maybeToken q
+  where q (Tok_File t) = Just t
         q _ = Nothing
 
 p :: Token -> Parser ()
@@ -68,4 +50,12 @@ semi = p Tok_Semi
 lparen = p Tok_LParen
 rparen = p Tok_RParen
 comma = p Tok_Comma
+assign_op = p Tok_AssignOp
+assign = p Tok_Assign
+endmodule = p Tok_Endmodule
+wire = p Tok_Wire
+reg = p Tok_Reg
+end = p Tok_End
+plusarg_reader = p Tok_PlusargReader
 
+showRtl (Verilog x) = show $ length x

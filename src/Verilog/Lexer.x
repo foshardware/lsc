@@ -18,12 +18,13 @@ $any     = [.\n\r]
 
 @nul_eof = \0 $any*
 
-@preprocessor = \# .* @newline
+@define = "`define"
+@endif  = "`endif"
+@ifdef  = "`ifdef"
+@ifndef = "`ifndef"
 
--- C# actually defines a letter to be any character (or escape sequence)
--- from the Unicode classes Lu, Ll, Lt, Lm, Lo or Nl. Identifiers must
--- start with a letter or an underscore, but can then also contain
--- characters from the classes Mn, Mc, Nd, Pc or Cf.
+@module = "module" $any* "endmodule"
+
 $ident_start = [a-zA-Z_\@]
 $ident_part  = [a-zA-Z_0-9]
 $const_part  = [A-Z_]
@@ -50,17 +51,8 @@ tokens :-
 $white+       ;
 @comment      ;
 @nul_eof      ;
-@preprocessor ;
 
--- Keywords
-module      { constTok Tok_Module     }
-endmodule   { constTok Tok_Endmodule  }
-
-
-\;           { constTok Tok_Semi       }
-\,           { constTok Tok_Comma      }
-\)           { constTok Tok_RParen     }
-\(           { constTok Tok_LParen     }
+@module { textTok Tok_File }
 
 
 {

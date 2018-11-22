@@ -19,6 +19,7 @@ import System.Process
 import BLIF.Builder
 import BLIF.Parser
 import LEF.Parser
+import Verilog.Parser
 
 import LSC
 import LSC.BLIF
@@ -57,6 +58,24 @@ program = do
         liftIO $ withCreateProcess (proc "lsc-test" []) { std_out = CreatePipe }
          $ \ _ hout _ _ -> for_ hout
           $ \ out -> Pipe.hGetContents out >>= Pipe.hPutStr stdout
+        exit
+
+    -- json output
+    when (Json `elem` fmap fst opts)
+      $ do
+
+        let verilogFiles = [v | (k, v) <- opts, k == Verilog ]
+
+        when (null verilogFiles) exit
+
+        verilog_ <- liftIO $ Text.readFile $ head verilogFiles
+        circuit <- lift $ either
+            (ioError . userError . show)
+            (pure)
+            (parseVerilog verilog_)
+
+        liftIO $ hPutStrLn stdout $ showRtl circuit
+
         exit
 
     let lefFiles   = [v | (k, v) <- opts, k == Lef ]
@@ -124,6 +143,8 @@ data FlagKey
   | Cores
   | Test
   | Rtl
+  | Verilog
+  | Json
   deriving (Eq, Show)
 
 type FlagValue = String
@@ -141,6 +162,9 @@ options =
     , Option ['t']      ["test"]       (NoArg  (Test, []))         "run tests and exit"
     , Option ['j']      ["cores"]
         (OptArg ((Cores,  ) . maybe "1" id) "count")               "use concurrency"
+
+    , Option ['J']      ["json"]       (NoArg  (Json, []))          "export json"
+    , Option ['u']      ["verilog"]    (ReqArg (Verilog, ) "FILE")  "verilog file"
     ]
 
 compilerOpts :: [String] -> IO ([Flag], [String])
@@ -148,5 +172,5 @@ compilerOpts argv =
     case getOpt Permute options argv of
         (o, n, []  ) -> pure (o, n)
         (_, _, errs) -> mempty <$ hPutStrLn stderr (concat errs ++ usageInfo header options)
-     where header = "Usage: lsc [OPTION...] files..."
+     where header = "Usage: lsc [OPTION...]"
 
