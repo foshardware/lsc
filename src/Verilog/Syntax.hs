@@ -1,12 +1,7 @@
 
 module Verilog.Syntax where
 
-import Data.Text (Text)
+import Language.Verilog.AST
 
-data Verilog = Verilog [Module]
+newtype Verilog = Verilog [Module]
   deriving (Eq, Show)
-
-data Module = Module Text
-  deriving (Eq, Show)
-
-type Ident = Text

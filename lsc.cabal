@@ -69,6 +69,7 @@ library
                 , containers
                 , blaze-svg
                 , time
+                , verilog
   exposed-modules:
       BLIF.Builder,
       BLIF.Parser,
