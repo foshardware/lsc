@@ -69,12 +69,9 @@ program = do
         when (null verilogFiles) exit
 
         verilog_ <- liftIO $ Text.readFile $ head verilogFiles
-        circuit <- lift $ either
-            (ioError . userError . show)
-            (pure)
-            (parseVerilog verilog_)
 
-        liftIO $ hPutStrLn stdout $ showRtl circuit
+        -- liftIO $ hPutStrLn stdout $ preprocessor verilog_
+        liftIO $ hPutStrLn stdout $ show $ parseVerilog verilog_
 
         exit
 
