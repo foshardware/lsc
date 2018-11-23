@@ -8,6 +8,8 @@ import Control.Monad.Trans.Maybe
 
 import Data.Foldable (for_)
 
+import qualified Data.ByteString.Lazy as Bytes
+
 import qualified Data.Text.IO as Text
 import qualified Data.Text.Lazy.IO as Pipe
 
@@ -23,6 +25,7 @@ import Verilog.Parser
 
 import LSC
 import LSC.BLIF
+import LSC.D3
 import LSC.LEF
 import LSC.SVG
 import LSC.Exlining
@@ -70,8 +73,8 @@ program = do
 
         verilog_ <- liftIO $ Text.readFile $ head verilogFiles
 
-        -- liftIO $ hPutStrLn stdout $ preprocessor verilog_
-        liftIO $ hPutStrLn stdout $ show $ parseVerilog verilog_
+        liftIO $ Bytes.putStrLn $ encodeVerilog $ parseVerilog verilog_
+        -- liftIO $ hPutStrLn stdout $ show $ parseVerilog verilog_
 
         exit
 
