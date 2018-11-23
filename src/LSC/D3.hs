@@ -14,7 +14,7 @@ import Verilog.Syntax
 data D3Dag = D3Dag String [D3Dag]
 
 instance ToJSON D3Dag where
-  toJSON (D3Dag name children) = object ["id" .= name, "children" .= toJSON children]
+  toJSON (D3Dag name children) = object ["name" .= name, "children" .= toJSON children]
 
 
 newtype DAG a = DAG a
