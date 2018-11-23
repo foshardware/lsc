@@ -25,11 +25,11 @@ encodeVerilog = encode . DAG
 instance ToJSON (DAG Verilog) where
   toJSON (DAG verilog) = toJSON (build root)
     where
-    build x
-      = D3Dag x
+    build node
+      = D3Dag node
       $ fmap build
       $ concat $ maybeToList
-      $ Map.lookup x dependencies
+      $ Map.lookup node dependencies
     root = head $
       [ name
       | name <- Map.keys dependencies
