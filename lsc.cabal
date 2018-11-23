@@ -89,8 +89,6 @@ library
 
       Verilog.Parser,
       Verilog.Syntax,
-      Verilog.Tokens,
-      Verilog.Lexer,
 
       LSC,
       LSC.Arboresence,

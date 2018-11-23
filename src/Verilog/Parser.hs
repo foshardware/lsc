@@ -10,7 +10,7 @@ import Verilog.Syntax
 
 
 parseVerilog :: Text -> Verilog
-parseVerilog = Verilog . parseFile [] "" . unpack
+parseVerilog = Verilog . parseFile [] ""
 
-preprocessor :: Text -> String
-preprocessor = preprocess [] "" . unpack
+preprocessor :: Text -> Text
+preprocessor = preprocess [] ""
