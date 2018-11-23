@@ -4,7 +4,8 @@
 module LSC.D3 where
 
 import Data.Aeson
-import Data.Map as Map
+import Data.Maybe
+import qualified Data.Map as Map
 import Data.ByteString.Lazy (ByteString)
 
 import Verilog.Syntax
@@ -22,11 +23,25 @@ encodeVerilog :: Verilog -> ByteString
 encodeVerilog = encode . DAG
 
 instance ToJSON (DAG Verilog) where
-  toJSON (DAG verilog) = toJSON (verilogModuleHierarchy verilog)
-
-verilogModuleHierarchy :: Verilog -> Map String [String]
-verilogModuleHierarchy verilog = Map.fromList
-  [ (moduleName m, moduleReferences m)
-  | m <- modules verilog
-  ]
+  toJSON (DAG verilog) = toJSON (build root)
+    where
+    build x
+      = D3Dag x
+      $ fmap build
+      $ concat $ maybeToList
+      $ Map.lookup x dependencies
+    root = head $
+      [ name
+      | name <- Map.keys dependencies
+      , isNothing $ Map.lookup name dependents
+      ] ++ (Map.keys dependencies)
+    dependencies = Map.fromList
+      [ (moduleName m, moduleReferences m)
+      | m <- modules verilog
+      ]
+    dependents = Map.fromListWith (++)
+      [ (child, [moduleName m])
+      | m <- modules verilog
+      , child <- moduleReferences m
+      ]
 
