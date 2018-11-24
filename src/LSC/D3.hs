@@ -26,9 +26,24 @@ encodeVerilog :: Verilog -> ByteString
 encodeVerilog = encode . DAG
 
 instance ToJSON (DAG Verilog) where
-  toJSON (DAG verilog) = toJSON $ build (root, 1)
+  toJSON (DAG verilog) = toJSON $ object [ "tree" .= tree, "stages" .= stages ]
 
     where
+
+    tree = build (root, 1)
+
+    (_, stages)
+      = unzip
+      $ take 32
+      $ takeWhile ( \ (D3Dag _ _ xs, _) -> not $ null xs)
+      $ iterate (\ (t, ls) -> let s = cut ls t in (s, leaves s)) (tree, leaves tree)
+
+    cut ls (D3Dag n k xs)
+      = D3Dag n k
+      $ cut ls <$> [ d | d@(D3Dag _ x _) <- xs, isNothing $ Map.lookup x ls ]
+
+    leaves (D3Dag n k []) = Map.singleton k n
+    leaves (D3Dag _ _ xs) = Map.unionsWith (+) (leaves <$> xs)
 
     build (node, n)
       = D3Dag n node
