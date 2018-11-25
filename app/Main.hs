@@ -45,85 +45,66 @@ exit = guard False
 program :: App ()
 program = do
 
-    (opts, _) <- liftIO $ compilerOpts =<< getArgs
+  (opts, _) <- liftIO $ compilerOpts =<< getArgs
 
-    when (null opts) exit
+  when (null opts) exit
 
-    -- print version string
-    when (Version `elem` fmap fst opts)
-      $ do
-        liftIO $ hPutStrLn stderr $ versionString
-        exit
+  let arg x = elem x $ fst <$> opts
 
-    -- run tests
-    when (Test `elem` fmap fst opts)
-      $ do
-        liftIO $ withCreateProcess (proc "lsc-test" []) { std_out = CreatePipe }
-         $ \ _ hout _ _ -> for_ hout
-          $ \ out -> Pipe.hGetContents out >>= Pipe.hPutStr stdout
-        exit
+  -- print version string
+  when (arg Version)
+    $ do
+      liftIO $ hPutStrLn stderr $ versionString
+      exit
 
-    -- json report
-    when (Json `elem` fmap fst opts && Verilog `elem` fmap fst opts)
-      $ do
-        verilog_ <- liftIO $ Text.readFile $ head [v | (k, v) <- opts, k == Verilog ]
-        liftIO $ Bytes.putStrLn $ encodeVerilog $ parseVerilog verilog_
-        exit
+  -- run tests
+  when (arg Test)
+    $ do
+      liftIO $ withCreateProcess (proc "lsc-test" []) { std_out = CreatePipe }
+        $ \ _ hout _ _ -> for_ hout
+        $ \ out -> Pipe.hGetContents out >>= Pipe.hPutStr stdout
+      exit
 
-    when (Json `elem` fmap fst opts && Blif `elem` fmap fst opts)
-      $ do
-        blif_ <- liftIO $ Text.readFile $ head [v | (k, v) <- opts, k == Blif]
-        liftIO $ either (ioError . userError . show) (Bytes.putStrLn . encodeBLIF) (parseBLIF blif_)
-        exit
+  -- json report
+  when (and $ arg <$> [Json, Verilog])
+    $ do
+      verilog_ <- liftIO $ Text.readFile $ head [v | (k, v) <- opts, k == Verilog ]
+      liftIO $ Bytes.putStrLn $ encodeVerilog $ parseVerilog verilog_
+      exit
 
-
-    lef_ <- liftIO $ Text.readFile $ head [v | (k, v) <- opts, k == Lef ]
-    net_ <- liftIO $ Text.readFile $ head [v | (k, v) <- opts, k == Blif]
-
-    tech <- lift $ either
+  when (and $ arg <$> [Json, Lef, Blif, Exline])
+    $ do
+      net_ <- liftIO $ Text.readFile $ head [v | (k, v) <- opts, k == Blif]
+      lef_ <- liftIO $ Text.readFile $ head [v | (k, v) <- opts, k == Lef ]
+      tech <- lift $ either
         (ioError . userError . show)
         (pure . fromLEF)
         (parseLEF lef_)
-
-    netlist <- lift $ either
+      netlist <- liftIO $ either
         (ioError . userError . show)
-        (pure . gnostic tech . fromBLIF)
+        (Bytes.putStrLn . encodeNetGraph . gnostic tech . fromBLIF)
         (parseBLIF net_)
+      exit
 
-    -- print exlined blif to stdout
-    when (Debug `elem` fmap fst opts && Exline `elem` fmap fst opts)
-      $ do
-        liftIO $ hPutStrLn stderr $ showGraph $ exline_ (replicate 3 4) netlist
-        exit
+  when (arg Exline && not (arg Blif))
+    $ do
+      liftIO $ hPutStrLn stderr "exline: no blif given"
+      exit
 
-    -- print exlined blif to stdout
-    when (Exline `elem` fmap fst opts)
-      $ do
-        liftIO $ printBLIF $ toBLIF $ exline_ (replicate 4 8) netlist
-        exit
+  when (arg Exline && not (arg Lef))
+    $ do
+      liftIO $ hPutStrLn stderr "exline: no lef given"
+      exit
 
-    -- print debug info
-    when (Debug `elem` fmap fst opts)
-      $ lift $ runLSC tech $ debug ["start debug output on stderr"]
+  when (and $ arg <$> [Json, Blif])
+    $ do
+      blif_ <- liftIO $ Text.readFile $ head [v | (k, v) <- opts, k == Blif]
+      liftIO $ either
+        (ioError . userError . show)
+        (Bytes.putStrLn . encodeBLIF)
+        (parseBLIF blif_)
+      exit
 
-    -- use concurrency
-    let j = maybe 1 read $ lookup Cores opts
-
-    -- svg output
-    circuit2d <- lift $ runLSC
-      ( do
-        tech
-        bootstrap $ \ t -> t { enableDebug = Debug `elem` fmap fst opts } )
-      ( stage1 j netlist )
-
-    when (Compile `elem` fmap fst opts)
-      $ do
-        liftIO $ plotStdout circuit2d
-
-    -- sat output
-    when (Verbose `elem` fmap fst opts)
-      $ do
-        liftIO $ hPutStrLn stderr $ show circuit2d
 
 
 type Flag = (FlagKey, FlagValue)
@@ -145,8 +126,8 @@ data FlagKey
 
 type FlagValue = String
 
-options :: [OptDescr Flag]
-options =
+args :: [OptDescr Flag]
+args =
     [ Option ['v']      ["verbose"]    (NoArg  (Verbose, []))      "chatty output on stderr"
     , Option ['V', '?'] ["version"]    (NoArg  (Version, []))      "show version number"
     , Option ['b']      ["blif"]       (ReqArg (Blif, ) "FILE")    "BLIF file"
@@ -165,8 +146,8 @@ options =
 
 compilerOpts :: [String] -> IO ([Flag], [String])
 compilerOpts argv =
-    case getOpt Permute options argv of
+    case getOpt Permute args argv of
         (o, n, []  ) -> pure (o, n)
-        (_, _, errs) -> mempty <$ hPutStrLn stderr (concat errs ++ usageInfo header options)
-     where header = "Usage: lsc [OPTION...]"
+        (_, _, errs) -> mempty <$ hPutStrLn stderr (concat errs ++ usageInfo header args)
+     where header = "Usage: lsc [arg...]"
 

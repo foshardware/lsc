@@ -6,7 +6,7 @@
 
 # stack build --profile --ghc-options=-fprof-auto && stack exec -- lsc -J -u ../rocket-chip-verilog/freechips.rocketchip.system.DefaultConfig.v +RTS -p
 
-stack build --profile --ghc-options=-fprof-auto && stack exec -- lsc -J -b ../rocket-chip-verilog/rocket.blif +RTS -p
+stack build --profile --ghc-options=-fprof-auto && stack exec -- lsc -J -x -l tests/osu035.lef -b ../rocket-chip-verilog/rocket.blif +RTS -p
 
 # stack build --profile --ghc-options=-fprof-auto-top && stack exec -- lsc-test +RTS -p
 
