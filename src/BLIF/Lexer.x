@@ -20,12 +20,8 @@ $any     = [.\n\r]
 
 @preprocessor = \# .* @newline
 
--- C# actually defines a letter to be any character (or escape sequence)
--- from the Unicode classes Lu, Ll, Lt, Lm, Lo or Nl. Identifiers must
--- start with a letter or an underscore, but can then also contain
--- characters from the classes Mn, Mc, Nd, Pc or Cf.
 $ident_start = [a-zA-Z_\@\$]
-$ident_part  = [a-zA-Z_0-9\[\]\$\.\:\\]
+$ident_part  = [a-zA-Z_0-9\[\]\$\.\:\\\?]
 $const_part  = [A-Z_]
 
 $bit       = [0-1]

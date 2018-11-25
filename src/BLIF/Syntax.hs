@@ -5,11 +5,19 @@ import Data.Text (Text)
 
 type Ident = Text
 
-data BLIF = BLIF [Model]
+newtype BLIF = BLIF { models :: [Model] }
   deriving (Eq, Show)
 
 data Model = Model ModelName InputList OutputList ClockList [Command]
   deriving (Eq, Show)
+
+modelName :: Model -> ModelName
+modelName (Model name _ _ _ _) = name
+
+subcircuits :: Model -> [Ident]
+subcircuits m@(Model n i o c (Subcircuit name _ : cs)) = name : subcircuits (Model n i o c cs)
+subcircuits m@(Model n i o c (_ : cs)) = subcircuits (Model n i o c cs)
+subcircuits   (Model _ _ _ _ _) = []
 
 type ModelName = Ident
 

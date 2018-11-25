@@ -63,26 +63,22 @@ program = do
           $ \ out -> Pipe.hGetContents out >>= Pipe.hPutStr stdout
         exit
 
-    -- json output
-    when (Json `elem` fmap fst opts)
+    -- json report
+    when (Json `elem` fmap fst opts && Verilog `elem` fmap fst opts)
       $ do
-
-        let verilogFiles = [v | (k, v) <- opts, k == Verilog ]
-
-        when (null verilogFiles) exit
-
-        verilog_ <- liftIO $ Text.readFile $ head verilogFiles
-
+        verilog_ <- liftIO $ Text.readFile $ head [v | (k, v) <- opts, k == Verilog ]
         liftIO $ Bytes.putStrLn $ encodeVerilog $ parseVerilog verilog_
-        -- liftIO $ hPutStrLn stdout $ show $ parseVerilog verilog_
-
         exit
 
-    let lefFiles   = [v | (k, v) <- opts, k == Lef ]
-        blifFiles  = [v | (k, v) <- opts, k == Blif]
+    when (Json `elem` fmap fst opts && Blif `elem` fmap fst opts)
+      $ do
+        blif_ <- liftIO $ Text.readFile $ head [v | (k, v) <- opts, k == Blif]
+        liftIO $ either (ioError . userError . show) (Bytes.putStrLn . encodeBLIF) (parseBLIF blif_)
+        exit
 
-    lef_ <- liftIO $ Text.readFile $ head lefFiles
-    net_ <- liftIO $ Text.readFile $ head blifFiles
+
+    lef_ <- liftIO $ Text.readFile $ head [v | (k, v) <- opts, k == Lef ]
+    net_ <- liftIO $ Text.readFile $ head [v | (k, v) <- opts, k == Blif]
 
     tech <- lift $ either
         (ioError . userError . show)

@@ -11,7 +11,7 @@ import Text.Parsec.Pos
 import Prelude hiding (null)
 
 import BLIF.Lexer
-import BLIF.Syntax
+import BLIF.Syntax hiding (modelName)
 
 
 type Parser = GenParser (Lexer Token) ()
