@@ -10,6 +10,7 @@ module LSC.Exlining where
 --
 
 import Control.Applicative
+import Control.Monad.State
 import Data.Default
 import Data.Foldable hiding (concat)
 import Data.Function (on)
@@ -29,27 +30,57 @@ import LSC.Types
 import LSC.SuffixTree
 
 
+type Exlining = State (SuffixTree Gate)
+
 exline_ :: [Int] -> NetGraph -> NetGraph
-exline_ ks netlist = exline 
+exline_ ks netlist = evalState
+  (exline ks netlist)
   (constructSuffixTree (hash . gateIdent) (gateVector netlist))
-  ks netlist
 
-exline :: SuffixTree Gate -> [Int] -> NetGraph -> NetGraph
-exline suffixTree (k : ks) top@(NetGraph name pins subs nodes edges)
-  | not $ null isomorphicGates
-  = exline (divideSuffixTree len pos (hash $ modelName netlist) newGateVector suffixTree) ks
-  $ NetGraph name pins
+exline :: [Int] -> NetGraph -> Exlining NetGraph
+exline [] top = pure top
+exline (k : ks) top@(NetGraph name pins subs nodes edges) = do
 
-  (Map.insert (modelName netlist) netlist subs)
+  suffixTree <- get
 
-  newGateVector
+  let ((len, pos@(p1 : _), _) : _) = isomorphicGates suffixTree
 
-  edges
+      (closures, netlist) = createSublist len pos top
 
+      gate p = Gate (modelName netlist) (wires p) (maps p) 0
+
+      wires p = Map.fromList
+        [ (wireName w, v)
+        | node <- toList $ slice (p - len) len nodes
+        , v <- toList (gateWires node)
+        , w <- maybe [] pure $ Map.lookup v =<< Map.lookup (p - len) closures
+        ]
+
+      maps p = Map.fromList
+        [ (v, u)
+        | (offset, nodep) <- zip [0..] $ toList $ slice (p - len) len nodes
+        , let node1 = nodes ! (p1 + offset)
+        , (u, v) <- toList (gateWires nodep) `zip` toList (gateWires node1)
+        ]
+
+      newGateVector = concat $ reverse
+        [ head $ [ gate p `cons` slice p (q - p) nodes | p > 0 ] <> [ slice 0 q nodes ]
+        | p <- fmap (+ len) pos <> pure 0
+        | q <- length nodes : pos
+        ]
+
+  put $ divideSuffixTree len pos (hash $ modelName netlist) newGateVector suffixTree
+
+  if null $ isomorphicGates suffixTree
+    then pure top
+    else exline ks $ NetGraph
+           name pins
+           (Map.insert (modelName netlist) netlist subs)
+           newGateVector
+           edges
   where
 
-    ((len, pos@(p1 : _), _) : _) = isomorphicGates
-    isomorphicGates
+    isomorphicGates suffixTree
       = sortBy ( \ (l, _, x) (m, _, y) -> compare (y, m) (x, l))
       $ take 4
       $ filter ( \ (l, p : _, _) -> primitive `all` slice p l nodes)
@@ -58,30 +89,6 @@ exline suffixTree (k : ks) top@(NetGraph name pins subs nodes edges)
       $ maximalRepeatsDisjoint suffixTree (hash . gateIdent) k
 
     primitive g = name /= T.take (T.length name) (gateIdent g)
-
-    gate p = Gate (modelName netlist) (wires p) (maps p) 0
-    wires p = Map.fromList
-      [ (wireName w, v)
-      | node <- toList $ slice (p - len) len nodes
-      , v <- toList (gateWires node)
-      , w <- maybe [] pure $ Map.lookup v =<< Map.lookup (p - len) closures
-      ]
-    maps p = Map.fromList
-      [ (v, u)
-      | (offset, nodep) <- zip [0..] $ toList $ slice (p - len) len nodes
-      , let node1 = nodes ! (p1 + offset)
-      , (u, v) <- toList (gateWires nodep) `zip` toList (gateWires node1)
-      ]
-
-    (closures, netlist) = createSublist len pos top
-
-    newGateVector = concat $ reverse
-      [ head $ [ gate p `cons` slice p (q - p) nodes | p > 0 ] <> [ slice 0 q nodes ]
-      | p <- fmap (+ len) pos <> pure 0
-      | q <- length nodes : pos
-      ]
-
-exline _ _ top = top
 
 
 createSublist :: Length -> [Position] -> NetGraph -> (Map Position Closure, NetGraph)
