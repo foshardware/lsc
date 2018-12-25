@@ -39,8 +39,8 @@ exlineDeep = exlineDeepWithEscapeHatch $ const True
 
 
 exlineDeepWithEscapeHatch :: (String -> Bool) -> [Int] -> NetGraph -> NetGraph
-exlineDeepWithEscapeHatch escape _ netlist@(NetGraph name _ _ _ _)
-  | escape $ unpack name
+exlineDeepWithEscapeHatch escape _ netlist
+  | escape $ unpack $ modelName netlist
   = netlist 
 exlineDeepWithEscapeHatch escape ks top@(NetGraph name pins subs nodes edges)
   = netlist
