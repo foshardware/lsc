@@ -21,7 +21,7 @@ import Data.Monoid
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Vector (Vector, slice, concat, (!), generate, cons)
-import Data.Text (Text)
+import Data.Text (Text, unpack)
 import qualified Data.Text as T
 import Prelude hiding (concat)
 import TextShow
@@ -32,10 +32,25 @@ import LSC.SuffixTree
 
 type Exlining = State (SuffixTree Gate)
 
+
+exlineDeep :: [Int] -> NetGraph -> NetGraph
+exlineDeep = exlineDeepWithEscapeHatch $ const True
+
+
+exlineDeepWithEscapeHatch :: (String -> Bool) -> [Int] -> NetGraph -> NetGraph
+exlineDeepWithEscapeHatch escape _ netlist@(NetGraph name _ _ _ _)
+  | escape $ unpack name
+  = netlist 
+exlineDeepWithEscapeHatch escape ks (NetGraph name pins subs nodes edges)
+  = exline_ ks
+  $ NetGraph name pins (exlineDeepWithEscapeHatch escape ks <$> subs) nodes edges
+
+
 exline_ :: [Int] -> NetGraph -> NetGraph
 exline_ ks netlist = evalState
   (exline ks netlist)
   (constructSuffixTree (hash . gateIdent) (gateVector netlist))
+
 
 exline :: [Int] -> NetGraph -> Exlining NetGraph
 exline [] top = pure top

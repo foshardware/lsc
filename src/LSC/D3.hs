@@ -93,10 +93,16 @@ instance ToJSON (DAG NetGraph) where
 
     (_, stages) = eval tree
 
-    dependencies = Map.fromList $ (unpack $ LSC.modelName netlist, fmap unpack $ filter (not . primitive) $ fmap gateIdent $ toList $ gateVector netlist) :
-      [ (unpack $ LSC.modelName m, fmap unpack $ filter (not . primitive) $ fmap gateIdent $ toList $ gateVector m)
-      | m <- Map.elems $ subModels netlist
-      ]
+    dependencies
+      = Map.fromList
+      $ ( unpack $ LSC.modelName netlist
+        , fmap unpack $ filter (not . primitive) $ fmap gateIdent $ toList $ gateVector netlist
+        )
+      : [ ( unpack $ LSC.modelName m
+          , fmap unpack $ filter (not . primitive) $ fmap gateIdent $ toList $ gateVector m
+          )
+        | m <- getLeaves netlist
+        ]
 
 
 type Leaves = Map String Integer
