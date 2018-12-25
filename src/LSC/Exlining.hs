@@ -11,6 +11,7 @@ module LSC.Exlining where
 
 import Control.Applicative
 import Control.Monad.State
+import Control.Parallel (par)
 import Data.Default
 import Data.Foldable hiding (concat)
 import Data.Function (on)
@@ -41,9 +42,12 @@ exlineDeepWithEscapeHatch :: (String -> Bool) -> [Int] -> NetGraph -> NetGraph
 exlineDeepWithEscapeHatch escape _ netlist@(NetGraph name _ _ _ _)
   | escape $ unpack name
   = netlist 
-exlineDeepWithEscapeHatch escape ks (NetGraph name pins subs nodes edges)
-  = exline_ ks
-  $ NetGraph name pins (exlineDeepWithEscapeHatch escape ks <$> subs) nodes edges
+exlineDeepWithEscapeHatch escape ks top@(NetGraph name pins subs nodes edges)
+  = netlist
+  where
+    netlist = deep `par` exline_ ks (NetGraph name pins deep nodes edges)
+    deep = Map.fromAscList $ mapLSC
+      [ (k, exlineDeepWithEscapeHatch escape ks v) | (k, v) <- Map.toAscList subs ]
 
 
 exline_ :: [Int] -> NetGraph -> NetGraph

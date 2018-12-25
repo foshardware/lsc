@@ -200,6 +200,9 @@ instance MonadParallel LST where
 runLSC :: Bootstrap () -> LSC a -> IO a
 runLSC b a = runSMT $ unLST (lowerCodensity a) `runGnosticT` freeze b
 
+mapLSC :: [a] -> [a]
+mapLSC = id
+
 concLSC :: [LSC a] -> LSC [a]
 concLSC = lift . Par.sequence . fmap lowerCodensity
 

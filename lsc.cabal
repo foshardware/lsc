@@ -58,6 +58,7 @@ library
                 , kan-extensions
                 , monad-loops
                 , monad-parallel
+                , parallel
                 , unordered-containers
                 , reducers
                 , array
