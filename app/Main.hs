@@ -80,9 +80,12 @@ program = do
         (ioError . userError . show)
         (pure . fromLEF)
         (parseLEF lef_)
-      netlist <- liftIO $ either
+
+      let exliner = exlineDeepWithEscapeHatch (/= "SystemBus") [16]
+
+      liftIO $ either
         (ioError . userError . show)
-        (Bytes.putStrLn . encodeNetGraph . gnostic tech . fromBLIF)
+        (Bytes.putStrLn . encodeNetGraph . exliner . gnostic tech . fromBLIF)
         (parseBLIF net_)
       exit
 
