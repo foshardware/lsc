@@ -26,7 +26,7 @@ executable lsc
                      , process
                      , bytestring
   hs-source-dirs:      app
-  ghc-options:         -Wall -O2 -threaded -with-rtopts=-N
+  ghc-options:         -Wall -O2 -threaded -with-rtsopts=-N
   default-language:    Haskell2010
   other-modules:       Paths_lsc
 
@@ -43,7 +43,7 @@ executable lsc-test
                      , file-embed
                      , bytestring
   hs-source-dirs:      app
-  ghc-options:         -Wall -O2 -threaded -with-rtopts=-N
+  ghc-options:         -Wall -O2 -threaded -with-rtsopts=-N
   default-language:    Haskell2010
   other-modules:       Paths_lsc
 

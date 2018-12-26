@@ -81,7 +81,8 @@ program = do
         (pure . fromLEF)
         (parseLEF lef_)
 
-      let exliner = exlineDeepWithEscapeHatch (/= "SystemBus") [16]
+      liftIO $ hPutStrLn stderr "exline reporting."
+      let exliner = exlineDeepWithEscapeHatch (/= "Queue_1") [4]
 
       liftIO $ either
         (ioError . userError . show)
