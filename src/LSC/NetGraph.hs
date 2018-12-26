@@ -1,25 +1,13 @@
 
 module LSC.NetGraph where
 
-import Control.Monad.Writer
 import Data.Foldable
-import Data.Semigroup
-import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Map.Internal.Debug
-import Data.Text (Text, unpack)
+import Data.Text (unpack)
 import qualified Data.Vector as Vector
 
 import LSC.Types
-
-
-collectAtRoot :: NetGraph -> NetGraph
-collectAtRoot netlist = netlist { subModels = execWriter $ new netlist }
-  where
-    new :: NetGraph -> Writer (Map Text NetGraph) ()
-    new graph = do
-      sequence_ $ new <$> subModels graph
-      tell $ subModels graph
 
 
 getLeaves :: NetGraph -> [NetGraph]

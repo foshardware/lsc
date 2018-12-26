@@ -19,7 +19,6 @@ import qualified Control.Monad.Parallel as Par
 import Control.Monad.Reader (ReaderT(..), Reader, runReader)
 import qualified Control.Monad.Reader as Reader
 import Control.Monad.State
-import Control.Parallel.Strategies
 
 import Data.Time.Clock.POSIX
 
@@ -38,11 +37,11 @@ data NetGraph = NetGraph
 
 instance Semigroup NetGraph where
   net1 <> net2 = NetGraph
-    (modelName net1)
-    (modelPins net1)
-    (subModels net1 `mappend` subModels net2)
-    (gateVector net1)
-    (netMapping net1)
+    (modelName  net1 `mappend` modelName  net2)
+    (modelPins  net1 `mappend` modelPins  net2)
+    (subModels  net1 `mappend` subModels  net2)
+    (gateVector net1 `mappend` gateVector net2)
+    (netMapping net1 `mappend` netMapping net2)
 
 instance Monoid NetGraph where
   mempty = NetGraph mempty mempty mempty mempty mempty
@@ -123,11 +122,10 @@ data Port = Port
 instance Default Port where
   def = Port mempty [(0, 0, 0, 0)]
 
-
 type Rectangle = (Integer, Integer, Integer, Integer)
 
 data Dir = In | Out | InOut
-  deriving (Eq, Show, Enum)
+  deriving (Eq, Show)
 
 
 data Technology = Technology
@@ -204,9 +202,6 @@ runLSC b a = runSMT $ unLST (lowerCodensity a) `runGnosticT` freeze b
 
 concLSC :: [LSC a] -> LSC [a]
 concLSC = lift . Par.sequence . fmap lowerCodensity
-
-conc :: NFData a => [a] -> [a]
-conc ls = ls `using` parList rdeepseq
 
 liftSMT :: Symbolic a -> LSC a
 liftSMT = lift . LST . lift
