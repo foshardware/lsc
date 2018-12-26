@@ -26,13 +26,14 @@ import Prelude hiding (concat)
 import TextShow
 
 import LSC.Types
+import LSC.NetGraph
 import LSC.SuffixTree
 
 
 exline_ :: [Int] -> NetGraph -> NetGraph
-exline_ ks netlist = exline 
-  (constructSuffixTree (hash . gateIdent) (gateVector netlist))
-  ks netlist
+exline_ ks netlist
+  = collectAtRoot
+  $ exline (constructSuffixTree (hash . gateIdent) (gateVector netlist)) ks netlist
 
 exline :: SuffixTree Gate -> [Int] -> NetGraph -> NetGraph
 exline suffixTree (k : ks) top@(NetGraph name pins subs nodes edges)
@@ -40,7 +41,7 @@ exline suffixTree (k : ks) top@(NetGraph name pins subs nodes edges)
   = exline (divideSuffixTree len pos (hash $ modelName netlist) newGateVector suffixTree) ks
   $ NetGraph name pins
 
-  (Map.insert (modelName netlist) netlist subs)
+  (Map.insert (modelName netlist) netlist $ subs)
 
   newGateVector
 

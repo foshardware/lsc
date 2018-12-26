@@ -26,7 +26,7 @@ executable lsc
                      , process
                      , bytestring
   hs-source-dirs:      app
-  ghc-options:         -Wall -O2 -threaded
+  ghc-options:         -Wall -O2 -threaded -with-rtsopts=-N
   default-language:    Haskell2010
   other-modules:       Paths_lsc
 
@@ -58,6 +58,8 @@ library
                 , kan-extensions
                 , monad-loops
                 , monad-parallel
+                , parallel
+                , deepseq
                 , unordered-containers
                 , reducers
                 , array

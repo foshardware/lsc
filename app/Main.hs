@@ -82,7 +82,7 @@ program = do
         (parseLEF lef_)
       netlist <- liftIO $ either
         (ioError . userError . show)
-        (Bytes.putStrLn . encodeNetGraph . gnostic tech . fromBLIF)
+        (Bytes.putStrLn . encodeNetGraph . exline_ [256] . gnostic tech . fromBLIF)
         (parseBLIF net_)
       exit
 
