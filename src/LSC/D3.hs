@@ -16,6 +16,8 @@ import BLIF.Syntax      as BLIF
 import Verilog.Syntax   as Verilog
 import LSC.Types        as LSC
 
+import LSC.NetGraph
+
 
 data D3Dag = D3Dag Integer String [D3Dag]
 
@@ -93,13 +95,13 @@ instance ToJSON (DAG NetGraph) where
 
     (_, stages) = eval tree
 
-    dependencies = Map.fromList $ (unpack $ LSC.modelName netlist, fmap unpack $ filter (not . primitive) $ fmap gateIdent $ toList $ gateVector netlist) :
-      [ (unpack $ LSC.modelName m, fmap unpack $ filter (not . primitive) $ fmap gateIdent $ toList $ gateVector m)
-      | m <- Map.elems $ subModels netlist
+    dependencies = Map.fromList $
+      [ ( unpack $ LSC.modelName m
+        , fmap unpack $ filter (not . primitive) $ fmap gateIdent $ toList $ gateVector m
+        )
+      | m <- flattenHierarchy netlist
       ]
 
-
-type Leaves = Map String Integer
 
 eval :: D3Dag -> ([D3Dag], [Leaves])
 eval tree
@@ -112,6 +114,7 @@ cut :: Leaves -> D3Dag -> D3Dag
 cut ls (D3Dag n k xs)
   = D3Dag n k
   $ cut ls <$> [ d | d@(D3Dag _ x _) <- xs, isNothing $ Map.lookup x ls ]
+
 
 leaves :: D3Dag -> Leaves
 leaves (D3Dag n k []) = Map.singleton k n

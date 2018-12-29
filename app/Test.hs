@@ -44,11 +44,16 @@ tests = do
     (pure . gnostic lefOsu035 . fromBLIF)
     (parseBLIF picorv32File)
 
-  let exlined = exline_ (replicate 128 8) blifPicorv32
+  blifQueue1 <- lift $ either
+    (ioError . userError . show)
+    (pure . gnostic lefOsu035 . fromBLIF)
+    (parseBLIF queue1File)
+
+  let exlined = exlineDeepWithEscapeHatch (const False) (replicate 8 8) blifQueue1
   let inlined = inlineAll exlined
   liftIO $ printBLIF $ toBLIF $ exlined
   liftIO $ hPutStrLn stderr $ showNetHierarchy $ exlined
-  it "inlines correctly" (reprBlif inlined == reprBlif blifPicorv32)
+  it "inlines correctly" (reprBlif inlined == reprBlif blifQueue1)
     $ liftIO $ printBLIF $ toBLIF $ inlined
 
   where
@@ -71,6 +76,9 @@ it_ desc b = it desc b $ pure ()
 
 picorv32File :: Text
 picorv32File = decodeUtf8 $(embedFile "tests/picorv32.blif")
+
+queue1File :: Text
+queue1File = decodeUtf8 $(embedFile "tests/queue_1.blif")
 
 osu035File :: Text
 osu035File = decodeUtf8 $(embedFile "tests/osu035.lef")

@@ -80,9 +80,13 @@ program = do
         (ioError . userError . show)
         (pure . fromLEF)
         (parseLEF lef_)
-      netlist <- liftIO $ either
+
+      liftIO $ hPutStrLn stderr "exline reporting."
+      let exliner = exlineDeepWithEscapeHatch (/= "Queue_1") [4]
+
+      liftIO $ either
         (ioError . userError . show)
-        (Bytes.putStrLn . encodeNetGraph . gnostic tech . fromBLIF)
+        (Bytes.putStrLn . encodeNetGraph . exliner . gnostic tech . fromBLIF)
         (parseBLIF net_)
       exit
 
@@ -128,21 +132,29 @@ type FlagValue = String
 
 args :: [OptDescr Flag]
 args =
-    [ Option ['v']      ["verbose"]    (NoArg  (Verbose, []))      "chatty output on stderr"
-    , Option ['V', '?'] ["version"]    (NoArg  (Version, []))      "show version number"
-    , Option ['b']      ["blif"]       (ReqArg (Blif, ) "FILE")    "BLIF file"
-    , Option ['l']      ["lef"]        (ReqArg (Lef,  ) "FILE")    "LEF file"
-    , Option ['d']      ["debug"]      (NoArg  (Debug, []))        "print some debug info"
+    [ Option ['v']      ["verbose"]    (NoArg  (Verbose, mempty))   "chatty output on stderr"
+    , Option ['V', '?'] ["version"]    (NoArg  (Version, mempty))   "show version number"
+    , Option ['b']      ["blif"]       (ReqArg (Blif, ) "FILE")     "BLIF file"
+    , Option ['l']      ["lef"]        (ReqArg (Lef,  ) "FILE")     "LEF file"
+    , Option ['d']      ["debug"]      (NoArg  (Debug, []))         "print some debug info"
     , Option ['c']      ["compile"]
-        (OptArg ((Compile,  ) . maybe "svg" id) "svg,magic")       "output format"
-    , Option ['x']      ["exline"]     (NoArg  (Exline, []))       "just exline and exit"
-    , Option ['t']      ["test"]       (NoArg  (Test, []))         "run tests and exit"
-    , Option ['j']      ["cores"]
-        (OptArg ((Cores,  ) . maybe "1" id) "count")               "use concurrency"
+        (OptArg ((Compile,  ) . maybe "svg" id) "svg,magic")        "output format"
 
-    , Option ['J']      ["json"]       (NoArg  (Json, []))          "export json"
+    , Option ['x']      ["exline"]
+        (OptArg ((Exline, ) . maybe "top" id)   "component")        "just exline and exit"
+
+    , Option ['t']      ["test"]       (NoArg  (Test, mempty))      "run tests and exit"
+    , Option ['j']      ["cores"]
+        (OptArg ((Cores,  ) . maybe "1" id) "count")                "use concurrency"
+
+    , Option ['J']      ["json"]       (NoArg  (Json, mempty))      "export json"
     , Option ['u']      ["verilog"]    (ReqArg (Verilog, ) "FILE")  "verilog file"
     ]
+
+exlineArgs :: String -> [String]
+exlineArgs [] = []
+exlineArgs string = arg : exlineArgs xs
+  where (arg, _ : xs) = break (== ',') string
 
 compilerOpts :: [String] -> IO ([Flag], [String])
 compilerOpts argv =

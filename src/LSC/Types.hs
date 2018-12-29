@@ -19,6 +19,7 @@ import qualified Control.Monad.Parallel as Par
 import Control.Monad.Reader (ReaderT(..), Reader, runReader)
 import qualified Control.Monad.Reader as Reader
 import Control.Monad.State
+import Control.Parallel (par)
 
 import Data.Time.Clock.POSIX
 
@@ -199,6 +200,9 @@ instance MonadParallel LST where
 
 runLSC :: Bootstrap () -> LSC a -> IO a
 runLSC b a = runSMT $ unLST (lowerCodensity a) `runGnosticT` freeze b
+
+mapLSC :: Foldable f => f a -> [a]
+mapLSC = foldr ( \ a bs -> a : par a bs ) []
 
 concLSC :: [LSC a] -> LSC [a]
 concLSC = lift . Par.sequence . fmap lowerCodensity
