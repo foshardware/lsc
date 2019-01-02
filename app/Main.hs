@@ -65,6 +65,13 @@ program = do
         $ \ out -> Pipe.hGetContents out >>= Pipe.hPutStr stdout
       exit
 
+  -- generate registers
+  when (and $ arg <$> [Register, Lef])
+    $ do
+      lef_ <- liftIO $ Text.readFile $ head [v | (k, v) <- opts, k == Lef ]
+      liftIO $ hPutStrLn stderr $ show $ parseLEF lef_
+      exit
+
   -- json report
   when (and $ arg <$> [Json, Verilog])
     $ do
@@ -123,6 +130,7 @@ data FlagKey
   | Debug
   | Cores
   | Test
+  | Register
   | Rtl
   | Verilog
   | Json
@@ -149,6 +157,7 @@ args =
 
     , Option ['J']      ["json"]       (NoArg  (Json, mempty))      "export json"
     , Option ['u']      ["verilog"]    (ReqArg (Verilog, ) "FILE")  "verilog file"
+    , Option ['r']      ["register"]   (ReqArg (Register, ) "size in bits")  "generate register"
     ]
 
 exlineArgs :: String -> [String]
