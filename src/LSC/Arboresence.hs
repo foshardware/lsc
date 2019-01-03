@@ -33,7 +33,7 @@ pnr (NetGraph name pins _ gates wires) = do
   nodes <- Map.fromList <$> sequence (freeGatePolygon <$> toList gates)
 
   boundedSpace nodes
-  collision nodes
+  rows 256 nodes
 
   result <- computeStage1 nodes
 
@@ -137,6 +137,30 @@ uniform ((x1, y1) : (x2, y2) : (x3, y3) : xs) = do
       &&& (y3 - y2 .> 0) .== (y1 - y2 .> 0)
   uniform ((x2, y2) : (x3, y3) : xs)
 uniform _ = pure ()
+
+
+rows n nodes = channels n $ Map.elems nodes
+
+channels n [] = pure ()
+channels n nodes =  do
+
+  let (xs, rest) = splitAt n nodes
+
+  sequence_
+    [ do
+
+      liftSMT $ do
+        constrain
+          $   left2 .> right1 ||| left1 .> right2
+          ||| bottom1 .> top2 ||| bottom2 .> top1
+
+    | (i, path1) <- [ 1 .. ] `zip` xs
+    ,     path2  <- i `drop` xs
+    , let (left1, bottom1) : (right1, top1) : _ = path1
+    , let (left2, bottom2) : (right2, top2) : _ = path2
+    ]
+
+  channels n rest
 
 
 collision nodes = do
