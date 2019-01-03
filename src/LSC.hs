@@ -8,11 +8,7 @@ import LSC.NetGraph
 
 
 stage1 :: Int -> NetGraph -> LSC Stage1
-stage1 j netlist
-  = fmap head
-  $ concLSC
-  $ take j
-  $ fmap pnr
-  $ getLeaves
-  $ exline_ (repeat 20) netlist
+stage1 _ netlist
+  = pnr
+  $ netlist
 
