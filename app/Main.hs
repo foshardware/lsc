@@ -79,6 +79,33 @@ program = do
       liftIO $ Bytes.putStrLn $ encodeVerilog $ parseVerilog verilog_
       exit
 
+   -- svg output
+  when (and $ arg <$> [Lef, Blif, Compile])
+    $ do
+      net_ <- liftIO $ Text.readFile $ head [v | (k, v) <- opts, k == Blif]
+      lef_ <- liftIO $ Text.readFile $ head [v | (k, v) <- opts, k == Lef ]
+
+      tech <- lift $ either
+        (ioError . userError . show)
+        (pure . fromLEF)
+        (parseLEF lef_)
+      netlist <- liftIO $ either
+        (ioError . userError . show)
+        (pure . gnostic tech . fromBLIF)
+        (parseBLIF net_)
+
+      circuit2d <- lift $ runLSC
+        ( do
+          tech
+          bootstrap $ \ t -> t { enableDebug = Debug `elem` fmap fst opts } )
+        ( stage1 1 netlist )
+
+      when (Compile `elem` fmap fst opts)
+       $ do
+         liftIO $ plotStdout circuit2d
+
+      exit
+
   when (and $ arg <$> [Json, Lef, Blif, Exline])
     $ do
       net_ <- liftIO $ Text.readFile $ head [v | (k, v) <- opts, k == Blif]
