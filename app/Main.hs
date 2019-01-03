@@ -1,4 +1,4 @@
-{-# LANGUAGE GADTs, DataKinds, TupleSections, DeriveDataTypeable #-}
+{-# LANGUAGE TupleSections #-}
 
 module Main where
 
