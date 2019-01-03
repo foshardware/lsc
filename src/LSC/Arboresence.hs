@@ -142,7 +142,7 @@ uniform _ = pure ()
 rows n nodes = channels n $ Map.elems nodes
 
 channels n [] = pure ()
-channels n nodes =  do
+channels n nodes = do
 
   let (xs, rest) = splitAt n nodes
 
@@ -150,12 +150,10 @@ channels n nodes =  do
     [ do
 
       liftSMT $ do
-        constrain
-          $   left2 .> right1 ||| left1 .> right2
-          ||| bottom1 .> top2 ||| bottom2 .> top1
+        constrain $ left1 .== left2
+        constrain $ bottom2 .> top1
 
-    | (i, path1) <- [ 1 .. ] `zip` xs
-    ,     path2  <- i `drop` xs
+    | (path1, path2) <- xs `zip` drop 1 xs
     , let (left1, bottom1) : (right1, top1) : _ = path1
     , let (left2, bottom2) : (right2, top2) : _ = path2
     ]
