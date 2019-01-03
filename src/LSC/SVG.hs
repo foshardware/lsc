@@ -22,7 +22,7 @@ plotStdout = Lazy.putStr . plot
 
 
 plot :: Stage1 -> Lazy.Text
-plot = renderSvg . svgDoc . scaleDown 100
+plot = renderSvg . svgDoc . svgPaths . scaleDown 100
 
 
 svgDoc :: Stage1 -> S.Svg
@@ -47,7 +47,7 @@ place (g, path@(Path ((x, y) : _))) = do
     ! A.y (S.toValue $ y + 24)
     ! A.fontSize "24"
     ! A.fontFamily "monospace"
-    ! A.transform (fromString $ "rotate(90 "++ show (x + 8) ++","++ show (y + 24)  ++")")
+    -- ! A.transform (fromString $ "rotate(90 "++ show (x + 8) ++","++ show (y + 24)  ++")")
     $ renderText $ gateIdent g
 
   follow True path
@@ -67,6 +67,18 @@ follow finish (Path ((px, py) : xs)) = do
     ! A.strokeWidth "4"
 
 follow _ _ = pure ()
+
+
+svgPaths :: Stage1 -> Stage1
+svgPaths (Circuit2D nodes steiner) = Circuit2D
+
+  [ (gate, Path $
+     let (left, bottom) : (right, top) : _ = pos
+     in [(left, bottom), (left, top), (right, top), (right, bottom)])
+  | (gate, Path pos) <- nodes
+  ]
+
+  steiner
 
 
 scaleDown :: Integer -> Stage1 -> Stage1

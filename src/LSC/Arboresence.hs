@@ -35,11 +35,7 @@ pnr (NetGraph name pins _ gates wires) = do
   boundedSpace nodes
   collision nodes
 
-  steiner <- arboresence pins nodes wires
-
-  rectilinear steiner
-
-  result <- computeStage1 nodes steiner
+  result <- computeStage1 nodes
 
   debug ["stop  pnr @ module", unpack name]
 
@@ -148,13 +144,14 @@ collision nodes = do
     [ do
 
       liftSMT $ do
-        constrain $ fst topLeft1 .> fst bottomRight2 ||| fst topLeft2 .> fst bottomRight1
-        constrain $ snd topLeft1 .< snd bottomRight2 ||| snd topLeft2 .< snd bottomRight1
+        constrain
+          $   left2 .> right1 ||| left1 .> right2
+          ||| bottom1 .> top2 ||| bottom2 .> top1
 
     | (i, path1) <- [ 1 .. ] `zip` Map.elems nodes
     ,     path2  <- i `drop` Map.elems nodes
-    , let _ : topLeft1 : _ : bottomRight1 : _ = path1
-    , let _ : topLeft2 : _ : bottomRight2 : _ = path2
+    , let (left1, bottom1) : (right1, top1) : _ = path1
+    , let (left2, bottom2) : (right2, top2) : _ = path2
     ]
 
 
@@ -162,22 +159,13 @@ freeGatePolygon gate = do
 
   (width, height) <- lookupDimensions gate <$> ask
 
-  path <- freePolygon 4
+  path <- freePolygon 2
 
-  let bottomLeft : topLeft : topRight : bottomRight : _ = path
+  let (left, bottom) : (right, top) : _ = path
 
   liftSMT $ constrain
-    $   snd topLeft - snd bottomLeft .== literal height
-    &&& fst topLeft .== fst bottomLeft
-
-    &&& snd topRight - snd bottomRight .== literal height
-    &&& fst topRight .== fst bottomRight
-
-    &&& fst topRight - fst topLeft .== literal width
-    &&& snd topRight .== snd topLeft
-
-    &&& fst bottomRight - fst bottomLeft .== literal width
-    &&& snd bottomRight .== snd bottomLeft
+    $   right - left .== literal height
+    &&& top - bottom .== literal width
 
   pure (gate, path)
 
@@ -197,7 +185,7 @@ freePolygon n = sequence $ replicate n freePoint
 freePoint = liftSMT $ (,) <$> free_ <*> free_
 
 
-computeStage1 nodes steiner = do
+computeStage1 nodes = do
 
   liftSMT $ query $ do
     result <- checkSat
@@ -211,11 +199,7 @@ computeStage1 nodes steiner = do
             | (gate, xs) <- Map.assocs nodes
             ]
 
-        <*> sequence
-            [ fmap (net, ) $ Path <$> sequence
-                [ (, ) <$> getValue x <*> getValue y | (x, y) <- xs ]
-            | (net, xs) <- steiner
-            ]
+        <*> pure mempty
 
       Unsat -> do
 
