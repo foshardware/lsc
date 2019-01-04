@@ -162,8 +162,8 @@ channels n nodes = do
     [ do
 
       liftSMT $ do
-        constrain $ left2 .> right1
- 
+        constrain $ left2 - right1 .== 8000
+
     | (path1, path2) <- take 1 xs `zip` take 1 rest
     , let _ : (right1, _) : _ = path1
     , let (left2, _)  : _ : _ = path2

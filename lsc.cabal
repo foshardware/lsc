@@ -106,6 +106,7 @@ library
       LSC.Exlining,
       LSC.NetGraph,
       LSC.Numbers,
+      LSC.Placement,
       LSC.Types
   other-modules:
       Paths_lsc
