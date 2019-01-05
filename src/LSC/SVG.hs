@@ -2,6 +2,7 @@
 
 module LSC.SVG where
 
+import Data.Foldable
 import Data.String
 import Data.Text
 import qualified Data.Text as Text
@@ -17,21 +18,20 @@ import LSC.Types
 
 
 
-plotStdout :: Stage1 -> IO ()
+plotStdout :: NetGraph -> IO ()
 plotStdout = Lazy.putStr . plot
 
 
-plot :: Stage1 -> Lazy.Text
-plot = renderSvg . svgDoc . svgPaths . scaleDown 100
+plot :: NetGraph -> Lazy.Text
+plot = renderSvg . svgDoc . scaleDown 100 . svgPaths
 
 
-svgDoc :: Stage1 -> S.Svg
+svgDoc :: Circuit2D () -> S.Svg
 svgDoc (Circuit2D nodes steiner) = S.docTypeSvg
   ! A.version "1.1"
   ! A.width "100000"
   ! A.height "100000"
   $ do
-    uncurry arbor `mapM_` steiner
     place `mapM_` nodes
 
 
@@ -69,28 +69,26 @@ follow finish (Path ((px, py) : xs)) = do
 follow _ _ = pure ()
 
 
-svgPaths :: Stage1 -> Stage1
-svgPaths (Circuit2D nodes steiner) = Circuit2D
+svgPaths :: NetGraph -> Circuit2D ()
+svgPaths netlist = Circuit2D
 
-  [ (gate, Path $
-     let (left, bottom) : (right, top) : _ = pos
-     in [(left, bottom), (left, top), (right, top), (right, bottom)])
-  | (gate, Path pos) <- nodes
+  [ (gate, Path [(left, bottom), (left, top), (right, top), (right, bottom)])
+  | gate <- toList $ gateVector netlist
+  , let Path pos = gatePath gate
+  , let (left, bottom) : (right, top) : _ = pos
   ]
 
-  steiner
+  ()
 
 
-scaleDown :: Integer -> Stage1 -> Stage1
-scaleDown n (Circuit2D nodes steiner) = Circuit2D
+scaleDown :: Integer -> Circuit2D () -> Circuit2D ()
+scaleDown n (Circuit2D nodes _) = Circuit2D
 
   [ (gate, Path [ (div x n, div y n) | (x, y) <- pos ])
   | (gate, Path pos) <- nodes
   ]
 
-  [ (net, Path [ (div x n, div y n) | (x, y) <- pos ])
-  | (net, Path pos) <- steiner
-  ]
+  ()
 
 
 renderText :: Text -> S.Svg

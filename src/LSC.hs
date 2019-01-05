@@ -8,7 +8,7 @@ import LSC.NetGraph
 import LSC.Placement
 
 
-stage1 :: Int -> NetGraph -> LSC Stage1
+stage1 :: Int -> NetGraph -> LSC NetGraph
 stage1 _ netlist
   = placement
   $ netlist

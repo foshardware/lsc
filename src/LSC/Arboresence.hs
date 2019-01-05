@@ -19,7 +19,7 @@ import LSC.Types
 
 
 pnr :: NetGraph -> LSC Stage1
-pnr (NetGraph name pins _ gates wires) = do
+pnr netlist@(NetGraph name pins _ gates wires) = do
 
   debug
     [ "start pnr @ module", unpack name
@@ -39,7 +39,7 @@ pnr (NetGraph name pins _ gates wires) = do
 
   debug ["stop  pnr @ module", unpack name]
 
-  pure result
+  pure (netlist, result)
 
 
 arboresence pins@(inputs, _, _) nodes wires = concat <$>

@@ -30,11 +30,12 @@ fromBLIF (BLIF models) = do
   let nets =
         [ (net, Net net (Map.singleton g [(contact, pin)]) i)
         | i <- [ 1 .. ]
-        | g@(Gate ident assignments _ _) <- gates
+        | g@(Gate ident _ assignments _ _) <- gates
         , (contact, net) <- Map.assocs assignments
         , com <- maybe [] pure $ Map.lookup ident $ components technology
         , pin <- maybe [] pure $ Map.lookup contact $ componentPins com
         ]
+        -- TODO: add outer contacts 
 
   let nodes = Vector.fromList gates
   let edges = Map.fromListWith mappend nets
@@ -56,12 +57,14 @@ toGates :: Int -> Command -> [Gate]
 toGates i (LibraryGate ident assignments)
   = [ Gate
         ident
+        mempty
         (Map.fromList assignments)
         mempty
         i ]
 toGates i (Subcircuit ident assignments)
   = [ Gate
         ident
+        mempty
         (Map.fromList assignments)
         mempty
         i ]
@@ -82,6 +85,6 @@ toModel (NetGraph name (inputList, outputList, clockList) _ nodes _) = Model nam
 
 
 toSubcircuit :: Gate -> Command
-toSubcircuit (Gate ident wires _ _) = Subcircuit ident (Map.assocs wires)
+toSubcircuit (Gate ident _ wires _ _) = Subcircuit ident (Map.assocs wires)
 
 

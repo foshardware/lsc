@@ -2,21 +2,26 @@
 module LSC.Placement where
 
 import Data.Foldable
-import qualified Data.Vector as V
+import qualified Data.Map as Map
+import Data.Vector (generate, fromList, (!))
 import LSC.Types
 
 
-placement :: NetGraph -> LSC Stage1
-placement (NetGraph name pins _ gates wires) = do
+placement :: NetGraph -> LSC NetGraph
+placement netlist@(NetGraph name pins subs gates wires) = do
 
   technology <- ask
 
   let heightAll = foldr (\ k a -> a + fst (lookupDimensions k technology)) 0 gates
   let columnCount = round $ sqrt $ fromIntegral $ length gates
 
-  result <- place True (space, space * 4) 0 (heightAll `div` columnCount) (toList gates)
+  result <- Map.fromList
+    <$> place True (space, space * 4) 0 (heightAll `div` columnCount) (toList gates)
 
-  pure $ Circuit2D result mempty
+  let newGateVector = generate (length gates)
+        $ \ i -> (gates ! i) { gatePath = maybe mempty id $ Map.lookup (gates ! i) result }
+
+  pure $ NetGraph name pins subs newGateVector wires
 
 
 space = 8000

@@ -66,7 +66,7 @@ exline (k : ks) top@(NetGraph name pins subs nodes edges) = do
 
       (closures, netlist) = createSublist len pos top
 
-      gate p = Gate (modelName netlist) (wires p) (maps p) 0
+      gate p = Gate (modelName netlist) mempty (wires p) (maps p) 0
 
       wires p = Map.fromList
         [ (wireName w, v)

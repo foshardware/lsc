@@ -79,6 +79,7 @@ type Index = Int
 
 data Gate = Gate
   { gateIdent :: Identifier
+  , gatePath  :: Path
   , gateWires :: Map Identifier Identifier
   , mapWires  :: Map Identifier Identifier
   , gateIndex :: Index
@@ -91,7 +92,7 @@ instance Ord Gate where
   g `compare` h = gateIndex g `compare` gateIndex h
 
 instance Default Gate where
-  def = Gate "default" def def def
+  def = Gate "default" mempty def def def
 
 
 data Component = Component
@@ -221,15 +222,26 @@ debug msg = do
     hPutStrLn stderr $ unwords $ timestamp : "-" : msg
 
 
-type Stage1 = Circuit2D Arboresence
+type Stage1 = (NetGraph, Circuit2D ())
+
+type Stage2 = (NetGraph, Circuit2D Arboresence)
+
 
 type Arboresence = [((Net, Identifier), Path)]
 
 data Circuit2D a = Circuit2D [(Gate, Path)] a
   deriving (Eq, Show)
 
+
 newtype Path = Path [(Integer, Integer)]
   deriving (Eq, Show)
 
 type SPath = [(SInteger, SInteger)]
+
+instance Semigroup Path where
+  Path xs <> Path ys = Path (xs <> ys)
+
+instance Monoid Path where
+  mempty = Path mempty
+  mappend = (<>)
 
