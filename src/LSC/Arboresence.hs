@@ -18,7 +18,7 @@ import System.IO
 import LSC.Types
 
 
-pnr :: NetGraph -> LSC Stage1
+pnr :: NetGraph -> LSC NetGraph
 pnr netlist@(NetGraph name pins _ gates wires) = do
 
   debug
@@ -30,45 +30,15 @@ pnr netlist@(NetGraph name pins _ gates wires) = do
   liftSMT $ do
     setOption $ ProduceUnsatCores True
 
-  nodes <- Map.fromList <$> sequence (freeGatePolygon <$> toList gates)
-
-  boundedSpace nodes
-  rows 128 nodes
-
-  result <- computeStage1 nodes
+  result <- concLSC [ arboresence gates net | net <- take 1 $ toList wires ]
 
   debug ["stop  pnr @ module", unpack name]
 
-  pure (netlist, result)
+  pure netlist
 
 
-arboresence pins@(inputs, _, _) nodes wires = concat <$>
-  sequence
-    [ do
-
-      source <- freePoint
-
-      if netIdent wire `elem` inputs
-      then do
-        liftSMT $ constrain $ bAnd [ fst source .< x | (x, _) : _ <- toList nodes ]
-      else do
-        liftSMT $ constrain $ bAnd
-          [ source .== (fst bottomLeft + literal px, snd bottomLeft + literal py)
-          | (gate, cs) <- Map.assocs $ contacts wire
-          , (_, pin) <- take 1 cs
-          , pinDir pin == Out
-          , (px, py, _, _) <- take 1 $ portRects $ pinPort pin
-          , bottomLeft <- maybe [] (take 1) $ Map.lookup gate nodes
-          ]
-
-      tree <- arbor pins nodes wire source
-
-      liftSMT $ constrain $ allEqual $ manhattan . snd <$> tree
-
-      pure tree
-
-    | wire <- toList wires
-    ]
+arboresence nodes net =
+  error $ show $ net
 
 
 arbor pins@(_, outputs, _) nodes net source = do
@@ -190,15 +160,15 @@ collision nodes = do
 
 freeGatePolygon gate = do
 
-  (width, height) <- lookupDimensions gate <$> ask
-
-  path <- freePolygon 2
-
-  let (left, bottom) : (right, top) : _ = path
+  path @ (left, bottom) : (right, top) : _ <- freePolygon 2 
+  
+  let Rect (x1, y1) (x2, y2) : _ = gatePath gate
 
   liftSMT $ constrain
-    $   right - left .== literal height
-    &&& top - bottom .== literal width
+    $   left   .== literal x1
+    &&& bottom .== literal y1
+    &&& right  .== literal x2
+    &&& top    .== literal y2
 
   pure (gate, path)
 
@@ -226,11 +196,7 @@ computeStage1 nodes = do
 
       Sat -> Circuit2D
 
-        <$> sequence
-            [ fmap (gate, ) $ Path <$> sequence
-                [ (, ) <$> getValue x <*> getValue y | (x, y) <- xs ]
-            | (gate, xs) <- Map.assocs nodes
-            ]
+        <$> pure mempty
 
         <*> pure mempty
 

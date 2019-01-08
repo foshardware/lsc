@@ -28,7 +28,7 @@ fromBLIF (BLIF models) = do
         ]
 
   let nets =
-        [ (net, Net net (Map.singleton g [(contact, pin)]) i)
+        [ (net, Net net mempty (Map.singleton g [(contact, pin)]) i)
         | i <- [ 1 .. ]
         | g@(Gate ident _ assignments _ _) <- gates
         , (contact, net) <- Map.assocs assignments

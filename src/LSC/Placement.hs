@@ -38,11 +38,11 @@ place ascending (x, y) width height (gate : gates)
   = do
 
     (h, w) <- lookupDimensions gate <$> ask
-    let points = if ascending then [(x, y), (x + w, y + h)] else [(x, y - h), (x + w, y)]
+    let rect = if ascending then Rect (x, y) (x + w, y + h) else Rect (x, y - h) (x + w, y)
 
     let h' = h + div space 4
 
-    (:) (gate, Path points)
+    (:) (gate, [rect])
       <$> place ascending (x, if ascending then y + h' else y - h') (max w width) height gates
 
 place _ _ _ _ _ = pure []

@@ -53,6 +53,7 @@ type Contact = (Identifier, Pin)
 
 data Net = Net
   { netIdent :: Identifier
+  , netPaths :: [Path]
   , contacts :: Map Gate [Contact]
   , netIndex :: Index
   } deriving Show
@@ -64,10 +65,10 @@ instance Ord Net where
   w `compare` v = netIndex w `compare` netIndex v
 
 instance Semigroup Net where
-  Net i as k <> Net _ bs _ = Net i (Map.unionWith mappend as bs) k
+  Net i ns as k <> Net _ os bs _ = Net i (ns <> os) (Map.unionWith mappend as bs) k
 
 instance Monoid Net where
-  mempty = Net mempty mempty def
+  mempty = Net mempty mempty mempty def
   mappend = (<>)
 
 
@@ -222,26 +223,21 @@ debug msg = do
     hPutStrLn stderr $ unwords $ timestamp : "-" : msg
 
 
-type Stage1 = (NetGraph, Circuit2D ())
+type Stage1 = Circuit2D ()
 
-type Stage2 = (NetGraph, Circuit2D Arboresence)
+type Stage2 = Circuit2D [Arboresence]
 
 
-type Arboresence = [((Net, Identifier), Path)]
+type Arboresence = (Net, [Path])
 
 data Circuit2D a = Circuit2D [(Gate, Path)] a
   deriving (Eq, Show)
 
 
-newtype Path = Path [(Integer, Integer)]
+data Rect = Rect (Integer, Integer) (Integer, Integer)
   deriving (Eq, Show)
 
+type Path = [Rect]
+
 type SPath = [(SInteger, SInteger)]
-
-instance Semigroup Path where
-  Path xs <> Path ys = Path (xs <> ys)
-
-instance Monoid Path where
-  mempty = Path mempty
-  mappend = (<>)
 

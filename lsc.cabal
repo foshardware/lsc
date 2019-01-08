@@ -107,6 +107,7 @@ library
       LSC.NetGraph,
       LSC.Numbers,
       LSC.Placement,
+      LSC.Routing,
       LSC.Types
   other-modules:
       Paths_lsc
