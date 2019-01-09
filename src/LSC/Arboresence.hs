@@ -37,20 +37,13 @@ pnr netlist@(NetGraph name pins _ gates wires) = do
   boundedSpace nodes
   collision nodes
 
-  result <- computeStage1 nodes
+  newGateVector <- computeStage1 nodes
 
   debug ["stop  pnr @ module", unpack name]
 
-  case result of
-    Nothing -> pure netlist
-    Just xs -> pure netlist { gateVector = assign xs }
-
-  where
-
-    assign xs = Vector.fromList
-      [ gate { gatePath = [rect] }
-      | (gate, rect) <- toList xs
-      ]
+  pure netlist
+    { gateVector = maybe (gateVector netlist) id newGateVector
+    }
 
 
 
@@ -158,10 +151,12 @@ computeStage1 nodes = do
     result <- checkSat
     case result of
 
-      Sat -> Just
+      Sat -> Just . Vector.fromList
 
         <$> sequence
-            [ (gate, ) <$> rectangle xs
+            [ do
+              path <- rectangle xs
+              pure gate { gatePath = pure path }
             | (gate, xs) <- assocs nodes
             ]
 
