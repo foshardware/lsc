@@ -49,23 +49,35 @@ pnr netlist@(NetGraph name pins _ gates nets) = do
     }
 
 
-
 boundedSpace nodes = do
 
-  (width, height) <- padDimensions <$> ask
+  let rects = snd <$> toList nodes
 
-  sequence_
-    [ do
-      liftSMT $ do
-        constrain
-          $   left   .> literal 0
-          .&& left   .< literal width
-          .&& bottom .> literal 0
-          .&& bottom .< literal height
+  let lowerBound = fromIntegral (minBound :: Int)
+      upperBound = fromIntegral (maxBound :: Int)
 
-    | (_, path) <- toList nodes
-    , (left, bottom) <- take 1 path
-    ]
+  let left   = foldr smin upperBound [ x | (x, _) : _ : _ <- rects ]
+      bottom = foldr smin upperBound [ x | (_, x) : _ : _ <- rects ]
+      right  = foldr smax lowerBound [ x | _ : (x, _) : _ <- rects ]
+      top    = foldr smax lowerBound [ x | _ : (_, x) : _ <- rects ]
+
+  let tie = literal $ floor $ sqrt $ fromIntegral $ length nodes :: SInteger
+
+  let width  = sum [ right - left | (left, _) : (right, _) : _ <- rects ]
+      height = sum [ top - bottom | (_, bottom) : (_, top) : _ <- rects ]
+
+  liftSMT $ do
+
+    constrain
+      $   left   .>= literal 0
+      .&& right  .<= width
+      .&& bottom .>= literal 0
+      .&& top    .<= sDiv height tie
+
+    constrain $ sOr
+      [ l .== 0 .&& b .== 0
+      | (l, b) : _ <- rects
+      ]
 
 
 collision nodes = do
@@ -73,11 +85,18 @@ collision nodes = do
     [ do
 
       liftSMT $ do
+
         constrain
-          $   left2 .> right1
-          .|| left1 .> right2
-          .|| bottom1 .> top2
-          .|| bottom2 .> top1
+          $   left2 .>= right1
+          .|| left1 .>= right2
+          .|| bottom1 .>= top2
+          .|| bottom2 .>= top1
+
+        softConstrain
+          $   left2 .== right1
+          .|| left1 .== right2
+          .|| bottom1 .== top2
+          .|| bottom2 .== top1
 
     | ((_, path1), (_, path2)) <- distinctPairs $ toList nodes
     , let (left1, bottom1) : (right1, top1) : _ = path1

@@ -132,16 +132,13 @@ data Dir = In | Out | InOut
 
 
 data Technology = Technology
-  { padDimensions  :: (Integer, Integer)
-  , wireResolution :: Int
-  , wireWidth      :: Integer
-  , scaleFactor    :: Double
+  { scaleFactor    :: Double
   , components     :: Map Text Component
   , enableDebug    :: Bool
   } deriving Show
 
 instance Default Technology where
-  def = Technology (10^6, 10^6) 12 1 1 mempty True
+  def = Technology 1 mempty True
 
 lookupDimensions :: Gate -> Technology -> (Integer, Integer)
 lookupDimensions g tech
