@@ -9,8 +9,6 @@ module LSC.Arboresence where
 import Control.Monad.Trans
 import Data.Default
 import Data.Foldable
-import Data.Map (assocs, fromAscList)
-import qualified Data.Map as Map
 import qualified Data.Vector as Vector
 import Data.SBV
 import Data.SBV.Control
@@ -32,7 +30,7 @@ pnr netlist@(NetGraph name pins _ gates wires) = do
   liftSMT $ do
     setOption $ ProduceUnsatCores True
 
-  nodes <- Map.fromList <$> sequence (freeGatePolygon <$> toList gates)
+  nodes <- sequence $ freeGatePolygon <$> gates
 
   boundedSpace nodes
   collision nodes
@@ -60,7 +58,7 @@ boundedSpace nodes = do
           .&& bottom .> literal 0
           .&& bottom .< literal height
 
-    | path <- toList nodes
+    | (_, path) <- toList nodes
     , (left, bottom) <- take 1 path
     ]
 
@@ -76,7 +74,7 @@ collision nodes = do
           .|| bottom1 .> top2
           .|| bottom2 .> top1
 
-    | (path1, path2) <- distinctPairs $ toList nodes
+    | ((_, path1), (_, path2)) <- distinctPairs $ toList nodes
     , let (left1, bottom1) : (right1, top1) : _ = path1
     , let (left2, bottom2) : (right2, top2) : _ = path2
     ]
@@ -113,14 +111,9 @@ computeStage1 nodes = do
     result <- checkSat
     case result of
 
-      Sat -> Just . Vector.fromList
+      Sat -> Just
 
-        <$> sequence
-            [ do
-              path <- rectangle xs
-              pure gate { gatePath = pure path }
-            | (gate, xs) <- assocs nodes
-            ]
+        <$> sequence (assign <$> nodes)
 
       Unsat -> do
 
@@ -136,7 +129,10 @@ computeStage1 nodes = do
 
         pure Nothing
 
+  where
 
-rectangle ((left, bottom) : (right, top) : _) = Rect
-  <$> ((, ) <$> getValue left  <*> getValue bottom)
-  <*> ((, ) <$> getValue right <*> getValue top)
+    assign (gate, xs) = rectangle xs >>= \ path -> pure gate { gatePath = pure path }
+
+    rectangle ((left, bottom) : (right, top) : _) = Rect
+      <$> ((, ) <$> getValue left  <*> getValue bottom)
+      <*> ((, ) <$> getValue right <*> getValue top)
