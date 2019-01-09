@@ -11,7 +11,6 @@ import LSC.Routing
 
 stage1 :: Int -> NetGraph -> LSC NetGraph
 stage1 _ netlist
-  =   routing
-  =<< placement
+  =   pnr
       netlist
 

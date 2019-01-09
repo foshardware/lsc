@@ -43,6 +43,7 @@ place (g, path@(Rect (x, y) _ : _)) = do
     ! A.y (S.toValue $ y + 24)
     ! A.fontSize "24"
     ! A.fontFamily "monospace"
+    ! A.transform (fromString $ "rotate(90 "++ show (x + 8) ++","++ show (y + 24)  ++")")
     $ renderText $ gateIdent g
 
   follow path
