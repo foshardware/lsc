@@ -2,7 +2,7 @@
 
 ## Installation
 
-`git submodule update --init --recursive`
+`git submodule update --init --recursive`  
 `stack install`
 
 ## Usage
