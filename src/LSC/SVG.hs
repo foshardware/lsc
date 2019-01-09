@@ -17,6 +17,8 @@ import Text.Blaze.Svg.Renderer.Text (renderSvg)
 import LSC.Types
 
 
+type Circuit = Stage2
+
 
 plotStdout :: NetGraph -> IO ()
 plotStdout = Lazy.putStr . plot
@@ -26,13 +28,14 @@ plot :: NetGraph -> Lazy.Text
 plot = renderSvg . svgDoc . scaleDown 100 . svgPaths
 
 
-svgDoc :: Circuit2D () -> S.Svg
-svgDoc (Circuit2D nodes steiner) = S.docTypeSvg
+svgDoc :: Circuit -> S.Svg
+svgDoc (Circuit2D nodes edges) = S.docTypeSvg
   ! A.version "1.1"
   ! A.width "100000"
   ! A.height "100000"
   $ do
     place `mapM_` nodes
+    route `mapM_` edges
 
 
 place :: (Gate, Path) -> S.Svg
@@ -51,6 +54,11 @@ place (g, path@(Rect (x, y) _ : _)) = do
 place _ = pure ()
 
 
+route :: (Net, [Path]) -> S.Svg
+route (net, p : ps) = follow p *> route (net, ps)
+route _ = pure ()
+
+
 follow :: Path -> S.Svg
 follow (Rect (left, bottom) (right, top) : xs) = do
 
@@ -65,18 +73,20 @@ follow (Rect (left, bottom) (right, top) : xs) = do
 follow _ = pure ()
 
 
-svgPaths :: NetGraph -> Circuit2D ()
+svgPaths :: NetGraph -> Circuit
 svgPaths netlist = Circuit2D
 
   [ (gate, gatePath gate)
   | gate <- toList $ gateVector netlist
   ]
 
-  ()
+  [ (net, netPaths net)
+  | net <- toList $ netMapping netlist
+  ]
 
 
-scaleDown :: Integer -> Circuit2D () -> Circuit2D ()
-scaleDown n (Circuit2D nodes _) = Circuit2D
+scaleDown :: Integer -> Circuit -> Circuit
+scaleDown n (Circuit2D nodes edges) = Circuit2D
 
   [ ( gate
     , [ Rect (div x1 n, div y1 n) (div x2 n, div y2 n)
@@ -86,7 +96,15 @@ scaleDown n (Circuit2D nodes _) = Circuit2D
   | (gate, path) <- nodes
   ]
 
-  ()
+  [ ( net
+    , [ [ Rect (div x1 n, div y1 n) (div x2 n, div y2 n)
+        | Rect (x1, y1) (x2, y2) <- path
+        ]
+      | path <- paths
+      ]
+    )
+  | (net, paths) <- edges
+  ]
 
 
 renderText :: Text -> S.Svg

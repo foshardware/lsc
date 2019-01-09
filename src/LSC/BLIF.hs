@@ -13,10 +13,10 @@ import LSC.Types hiding (ask)
 
 
 fromBLIF :: BLIF -> Gnostic NetGraph
-fromBLIF (BLIF     []) = pure mempty
-fromBLIF (BLIF models) = do
+fromBLIF (BLIF []) = pure mempty
+fromBLIF (BLIF ms) = do
 
-  let (model, submodels) = splitAt 1 models
+  let (model, submodels) = splitAt 1 ms
 
   technology <- ask
 
@@ -27,17 +27,22 @@ fromBLIF (BLIF models) = do
         , gate <- toGates i command
         ]
 
+  let nodes = Vector.fromList
+        [ gate { gateIndex = i }
+        | (i, gate) <- zip [0.. ] gates
+        ]
+
   let nets =
         [ (net, Net net mempty (Map.singleton g [(contact, pin)]) i)
-        | i <- [ 1 .. ]
-        | g@(Gate ident _ assignments _ _) <- gates
+        | i <- [ 0 .. ]
+        | g@(Gate ident _ assignments _ _) <- toList nodes
         , (contact, net) <- Map.assocs assignments
         , com <- maybe [] pure $ Map.lookup ident $ components technology
         , pin <- maybe [] pure $ Map.lookup contact $ componentPins com
         ]
         -- TODO: add outer contacts 
 
-  let nodes = Vector.fromList gates
+
   let edges = Map.fromListWith mappend nets
 
   subGraphs <- sequence

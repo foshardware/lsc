@@ -9,6 +9,8 @@ module LSC.Arboresence where
 import Control.Monad.Trans
 import Data.Default
 import Data.Foldable
+import Data.Map (assocs)
+import Data.Vector ((!))
 import qualified Data.Vector as Vector
 import Data.SBV
 import Data.SBV.Control
@@ -19,12 +21,12 @@ import LSC.Types
 
 
 pnr :: NetGraph -> LSC NetGraph
-pnr netlist@(NetGraph name pins _ gates wires) = do
+pnr netlist@(NetGraph name pins _ gates nets) = do
 
   debug
     [ "start pnr @ module", unpack name
     , "-", show $ length gates, "gates"
-    , "-", show $ length wires, "nets"
+    , "-", show $ length nets, "nets"
     ]
 
   liftSMT $ do
@@ -32,15 +34,18 @@ pnr netlist@(NetGraph name pins _ gates wires) = do
 
   nodes <- sequence $ freeGatePolygon <$> gates
 
+  edges <- sequence $ netPolygon nodes <$> nets
+
   boundedSpace nodes
   collision nodes
 
-  newGateVector <- computeStage1 nodes
+  result <- computeStage1 nodes edges
 
   debug ["stop  pnr @ module", unpack name]
 
   pure netlist
-    { gateVector = maybe (gateVector netlist) id newGateVector
+    { gateVector = maybe (gateVector netlist) fst result
+    , netMapping = maybe (netMapping netlist) snd result
     }
 
 
@@ -97,6 +102,49 @@ freeGatePolygon gate = do
   pure (gate, path)
 
 
+netPolygon nodes net = do
+
+  start @ ((leftStart, bottomStart) : (rightStart, topStart) : _) <- freeRectangle
+
+  sequence_
+    [ do
+
+      liftSMT $ constrain
+        $   leftStart   .== left   + literal a
+        .&& bottomStart .== bottom + literal b
+        .&& rightStart  .== left   + literal c
+        .&& topStart    .== bottom + literal d
+
+    | (i, assignments) <- assocs $ contacts net
+    , (_, source) <- assignments
+    , pinDir source == Out
+    , Rect (a, b) (c, d) <- take 1 $ portRects $ pinPort source
+    , let (gate, (left, bottom) : _) = nodes ! gateIndex i
+    ]
+
+  hyperedge <- sequence
+    [ do
+
+      target @ ((leftTarget, bottomTarget) : (rightTarget, topTarget) : _) <- freeRectangle
+    
+      liftSMT $ constrain
+        $   leftTarget   .== left   + literal a
+        .&& bottomTarget .== bottom + literal b
+        .&& rightTarget  .== left   + literal c
+        .&& topTarget    .== bottom + literal d
+
+      pure target
+
+    | (i, assignments) <- assocs $ contacts net
+    , (_, sink) <- assignments
+    , pinDir sink == In
+    , Rect (a, b) (c, d) <- take 1 $ portRects $ pinPort sink
+    , let (gate, (left, bottom) : _) = nodes ! gateIndex i
+    ]
+
+  pure (net, start : hyperedge)
+
+
 freeRectangle = freePolygon 2
 
 freePolygon n = sequence $ replicate n freePoint
@@ -105,15 +153,18 @@ freePolygon n = sequence $ replicate n freePoint
 freePoint = liftSMT $ (,) <$> free_ <*> free_
 
 
-computeStage1 nodes = do
+computeStage1 nodes edges = do
 
   liftSMT $ query $ do
     result <- checkSat
     case result of
 
-      Sat -> Just
+      Sat -> do
 
-        <$> sequence (assign <$> nodes)
+        gates <- sequence (gateAssign <$> nodes)
+        nets  <- sequence (netAssign  <$> edges)
+
+        pure $ Just (gates, nets)
 
       Unsat -> do
 
@@ -131,7 +182,11 @@ computeStage1 nodes = do
 
   where
 
-    assign (gate, xs) = rectangle xs >>= \ path -> pure gate { gatePath = pure path }
+    gateAssign (gate, xs) = rectangle xs
+      >>= \ path -> pure gate { gatePath = pure path }
+
+    netAssign (net, edge) = sequence (rectangle <$> edge)
+      >>= \ paths -> pure net { netPaths = pure paths }
 
     rectangle ((left, bottom) : (right, top) : _) = Rect
       <$> ((, ) <$> getValue left  <*> getValue bottom)

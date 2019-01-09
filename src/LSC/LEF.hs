@@ -35,12 +35,10 @@ port t (MacroPinPort (MacroPinPortLayer ident : rest) : _) = Port ident (portRec
 port t (_ : rest) = port t rest
 port _ [] = Port mempty mempty
 
-portRectangles t (MacroPinPortRect a b c d : rest) =
-  ( ceiling $ a * scaleFactor t
-  , ceiling $ b * scaleFactor t
-  , ceiling $ c * scaleFactor t
-  , ceiling $ d * scaleFactor t
-  ) : portRectangles t rest
+portRectangles t (MacroPinPortRect a b c d : rest) = Rect
+  (ceiling $ a * scaleFactor t, ceiling $ b * scaleFactor t)
+  (ceiling $ c * scaleFactor t, ceiling $ d * scaleFactor t)
+  : portRectangles t rest
 portRectangles t (_ : rest) = portRectangles t rest
 portRectangles _ [] = []
 

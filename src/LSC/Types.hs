@@ -123,9 +123,9 @@ data Port = Port
   } deriving Show
 
 instance Default Port where
-  def = Port mempty [(0, 0, 0, 0)]
+  def = Port mempty mempty
 
-type Rectangle = (Integer, Integer, Integer, Integer)
+type Rectangle = Rect
 
 data Dir = In | Out | InOut
   deriving (Eq, Show)
