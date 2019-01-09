@@ -76,48 +76,15 @@ collision nodes = do
           .|| bottom1 .> top2
           .|| bottom2 .> top1
 
-    | (path1, path2) <- pairs $ toList nodes
+    | (path1, path2) <- distinctPairs $ toList nodes
     , let (left1, bottom1) : (right1, top1) : _ = path1
     , let (left2, bottom2) : (right2, top2) : _ = path2
     ]
 
 
-pairs [] = []
-pairs (x : xs) = fmap (x, ) xs ++ pairs xs
-
-
-rows n = channels n . toList
-
-channels n [] = pure ()
-channels n nodes = do
-
-  let (xs, rest) = splitAt n nodes
-
-  sequence_
-    [ do
-
-      liftSMT $ do
-        constrain
-          $   left1 .== left2
-          .&& bottom2 .> top1
-
-    | (path1, path2) <- xs `zip` drop 1 xs
-    , let (left1, _) : (_, top1) : _ = path1
-    , let (left2, bottom2)  : _  : _ = path2
-    ]
-
-  sequence_
-    [ do
-
-      liftSMT $ do
-        constrain $ left2 - right1 .== 8000
-
-    | (path1, path2) <- take 1 xs `zip` take 1 rest
-    , let _ : (right1, _) : _ = path1
-    , let (left2, _)  : _ : _ = path2
-    ]
-
-  channels n rest
+distinctPairs :: [a] -> [(a, a)]
+distinctPairs [] = []
+distinctPairs (x : xs) = fmap (x, ) xs ++ distinctPairs xs
 
 
 freeGatePolygon gate = do
@@ -138,11 +105,6 @@ freePolygon n = sequence $ replicate n freePoint
 
 
 freePoint = liftSMT $ (,) <$> free_ <*> free_
-
-
-rectangle ((left, bottom) : (right, top) : _) = Rect
-  <$> ((, ) <$> getValue left  <*> getValue bottom)
-  <*> ((, ) <$> getValue right <*> getValue top)
 
 
 computeStage1 nodes = do
@@ -174,3 +136,7 @@ computeStage1 nodes = do
 
         pure Nothing
 
+
+rectangle ((left, bottom) : (right, top) : _) = Rect
+  <$> ((, ) <$> getValue left  <*> getValue bottom)
+  <*> ((, ) <$> getValue right <*> getValue top)
