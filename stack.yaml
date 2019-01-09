@@ -37,6 +37,7 @@ resolver: lts-11.20
 # will not be run. This is useful for tweaking upstream packages.
 packages:
 - .
+- sbv
 - verilog
 
 # Dependency packages to be pulled from upstream that are not in the resolver
@@ -44,6 +45,7 @@ packages:
 extra-deps:
 - text-builder-0.6.4
 - deferred-folds-0.9.9
+- crackNum-2.3
 
 # Override default flag values for local packages and extra-deps
 # flags: {}

@@ -52,7 +52,7 @@ arbor pins@(_, outputs, _) nodes net source = do
           pure (fst bottomLeft + literal px, snd bottomLeft + literal py)
         _ -> do
           target <- freePoint
-          liftSMT $ constrain $ bAnd [ fst target .> x | _ : _ : (x, _) : _ <- toList nodes ]
+          liftSMT $ constrain $ sAnd [ fst target .> x | _ : _ : (x, _) : _ <- toList nodes ]
           pure target
 
       liftSMT $ do
@@ -81,8 +81,8 @@ boundedSpace nodes = do
   (w, h) <- padDimensions <$> ask
   sequence_
     [ liftSMT $ do
-        constrain $ x .> literal 0 &&& y .> literal 0
-        constrain $ x .< literal w &&& y .< literal h
+        constrain $ x .> literal 0 .&& y .> literal 0
+        constrain $ x .< literal w .&& y .< literal h
     | rect <- Map.elems nodes
     , (x, y) <- take 1 rect
     ]
@@ -91,7 +91,7 @@ boundedSpace nodes = do
 rectilinear steiner = sequence_ [ uniform edge *> rectangular edge | (_, edge) <- steiner ]
 
 rectangular ((x1, y1) : (x2, y2) : xs) = do
-  liftSMT $ constrain $ x1 .== x2 ||| y1 .== y2
+  liftSMT $ constrain $ x1 .== x2 .|| y1 .== y2
   rectangular ((x2, y2) : xs)
 rectangular _ = pure ()
 
@@ -103,8 +103,8 @@ segments _ = []
 uniform ((x1, y1) : (x2, y2) : (x3, y3) : xs) = do
   liftSMT $ do
     constrain $ (x1, y1) .== (x2, y2)
-      ||| (x3 - x2 .> 0) .== (x1 - x2 .> 0)
-      &&& (y3 - y2 .> 0) .== (y1 - y2 .> 0)
+      .|| (x3 - x2 .> 0) .== (x1 - x2 .> 0)
+      .&& (y3 - y2 .> 0) .== (y1 - y2 .> 0)
   uniform ((x2, y2) : (x3, y3) : xs)
 uniform _ = pure ()
 
@@ -148,8 +148,8 @@ collision nodes = do
 
       liftSMT $ do
         constrain
-          $   left2 .> right1 ||| left1 .> right2
-          ||| bottom1 .> top2 ||| bottom2 .> top1
+          $   left2 .> right1 .|| left1 .> right2
+          .|| bottom1 .> top2 .|| bottom2 .> top1
 
     | (i, path1) <- [ 1 .. ] `zip` Map.elems nodes
     ,     path2  <- i `drop` Map.elems nodes
@@ -166,9 +166,9 @@ freeGatePolygon gate = do
 
   liftSMT $ constrain
     $   left   .== literal x1
-    &&& bottom .== literal y1
-    &&& right  .== literal x2
-    &&& top    .== literal y2
+    .&& bottom .== literal y1
+    .&& right  .== literal x2
+    .&& top    .== literal y2
 
   pure (gate, path)
 
