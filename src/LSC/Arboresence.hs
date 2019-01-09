@@ -102,18 +102,28 @@ freeGatePolygon gate = do
   pure (gate, path)
 
 
+overlap
+  ((left1, bottom1) : (right1, top1) : _)
+  ((left2, bottom2) : (right2, top2) : _)
+  = do
+    liftSMT $ constrain
+      $   left1   .== left2
+      .&& bottom1 .== bottom2
+      .&& right1  .== right2
+      .&& top1    .== top2
+
+
 arboresence nodes net = do
 
-  start @ ((leftStart, bottomStart) : (rightStart, topStart) : _) <- freeRectangle
+  start <- freeRectangle
 
   sequence_
     [ do
 
-      liftSMT $ constrain
-        $   leftStart   .== left   + literal a
-        .&& bottomStart .== bottom + literal b
-        .&& rightStart  .== left   + literal c
-        .&& topStart    .== bottom + literal d
+      overlap start
+        [ (left + literal a, bottom + literal b)
+        , (left + literal c, bottom + literal d)
+        ]
 
     | (i, assignments) <- assocs $ contacts net
     , (_, source) <- assignments
@@ -125,13 +135,12 @@ arboresence nodes net = do
   hyperedge <- sequence
     [ do
 
-      target @ ((leftTarget, bottomTarget) : (rightTarget, topTarget) : _) <- freeRectangle
-    
-      liftSMT $ constrain
-        $   leftTarget   .== left   + literal a
-        .&& bottomTarget .== bottom + literal b
-        .&& rightTarget  .== left   + literal c
-        .&& topTarget    .== bottom + literal d
+      target <- freeRectangle
+
+      overlap target
+        [ (left + literal a, bottom + literal b)
+        , (left + literal c, bottom + literal d)
+        ]
 
       pure target
 
