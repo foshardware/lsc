@@ -34,12 +34,12 @@ pnr netlist@(NetGraph name pins _ gates nets) = do
 
   nodes <- sequence $ freeGatePolygon <$> gates
 
-  edges <- sequence $ netPolygon nodes <$> nets
+  edges <- sequence $ arboresence nodes <$> nets
 
   boundedSpace nodes
   collision nodes
 
-  result <- computeStage1 nodes edges
+  result <- checkResult nodes edges
 
   debug ["stop  pnr @ module", unpack name]
 
@@ -102,7 +102,7 @@ freeGatePolygon gate = do
   pure (gate, path)
 
 
-netPolygon nodes net = do
+arboresence nodes net = do
 
   start @ ((leftStart, bottomStart) : (rightStart, topStart) : _) <- freeRectangle
 
@@ -153,7 +153,7 @@ freePolygon n = sequence $ replicate n freePoint
 freePoint = liftSMT $ (,) <$> free_ <*> free_
 
 
-computeStage1 nodes edges = do
+checkResult nodes edges = do
 
   liftSMT $ query $ do
     result <- checkSat

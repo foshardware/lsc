@@ -88,23 +88,15 @@ svgPaths netlist = Circuit2D
 scaleDown :: Integer -> Circuit -> Circuit
 scaleDown n (Circuit2D nodes edges) = Circuit2D
 
-  [ ( gate
-    , [ Rect (div x1 n, div y1 n) (div x2 n, div y2 n)
-      | Rect (x1, y1) (x2, y2) <- path
-      ]
-    )
+  [ (gate, scaleRect n <$> path)
   | (gate, path) <- nodes
   ]
 
-  [ ( net
-    , [ [ Rect (div x1 n, div y1 n) (div x2 n, div y2 n)
-        | Rect (x1, y1) (x2, y2) <- path
-        ]
-      | path <- paths
-      ]
-    )
+  [ (net, fmap (scaleRect n) <$> paths)
   | (net, paths) <- edges
   ]
+
+scaleRect n (Rect (x1, y1) (x2, y2)) = Rect (div x1 n, div y1 n) (div x2 n, div y2 n)
 
 
 renderText :: Text -> S.Svg
