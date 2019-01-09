@@ -2,12 +2,7 @@
 
 ## Installation
 
-### Windows
-
-`cabal install`
-
-### Linux
-
+`git submodule update --init --recursive`
 `stack install`
 
 ## Usage
