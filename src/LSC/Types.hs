@@ -133,11 +133,12 @@ data Dir = In | Out | InOut
 data Technology = Technology
   { scaleFactor    :: Double
   , components     :: Map Text Component
+  , standardPin    :: Rectangle
   , enableDebug    :: Bool
   } deriving Show
 
 instance Default Technology where
-  def = Technology 1 mempty True
+  def = Technology 1000 mempty (Rect (0, 0) (1000, 1000)) True
 
 lookupDimensions :: Gate -> Technology -> Maybe (Integer, Integer)
 lookupDimensions g tech = componentDimensions
