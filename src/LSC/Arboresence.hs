@@ -50,7 +50,7 @@ pnr netlist@(NetGraph name pins _ gates nets) = do
     }
 
 
-boundedSpace nodes | length nodes < 1 = pure ()
+boundedSpace nodes | length nodes < 2 = pure ()
 boundedSpace nodes = do
 
   let inner = fmap snd $ drop 1 $ toList nodes
@@ -61,10 +61,10 @@ boundedSpace nodes = do
       upperBound = fromIntegral (maxBound :: Int)
 
   liftSMT $ constrain
-    $   left   .<= foldr smin upperBound [ x | (x, _) : _ : _ <- inner ]
-    .&& bottom .<= foldr smin upperBound [ x | (_, x) : _ : _ <- inner ]
-    .&& right  .>= foldr smax lowerBound [ x | _ : (x, _) : _ <- inner ]
-    .&& top    .>= foldr smax lowerBound [ x | _ : (_, x) : _ <- inner ]
+    $   left   .== foldr1 smin [ x | (x, _) : _ : _ <- inner ]
+    .&& bottom .== foldr1 smin [ x | (_, x) : _ : _ <- inner ]
+    .&& right  .== foldr1 smax [ x | _ : (x, _) : _ <- inner ]
+    .&& top    .== foldr1 smax [ x | _ : (_, x) : _ <- inner ]
 
   let tie = literal $ floor $ sqrt $ fromIntegral $ length nodes :: SInteger
 
@@ -141,6 +141,15 @@ pinConnect
       .|| bottom1 .== bottom2 .&& right1  .== right2  .&& top1   .== top2
 
 
+pathCombine
+  ((left1, bottom1) : (right1, top1) : _)
+  ((left2, bottom2) : (right2, top2) : _)
+  = do
+    liftSMT $ constrain
+      $   (right1 .== left2 .|| right2 .== left1) .&& (top1 .== top2 .|| bottom1 .== bottom2)
+      .|| (bottom1 .== top2 .|| bottom2 .== top1) .&& (left1 .== left2 .|| right1 .== right2)
+
+
 arboresence nodes net = do
 
 
@@ -163,7 +172,7 @@ arboresence nodes net = do
           -> pure ()
         port
           | Rect (l, b) (r, t) : _ <- portRects port
-          -> overlap target
+          -> pinConnect target
               [ (sinkLeft + literal l, sinkBottom + literal b)
               , (sinkLeft + literal r, sinkBottom + literal t)
               ]
@@ -173,10 +182,12 @@ arboresence nodes net = do
           -> pure ()
         port
           | Rect (l, b) (r, t) : _ <- portRects port
-          -> overlap start
+          -> pinConnect start
               [ (sourceLeft + literal l, sourceBottom + literal b)
               , (sourceLeft + literal r, sourceBottom + literal t)
               ]
+
+      pathCombine start target
 
       pure [start, target]
 
