@@ -7,8 +7,7 @@ module LSC.Types where
 
 import Data.Default
 import Data.Function (on)
-import Data.Map (Map)
-import qualified Data.Map as Map
+import Data.Map (Map, unionWith, lookup)
 import Data.Semigroup
 import Data.Text (Text)
 import Data.Vector (Vector)
@@ -22,6 +21,8 @@ import Control.Monad.State
 import Control.Parallel (par)
 
 import Data.Time.Clock.POSIX
+
+import Prelude hiding (lookup)
 
 import Data.SBV
 
@@ -55,20 +56,19 @@ data Net = Net
   { netIdent :: Identifier
   , netPaths :: [Path]
   , contacts :: Map Gate [Contact]
-  , netIndex :: Index
   } deriving Show
 
 instance Eq Net where
-  w == v = netIndex w == netIndex v
+  w == v = netIdent w == netIdent v
 
 instance Ord Net where
-  w `compare` v = netIndex w `compare` netIndex v
+  w `compare` v = netIdent w `compare` netIdent v
 
 instance Semigroup Net where
-  Net i ns as k <> Net _ os bs _ = Net i (ns <> os) (Map.unionWith mappend as bs) k
+  Net i ns as <> Net _ os bs = Net i (ns <> os) (unionWith mappend as bs)
 
 instance Monoid Net where
-  mempty = Net mempty mempty mempty def
+  mempty = Net mempty mempty mempty
   mappend = (<>)
 
 
@@ -117,7 +117,7 @@ instance Default Pin where
   def = Pin mempty In def
 
 
-data Port = Port
+data Port = FreePort | Port
   { portLayer :: Text
   , portRects :: [Rectangle]
   } deriving Show
@@ -140,10 +140,9 @@ data Technology = Technology
 instance Default Technology where
   def = Technology 1 mempty True
 
-lookupDimensions :: Gate -> Technology -> (Integer, Integer)
-lookupDimensions g tech
-  = maybe (0, 0) componentDimensions
-  $ Map.lookup (gateIdent g) (components tech)
+lookupDimensions :: Gate -> Technology -> Maybe (Integer, Integer)
+lookupDimensions g tech = componentDimensions
+  <$> lookup (gateIdent g) (components tech)
 
 type BootstrapT m = StateT Technology m
 type Bootstrap = State Technology

@@ -113,9 +113,9 @@ distinctPairs (x : xs) = fmap (x, ) xs ++ distinctPairs xs
 freeGatePolygon gate = do
 
   path @ ((left, bottom) : (right, top) : _) <- freeRectangle
-  (width, height) <- lookupDimensions gate <$> ask
 
-  liftSMT $ constrain
+  dimensions <- lookupDimensions gate <$> ask
+  for_ dimensions $ \ (width, height) -> liftSMT $ constrain
     $   right - left .== literal width
     .&& top - bottom .== literal height
 
@@ -161,15 +161,25 @@ arboresence nodes net = do
       start  <- freeRectangle
       target <- freeRectangle
 
-      overlap target
-        [ (sinkLeft + literal a, sinkBottom + literal b)
-        , (sinkLeft + literal c, sinkBottom + literal d)
-        ]
+      case pinPort sink of
+        FreePort
+          -> pure ()
+        port
+          | Rect (l, b) (r, t) : _ <- portRects port
+          -> overlap target
+              [ (sinkLeft + literal l, sinkBottom + literal b)
+              , (sinkLeft + literal r, sinkBottom + literal t)
+              ]
 
-      overlap start
-        [ (sourceLeft + literal e, sourceBottom + literal f)
-        , (sourceLeft + literal g, sourceBottom + literal h)
-        ]
+      case pinPort source of
+        FreePort
+          -> pure ()
+        port
+          | Rect (l, b) (r, t) : _ <- portRects port
+          -> overlap start
+              [ (sourceLeft + literal l, sourceBottom + literal b)
+              , (sourceLeft + literal r, sourceBottom + literal t)
+              ]
 
       pure [start, target]
 
@@ -179,8 +189,6 @@ arboresence nodes net = do
     , let (gate, (sinkLeft, sinkBottom)     : _) = nodes ! gateIndex i
     , let (from, (sourceLeft, sourceBottom) : _) = nodes ! gateIndex j
     , pinDir sink == In
-    , Rect (a, b) (c, d) <- take 1 $ portRects $ pinPort sink
-    , Rect (e, f) (g, h) <- take 1 $ portRects $ pinPort source
     ]
 
   pure (net, join hyperedge)

@@ -5,8 +5,15 @@ module LSC.BLIF where
 import Control.Monad.Reader
 
 import Data.Foldable
-import qualified Data.Map as Map
+import Data.Map
+  ( assocs, lookup
+  , union, unions
+  , singleton
+  , fromList, fromListWith, fromAscList
+  )
+import Data.Maybe
 import qualified Data.Vector as Vector
+import Prelude hiding (lookup)
 
 import BLIF.Syntax
 import LSC.Types hiding (ask)
@@ -14,36 +21,37 @@ import LSC.Types hiding (ask)
 
 fromBLIF :: BLIF -> Gnostic NetGraph
 fromBLIF (BLIF []) = pure mempty
-fromBLIF (BLIF ms) = do
-
-  let (model, submodels) = splitAt 1 ms
+fromBLIF (BLIF (Model name inputs outputs clocks commands : submodels)) = do
 
   technology <- ask
 
-  let gates =
-        [ gate
-        | Model _ _ _ _ commands <- model
-        , (i, command) <- zip [1..] commands
-        , gate <- toGates i command
-        ]
+  let gates = join $ toGates 0 <$> commands
+  let modelGate = Gate name mempty mempty mempty 0
 
   let nodes = Vector.fromList
         [ gate { gateIndex = i }
-        | (i, gate) <- zip [0.. ] gates
+        | (i, gate) <- zip [0.. ] $ modelGate : gates
         ]
 
-  let nets =
-        [ (net, Net net mempty (Map.singleton g [(contact, pin)]) i)
-        | i <- [ 0 .. ]
-        | g@(Gate ident _ assignments _ _) <- toList nodes
-        , (contact, net) <- Map.assocs assignments
-        , com <- maybe [] pure $ Map.lookup ident $ components technology
-        , pin <- maybe [] pure $ Map.lookup contact $ componentPins com
+  let nets = fromListWith mappend
+        [ (net, Net net mempty (singleton gate [(contact, pin)]))
+        | gate@(Gate ident _ assignments _ _) <- toList nodes
+        , (contact, net) <- assocs assignments
+        , com <- maybeToList $ lookup ident $ components technology
+        , pin <- maybeToList $ lookup contact $ componentPins com
         ]
-        -- TODO: add outer contacts 
 
-
-  let edges = Map.fromListWith mappend nets
+  let edges = fromAscList
+        [ (ident, Net ident mempty $ unions $ contacts : outerRim)
+        | Net ident _ contacts <- toList nets
+        , let outerRim =
+                [ singleton modelGate [(ident, Pin ident Out FreePort)]
+                | ident `elem` inputs
+                ] ++
+                [ singleton modelGate [(ident, Pin ident  In FreePort)]
+                | ident `elem` outputs
+                ]
+        ]
 
   subGraphs <- sequence
         [ (,) name <$> fromBLIF (BLIF [submodel])
@@ -51,9 +59,9 @@ fromBLIF (BLIF ms) = do
         ]
 
   pure $ NetGraph
-    (head [name | Model name _ _ _ _ <- model])
-    (head [(i, o, c) | Model _ i o c _ <- model])
-    (Map.fromList subGraphs)
+    name
+    (inputs, outputs, clocks)
+    (fromList subGraphs)
     nodes
     edges
 
@@ -63,14 +71,14 @@ toGates i (LibraryGate ident assignments)
   = [ Gate
         ident
         mempty
-        (Map.fromList assignments)
+        (fromList assignments)
         mempty
         i ]
 toGates i (Subcircuit ident assignments)
   = [ Gate
         ident
         mempty
-        (Map.fromList assignments)
+        (fromList assignments)
         mempty
         i ]
 toGates _ _ = []
@@ -90,6 +98,6 @@ toModel (NetGraph name (inputList, outputList, clockList) _ nodes _) = Model nam
 
 
 toSubcircuit :: Gate -> Command
-toSubcircuit (Gate ident _ wires _ _) = Subcircuit ident (Map.assocs wires)
+toSubcircuit (Gate ident _ wires _ _) = Subcircuit ident (assocs wires)
 
 
