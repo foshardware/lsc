@@ -125,7 +125,6 @@ data Port = Port
 instance Default Port where
   def = Port mempty mempty
 
-type Rectangle = Rect
 
 data Dir = In | Out | InOut
   deriving (Eq, Show)
@@ -230,10 +229,14 @@ data Circuit2D a = Circuit2D [(Gate, Path)] a
   deriving (Eq, Show)
 
 
-data Rect = Rect (Integer, Integer) (Integer, Integer)
+data Rect a = Rect (a, a) (a, a)
   deriving (Eq, Show)
 
-type Path = [Rect]
+type Rectangle = Rect Integer
 
-type SPath = [(SInteger, SInteger)]
+type Path = [Rectangle]
+
+type SRectangle = Rect SInteger
+
+type SPath = [SRectangle]
 
