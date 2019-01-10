@@ -6,6 +6,7 @@
 
 module LSC.Arboresence where
 
+import Control.Monad
 import Control.Monad.Trans
 import Data.Default
 import Data.Foldable
@@ -132,45 +133,57 @@ overlap
       .&& top1    .== top2
 
 
+pinConnect
+  ((left1, bottom1) : (right1, top1) : _)
+  ((left2, bottom2) : (right2, top2) : _)
+  = do
+    liftSMT $ constrain
+      $   left1   .== left2   .&& bottom1 .== bottom2 .&& right1 .== right2
+      .|| left1   .== left2   .&& bottom1 .== bottom2 .&& top1   .== top2
+      .|| left1   .== left2   .&& right1  .== right2  .&& top1   .== top2
+      .|| bottom1 .== bottom2 .&& right1  .== right2  .&& top1   .== top2
+
+
 arboresence nodes net = do
 
-  start <- freeRectangle
 
-  sequence_
+  sources <- sequence
     [ do
-
-      overlap start
-        [ (left + literal a, bottom + literal b)
-        , (left + literal c, bottom + literal d)
-        ]
-
-    | (i, assignments) <- assocs $ contacts net
+      pure (gate, source)
+    | (gate, assignments) <- assocs $ contacts net
     , (_, source) <- assignments
     , pinDir source == Out
-    , Rect (a, b) (c, d) <- take 1 $ portRects $ pinPort source
-    , let (gate, (left, bottom) : _) = nodes ! gateIndex i
     ]
 
   hyperedge <- sequence
     [ do
 
+      start  <- freeRectangle
       target <- freeRectangle
 
       overlap target
-        [ (left + literal a, bottom + literal b)
-        , (left + literal c, bottom + literal d)
+        [ (sinkLeft + literal a, sinkBottom + literal b)
+        , (sinkLeft + literal c, sinkBottom + literal d)
         ]
 
-      pure target
+      overlap start
+        [ (sourceLeft + literal e, sourceBottom + literal f)
+        , (sourceLeft + literal g, sourceBottom + literal h)
+        ]
 
-    | (i, assignments) <- assocs $ contacts net
+      pure [start, target]
+
+    | (j, source) <- sources
+    , (i, assignments) <- assocs $ contacts net
     , (_, sink) <- assignments
+    , let (gate, (sinkLeft, sinkBottom)     : _) = nodes ! gateIndex i
+    , let (from, (sourceLeft, sourceBottom) : _) = nodes ! gateIndex j
     , pinDir sink == In
     , Rect (a, b) (c, d) <- take 1 $ portRects $ pinPort sink
-    , let (gate, (left, bottom) : _) = nodes ! gateIndex i
+    , Rect (e, f) (g, h) <- take 1 $ portRects $ pinPort source
     ]
 
-  pure (net, start : hyperedge)
+  pure (net, join hyperedge)
 
 
 freeRectangle = freePolygon 2
