@@ -50,35 +50,32 @@ pnr netlist@(NetGraph name pins _ gates nets) = do
     }
 
 
+boundedSpace nodes | length nodes < 1 = pure ()
 boundedSpace nodes = do
 
-  let rects = snd <$> toList nodes
+  let inner = fmap snd $ drop 1 $ toList nodes
+
+  let (left, bottom) : (right, top) : _ = snd $ nodes ! 0
 
   let lowerBound = fromIntegral (minBound :: Int)
       upperBound = fromIntegral (maxBound :: Int)
 
-  let left   = foldr smin upperBound [ x | (x, _) : _ : _ <- rects ]
-      bottom = foldr smin upperBound [ x | (_, x) : _ : _ <- rects ]
-      right  = foldr smax lowerBound [ x | _ : (x, _) : _ <- rects ]
-      top    = foldr smax lowerBound [ x | _ : (_, x) : _ <- rects ]
+  liftSMT $ constrain
+    $   left   .<= foldr smin upperBound [ x | (x, _) : _ : _ <- inner ]
+    .&& bottom .<= foldr smin upperBound [ x | (_, x) : _ : _ <- inner ]
+    .&& right  .>= foldr smax lowerBound [ x | _ : (x, _) : _ <- inner ]
+    .&& top    .>= foldr smax lowerBound [ x | _ : (_, x) : _ <- inner ]
 
   let tie = literal $ floor $ sqrt $ fromIntegral $ length nodes :: SInteger
 
-  let width  = sum [ right - left | (left, _) : (right, _) : _ <- rects ]
-      height = sum [ top - bottom | (_, bottom) : (_, top) : _ <- rects ]
+  let width  = sum [ right - left | (left, _) : (right, _) : _ <- inner ]
+      height = sum [ top - bottom | (_, bottom) : (_, top) : _ <- inner ]
 
-  liftSMT $ do
-
-    constrain
-      $   left   .>= literal 0
-      .&& right  .<= width
-      .&& bottom .>= literal 0
-      .&& top    .<= sDiv height tie
-
-    constrain $ sOr
-      [ l .== 0 .&& b .== 0
-      | (l, b) : _ <- rects
-      ]
+  liftSMT $ constrain
+    $   left   .== literal 0
+    .&& right  .<= width
+    .&& bottom .== literal 0
+    .&& top    .<= sDiv height tie
 
 
 collision nodes = do
@@ -99,7 +96,7 @@ collision nodes = do
           .|| bottom1 .== top2
           .|| bottom2 .== top1
 
-    | ((_, path1), (_, path2)) <- distinctPairs $ toList nodes
+    | ((_, path1), (_, path2)) <- distinctPairs $ drop 1 $ toList nodes
     , let (left1, bottom1) : (right1, top1) : _ = path1
     , let (left2, bottom2) : (right2, top2) : _ = path2
     ]
