@@ -53,20 +53,17 @@ pnr netlist@(NetGraph name pins _ gates nets) = do
 boundedSpace nodes | length nodes < 1 = pure ()
 boundedSpace nodes = do
 
-  let inner = fmap snd $ toList nodes
+  let inner = snd <$> toList nodes
 
-  let lowerBound = fromIntegral (minBound :: Int)
-      upperBound = fromIntegral (maxBound :: Int)
-
-  let left   = foldr1 smin [ x | (x, _) : _ : _ <- inner ]
-  let bottom = foldr1 smin [ x | (_, x) : _ : _ <- inner ]
-  let right  = foldr1 smax [ x | _ : (x, _) : _ <- inner ]
-  let top    = foldr1 smax [ x | _ : (_, x) : _ <- inner ]
+  let left   = foldr1 smin [ x | Rect (x, _) _ <- inner ]
+  let bottom = foldr1 smin [ x | Rect (_, x) _ <- inner ]
+  let right  = foldr1 smax [ x | Rect _ (x, _) <- inner ]
+  let top    = foldr1 smax [ x | Rect _ (_, x) <- inner ]
 
   let tie = literal $ floor $ sqrt $ fromIntegral $ length nodes :: SInteger
 
-  let width  = sum [ right - left | (left, _) : (right, _) : _ <- inner ]
-      height = sum [ top - bottom | (_, bottom) : (_, top) : _ <- inner ]
+  let width  = sum [ right - left | Rect (left, _) (right, _) <- inner ]
+      height = sum [ top - bottom | Rect (_, bottom) (_, top) <- inner ]
 
   liftSMT $ constrain
     $   left   .== literal 0
@@ -94,8 +91,8 @@ collision nodes = do
           .|| bottom2 .== top1
 
     | ((_, path1), (_, path2)) <- distinctPairs $ toList nodes
-    , let (left1, bottom1) : (right1, top1) : _ = path1
-    , let (left2, bottom2) : (right2, top2) : _ = path2
+    , let Rect (left1, bottom1) (right1, top1) = path1
+    , let Rect (left2, bottom2) (right2, top2) = path2
     ]
 
 
@@ -106,7 +103,7 @@ distinctPairs (x : xs) = fmap (x, ) xs ++ distinctPairs xs
 
 freeGatePolygon gate = do
 
-  path @ ((left, bottom) : (right, top) : _) <- freeRectangle
+  path @ (Rect (left, bottom) (right, top)) <- freeRectangle
 
   dimensions <- lookupDimensions gate <$> ask
   for_ dimensions $ \ (width, height) -> liftSMT $ constrain
@@ -117,8 +114,8 @@ freeGatePolygon gate = do
 
 
 overlap
-  ((left1, bottom1) : (right1, top1) : _)
-  ((left2, bottom2) : (right2, top2) : _)
+  (Rect (left1, bottom1) (right1, top1))
+  (Rect (left2, bottom2) (right2, top2))
   = do
     liftSMT $ constrain
       $   left1   .== left2
@@ -128,8 +125,8 @@ overlap
 
 
 pinConnect
-  ((left1, bottom1) : (right1, top1) : _)
-  ((left2, bottom2) : (right2, top2) : _)
+  (Rect (left1, bottom1) (right1, top1))
+  (Rect (left2, bottom2) (right2, top2))
   = do
     liftSMT $ constrain
       $   left1   .== left2   .&& bottom1 .== bottom2 .&& right1 .== right2
@@ -139,8 +136,8 @@ pinConnect
 
 
 pathCombine
-  ((left1, bottom1) : (right1, top1) : _)
-  ((left2, bottom2) : (right2, top2) : _)
+  (Rect (left1, bottom1) (right1, top1))
+  (Rect (left2, bottom2) (right2, top2))
   = do
     liftSMT $ constrain
       $   (right1 .== left2 .|| right2 .== left1) .&& (top1 .== top2 .|| bottom1 .== bottom2)
@@ -148,7 +145,6 @@ pathCombine
 
 
 arboresence nodes net = do
-
 
   sources <- sequence
     [ do
@@ -164,16 +160,13 @@ arboresence nodes net = do
       start  <- freeRectangle
       target <- freeRectangle
 
+      pinConnect start $ Rect
+        (sourceLeft + literal l, sourceBottom + literal b)
+        (sourceLeft + literal r, sourceBottom + literal t)
 
-      pinConnect start
-        [ (sourceLeft + literal l, sourceBottom + literal b)
-        , (sourceLeft + literal r, sourceBottom + literal t)
-        ]
-
-      pinConnect target
-        [ (sinkLeft + literal m, sinkBottom + literal c)
-        , (sinkLeft + literal s, sinkBottom + literal u)
-        ]
+      pinConnect target $ Rect
+        (sinkLeft + literal m, sinkBottom + literal c)
+        (sinkLeft + literal s, sinkBottom + literal u)
 
       pathCombine start target
 
@@ -182,8 +175,8 @@ arboresence nodes net = do
     | (j, source) <- sources
     , (i, assignments) <- assocs $ contacts net
     , (_, sink) <- assignments
-    , let (gate, (sinkLeft, sinkBottom)     : _) = nodes ! gateIndex i
-    , let (from, (sourceLeft, sourceBottom) : _) = nodes ! gateIndex j
+    , let (gate, Rect (  sinkLeft,   sinkBottom) _) = nodes ! gateIndex i
+    , let (from, Rect (sourceLeft, sourceBottom) _) = nodes ! gateIndex j
     , pinDir sink == In
     , Rect (l, b) (r, t) <- take 1 $ portRects $ pinPort source
     , Rect (m, c) (s, u) <- take 1 $ portRects $ pinPort sink
@@ -192,7 +185,7 @@ arboresence nodes net = do
   pure (net, join hyperedge)
 
 
-freeRectangle = freePolygon 2
+freeRectangle = Rect <$> freePoint <*> freePoint
 
 freePolygon n = sequence $ replicate n freePoint
 
@@ -235,6 +228,6 @@ checkResult nodes edges = do
     netAssign (net, edge) = sequence (rectangle <$> edge)
       >>= \ paths -> pure net { netPaths = pure paths }
 
-    rectangle ((left, bottom) : (right, top) : _) = Rect
+    rectangle (Rect (left, bottom) (right, top)) = Rect
       <$> ((, ) <$> getValue left  <*> getValue bottom)
       <*> ((, ) <$> getValue right <*> getValue top)
