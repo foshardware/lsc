@@ -2,9 +2,12 @@
 
 module LSC.SVG where
 
+import Control.Monad
 import Data.Foldable
 import Data.String
-import Data.Text
+import Data.Map (assocs)
+import Data.Text hiding (take)
+import qualified Data.Vector as V
 import qualified Data.Text as Text
 import qualified Data.Text.Lazy    as Lazy
 import qualified Data.Text.Lazy.IO as Lazy
@@ -17,7 +20,9 @@ import Text.Blaze.Svg.Renderer.Text (renderSvg)
 import LSC.Types
 
 
-type Circuit = Stage2
+type Circuit = Circuit2D [Arboresence]
+
+type Options = (S.AttributeValue, S.AttributeValue)
 
 
 plotStdout :: NetGraph -> IO ()
@@ -49,28 +54,30 @@ place (g, path@(Rect (x, y) _ : _)) = do
     ! A.transform (fromString $ "rotate(90 "++ show (x + 8) ++","++ show (y + 24)  ++")")
     $ renderText $ gateIdent g
 
-  follow path
+  follow ("black", "transparent") path
 
 place _ = pure ()
 
 
-route :: (Net, [Path]) -> S.Svg
-route (net, p : ps) = follow p *> route (net, ps)
+route :: Arboresence -> S.Svg
+route (net, pins, paths) = do
+  follow ("blue", "blue") `mapM_` paths
+  follow ("black", "blue") pins
 route _ = pure ()
 
 
-follow :: Path -> S.Svg
-follow (Rect (left, bottom) (right, top) : xs) = do
+follow :: Options -> Path -> S.Svg
+follow (stroke, fill) (Rect (left, bottom) (right, top) : xs) = do
 
   S.path
     ! A.d (mkPath $ m left bottom *> l left top *> l right top *> l right bottom *> z)
-    ! A.stroke "black"
-    ! A.fill "transparent"
+    ! A.stroke stroke
+    ! A.fill fill
     ! A.strokeWidth "4"
 
-  follow xs
+  follow (stroke, fill) xs
 
-follow _ = pure ()
+follow _ _ = pure ()
 
 
 svgPaths :: NetGraph -> Circuit
@@ -80,23 +87,33 @@ svgPaths netlist = Circuit2D
   | gate <- toList $ gateVector netlist
   ]
 
-  [ (net, netPaths net)
+  [ (net, inducePins =<< assocs (contacts net), netPaths net)
   | net <- toList $ netMapping netlist
   ]
+
+  where
+
+    inducePins (i, cons) =
+      [ Rect (l + x, b + y) (r + x, t + y)
+      | (_, pin) <- cons
+      , Rect (x, y) _ <- take 1 $ gatePath $ gateVector netlist V.! gateIndex i
+      , Rect (l, b) (r, t) <- take 1 $ portRects $ pinPort pin
+      ]
 
 
 scaleDown :: Integer -> Circuit -> Circuit
 scaleDown n (Circuit2D nodes edges) = Circuit2D
 
-  [ (gate, scaleRect n <$> path)
+  [ (gate, f (`div` n) path)
   | (gate, path) <- nodes
+  , let f = fmap . fmap
   ]
 
-  [ (net, fmap (scaleRect n) <$> paths)
-  | (net, paths) <- edges
+  [ (net, g (`div` n) pins, f (`div` n) paths)
+  | (net, pins, paths) <- edges
+  , let f = fmap . fmap . fmap
+  , let g = fmap . fmap
   ]
-
-scaleRect n (Rect (x1, y1) (x2, y2)) = Rect (div x1 n, div y1 n) (div x2 n, div y2 n)
 
 
 renderText :: Text -> S.Svg

@@ -223,7 +223,7 @@ type Stage1 = Circuit2D ()
 type Stage2 = Circuit2D [Arboresence]
 
 
-type Arboresence = (Net, [Path])
+type Arboresence = (Net, [Rectangle], [Path])
 
 data Circuit2D a = Circuit2D [(Gate, Path)] a
   deriving (Eq, Show)
@@ -231,6 +231,10 @@ data Circuit2D a = Circuit2D [(Gate, Path)] a
 
 data Rect a = Rect (a, a) (a, a)
   deriving (Eq, Show)
+
+instance Functor Rect where
+  fmap f (Rect (a, b) (c, d)) = Rect (f a, f b) (f c, f d)
+
 
 type Rectangle = Rect Integer
 
