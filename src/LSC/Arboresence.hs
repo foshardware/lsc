@@ -37,7 +37,7 @@ pnr netlist@(NetGraph name pins _ gates nets) = do
 
   edges <- sequence $ arboresence nodes <$> nets
 
-  boundedSpace nodes
+  placement nodes pins
   collision nodes
 
   result <- checkResult nodes edges
@@ -50,8 +50,8 @@ pnr netlist@(NetGraph name pins _ gates nets) = do
     }
 
 
-boundedSpace nodes | length nodes < 1 = pure ()
-boundedSpace nodes = do
+placement nodes _ | length nodes < 1 = pure ()
+placement nodes (inputs, outputs, _) = do
 
   let inner = snd <$> toList nodes
 
@@ -60,7 +60,7 @@ boundedSpace nodes = do
   let right  = foldr1 smax [ x | Rect _ (x, _) <- inner ]
   let top    = foldr1 smax [ x | Rect _ (_, x) <- inner ]
 
-  let tie = literal $ floor $ sqrt $ fromIntegral $ length nodes :: SInteger
+  let tie = floor $ sqrt $ fromIntegral $ length nodes :: Integer
 
   let width  = sum [ right - left | Rect (left, _) (right, _) <- inner ]
       height = sum [ top - bottom | Rect (_, bottom) (_, top) <- inner ]
@@ -69,7 +69,21 @@ boundedSpace nodes = do
     $   left   .== literal 0
     .&& right  .<= width
     .&& bottom .== literal 0
-    .&& top    .<= sDiv height tie
+    .&& top    .<= height
+
+  sequence_
+    [ liftSMT $ constrain $ x .== left
+    | (g, Rect (x, _) _) <- toList nodes
+    , any (`elem` inputs) $ gateWires g
+    , not $ any (`elem` outputs) $ gateWires g
+    ]
+
+  sequence_
+    [ liftSMT $ constrain $ x .== right
+    | (g, Rect _ (x, _)) <- toList nodes
+    , any (`elem` outputs) $ gateWires g
+    , not $ any (`elem` inputs) $ gateWires g
+    ]
 
 
 collision nodes = do
