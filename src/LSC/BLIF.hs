@@ -26,11 +26,10 @@ fromBLIF (BLIF (Model name inputs outputs clocks commands : submodels)) = do
   technology <- ask
 
   let gates = join $ toGates 0 <$> commands
-  let modelGate = Gate name mempty mempty mempty 0
 
   let nodes = Vector.fromList
         [ gate { gateIndex = i }
-        | (i, gate) <- zip [0.. ] $ modelGate : gates
+        | (i, gate) <- zip [0.. ] gates
         ]
 
   let nets = fromListWith mappend
@@ -41,19 +40,9 @@ fromBLIF (BLIF (Model name inputs outputs clocks commands : submodels)) = do
         , pin <- maybeToList $ lookup contact $ componentPins com
         ]
 
-  let edges = fromAscList
-        [ (ident, Net ident mempty $ unions $ contacts : outerRim)
-        | Net ident _ contacts <- toList nets
-        , let outerRim =
-                [ singleton modelGate [(ident, Pin ident Out FreePort)]
-                | ident `elem` inputs
-                ] ++
-                [ singleton modelGate [(ident, Pin ident  In FreePort)]
-                | ident `elem` outputs
-                ]
-        ]
+  let edges = nets
 
-  subGraphs <- sequence
+  subGraphs <- fromList <$> sequence
         [ (,) name <$> fromBLIF (BLIF [submodel])
         | submodel@(Model name _ _ _ _) <- submodels
         ]
@@ -61,7 +50,7 @@ fromBLIF (BLIF (Model name inputs outputs clocks commands : submodels)) = do
   pure $ NetGraph
     name
     (inputs, outputs, clocks)
-    (fromList subGraphs)
+    subGraphs
     nodes
     edges
 

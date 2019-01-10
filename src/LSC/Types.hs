@@ -117,7 +117,7 @@ instance Default Pin where
   def = Pin mempty In def
 
 
-data Port = FreePort | Port
+data Port = Port
   { portLayer :: Text
   , portRects :: [Rectangle]
   } deriving Show

@@ -50,21 +50,18 @@ pnr netlist@(NetGraph name pins _ gates nets) = do
     }
 
 
-boundedSpace nodes | length nodes < 2 = pure ()
+boundedSpace nodes | length nodes < 1 = pure ()
 boundedSpace nodes = do
 
-  let inner = fmap snd $ drop 1 $ toList nodes
-
-  let (left, bottom) : (right, top) : _ = snd $ nodes ! 0
+  let inner = fmap snd $ toList nodes
 
   let lowerBound = fromIntegral (minBound :: Int)
       upperBound = fromIntegral (maxBound :: Int)
 
-  liftSMT $ constrain
-    $   left   .== foldr1 smin [ x | (x, _) : _ : _ <- inner ]
-    .&& bottom .== foldr1 smin [ x | (_, x) : _ : _ <- inner ]
-    .&& right  .== foldr1 smax [ x | _ : (x, _) : _ <- inner ]
-    .&& top    .== foldr1 smax [ x | _ : (_, x) : _ <- inner ]
+  let left   = foldr1 smin [ x | (x, _) : _ : _ <- inner ]
+  let bottom = foldr1 smin [ x | (_, x) : _ : _ <- inner ]
+  let right  = foldr1 smax [ x | _ : (x, _) : _ <- inner ]
+  let top    = foldr1 smax [ x | _ : (_, x) : _ <- inner ]
 
   let tie = literal $ floor $ sqrt $ fromIntegral $ length nodes :: SInteger
 
@@ -96,7 +93,7 @@ collision nodes = do
           .|| bottom1 .== top2
           .|| bottom2 .== top1
 
-    | ((_, path1), (_, path2)) <- distinctPairs $ drop 1 $ toList nodes
+    | ((_, path1), (_, path2)) <- distinctPairs $ toList nodes
     , let (left1, bottom1) : (right1, top1) : _ = path1
     , let (left2, bottom2) : (right2, top2) : _ = path2
     ]
@@ -167,25 +164,16 @@ arboresence nodes net = do
       start  <- freeRectangle
       target <- freeRectangle
 
-      case pinPort sink of
-        FreePort
-          -> pure ()
-        port
-          | Rect (l, b) (r, t) : _ <- portRects port
-          -> pinConnect target
-              [ (sinkLeft + literal l, sinkBottom + literal b)
-              , (sinkLeft + literal r, sinkBottom + literal t)
-              ]
 
-      case pinPort source of
-        FreePort
-          -> pure ()
-        port
-          | Rect (l, b) (r, t) : _ <- portRects port
-          -> pinConnect start
-              [ (sourceLeft + literal l, sourceBottom + literal b)
-              , (sourceLeft + literal r, sourceBottom + literal t)
-              ]
+      pinConnect start
+        [ (sourceLeft + literal l, sourceBottom + literal b)
+        , (sourceLeft + literal r, sourceBottom + literal t)
+        ]
+
+      pinConnect target
+        [ (sinkLeft + literal m, sinkBottom + literal c)
+        , (sinkLeft + literal s, sinkBottom + literal u)
+        ]
 
       pathCombine start target
 
@@ -197,6 +185,8 @@ arboresence nodes net = do
     , let (gate, (sinkLeft, sinkBottom)     : _) = nodes ! gateIndex i
     , let (from, (sourceLeft, sourceBottom) : _) = nodes ! gateIndex j
     , pinDir sink == In
+    , Rect (l, b) (r, t) <- take 1 $ portRects $ pinPort source
+    , Rect (m, c) (s, u) <- take 1 $ portRects $ pinPort sink
     ]
 
   pure (net, join hyperedge)
