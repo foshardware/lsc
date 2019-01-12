@@ -51,7 +51,7 @@ pnr netlist@(NetGraph name pins _ gates nets) = do
 
 
 placement nodes _ | length nodes < 1 = pure ()
-placement nodes (inputs, outputs, _) = do
+placement nodes _ = do
 
   let inner = snd <$> toList nodes
 
@@ -70,12 +70,6 @@ placement nodes (inputs, outputs, _) = do
     .&& right  .<= width
     .&& bottom .== literal 0
     .&& top    .<= height
-
-  sequence_
-    [ liftSMT $ constrain $ x .== right
-    | (g, Rect _ (x, _)) <- toList nodes
-    , any (`elem` outputs) $ gateWires g
-    ]
 
 
 collision nodes = do

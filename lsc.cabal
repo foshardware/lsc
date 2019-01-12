@@ -102,9 +102,6 @@ library
       LSC.LEF,
       LSC.SVG,
       LSC.SuffixTree,
-      LSC.Inlining,
-      LSC.Exlining,
-      LSC.NetGraph,
       LSC.Numbers,
       LSC.Types
   other-modules:

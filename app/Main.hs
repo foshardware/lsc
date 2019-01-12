@@ -28,8 +28,6 @@ import LSC.BLIF
 import LSC.D3
 import LSC.LEF
 import LSC.SVG
-import LSC.Exlining
-import LSC.NetGraph
 import LSC.Types
 
 versionString :: String
@@ -104,24 +102,6 @@ program = do
        $ do
          liftIO $ plotStdout circuit2d
 
-      exit
-
-  when (and $ arg <$> [Json, Lef, Blif, Exline])
-    $ do
-      net_ <- liftIO $ Text.readFile $ head [v | (k, v) <- opts, k == Blif]
-      lef_ <- liftIO $ Text.readFile $ head [v | (k, v) <- opts, k == Lef ]
-      tech <- lift $ either
-        (ioError . userError . show)
-        (pure . fromLEF)
-        (parseLEF lef_)
-
-      liftIO $ hPutStrLn stderr "exline reporting."
-      let exliner = exlineDeepWithEscapeHatch (/= "Queue_1") [4]
-
-      liftIO $ either
-        (ioError . userError . show)
-        (Bytes.putStrLn . encodeNetGraph . exliner . gnostic tech . fromBLIF)
-        (parseBLIF net_)
       exit
 
   when (arg Exline && not (arg Blif))

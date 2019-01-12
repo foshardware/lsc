@@ -16,8 +16,6 @@ import BLIF.Syntax      as BLIF
 import Verilog.Syntax   as Verilog
 import LSC.Types        as LSC
 
-import LSC.NetGraph
-
 
 data D3Dag = D3Dag Integer String [D3Dag]
 
@@ -115,6 +113,8 @@ cut ls (D3Dag n k xs)
   = D3Dag n k
   $ cut ls <$> [ d | d@(D3Dag _ x _) <- xs, isNothing $ Map.lookup x ls ]
 
+
+type Leaves = Map String Integer
 
 leaves :: D3Dag -> Leaves
 leaves (D3Dag n k []) = Map.singleton k n

@@ -20,9 +20,6 @@ import LEF.Parser
 
 import LSC.BLIF
 import LSC.LEF
-import LSC.Inlining
-import LSC.Exlining
-import LSC.NetGraph
 import LSC.Types
 
 
@@ -49,16 +46,7 @@ tests = do
     (pure . gnostic lefOsu035 . fromBLIF)
     (parseBLIF queue1File)
 
-  let exlined = exlineDeepWithEscapeHatch (const False) (replicate 8 8) blifQueue1
-  let inlined = inlineAll exlined
-  liftIO $ printBLIF $ toBLIF $ exlined
-  liftIO $ hPutStrLn stderr $ showNetHierarchy $ exlined
-  it "inlines correctly" (reprBlif inlined == reprBlif blifQueue1)
-    $ liftIO $ printBLIF $ toBLIF $ inlined
-
-  where
-
-    reprBlif = toLazyText . builderBlif . toBLIF
+  pure ()
 
 
 it :: String -> Bool -> Test () -> Test ()

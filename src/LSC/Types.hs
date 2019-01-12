@@ -6,6 +6,7 @@
 module LSC.Types where
 
 import Data.Default
+import Data.Foldable
 import Data.Function (on)
 import Data.Map (Map, unionWith, lookup)
 import Data.Semigroup
@@ -31,24 +32,20 @@ import System.IO
 
 data NetGraph = NetGraph
   { modelName  :: Text
-  , modelPins  :: ([Text], [Text], [Text])
-  -- , modelGate  :: AbstractGate
+  , modelGate  :: AbstractGate
   , subModels  :: Map Text NetGraph
   , gateVector :: Vector Gate
   , netMapping :: Map Identifier Net
   } deriving Show
 
-instance Semigroup NetGraph where
-  net1 <> net2 = NetGraph
-    (modelName  net1 `mappend` modelName  net2)
-    (modelPins  net1 `mappend` modelPins  net2)
-    (subModels  net1 `mappend` subModels  net2)
-    (gateVector net1 `mappend` gateVector net2)
-    (netMapping net1 `mappend` netMapping net2)
+instance Default NetGraph where
+  def = NetGraph mempty def mempty mempty mempty
 
-instance Monoid NetGraph where
-  mempty = NetGraph mempty mempty mempty mempty mempty
-  mappend = (<>)
+
+flattenHierarchy :: NetGraph -> [NetGraph]
+flattenHierarchy netlist
+  = netlist
+  : join [ flattenHierarchy model | model <- toList $ subModels netlist ]
 
 
 type Contact = Pin
@@ -83,7 +80,6 @@ data Gate = Gate
   { gateIdent :: Identifier
   , gatePath  :: Path
   , gateWires :: Map Identifier Identifier
-  , mapWires  :: Map Identifier Identifier
   , gateIndex :: Index
   } deriving Show
 
@@ -94,13 +90,16 @@ instance Ord Gate where
   g `compare` h = gateIndex g `compare` gateIndex h
 
 instance Default Gate where
-  def = Gate "default" mempty def def def
+  def = Gate mempty mempty mempty def
 
 
 data AbstractGate = AbstractGate
   { abstractGatePath :: Path
   , abstractPins     :: [Pin]
   } deriving Show
+
+instance Default AbstractGate where
+  def = AbstractGate mempty mempty
 
 
 data Component = Component
