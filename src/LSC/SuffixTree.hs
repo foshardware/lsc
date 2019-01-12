@@ -13,10 +13,8 @@ import Data.Vector
   , unsafeFreeze, thaw
   , generate, (!)
   , reverse
-  , drop, take
+  , drop
   , filter
-  , slice, cons
-  , concat
   )
 import qualified Data.Vector.Unboxed as U
 import qualified Data.Vector.Algorithms.Intro as Intro

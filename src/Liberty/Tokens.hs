@@ -5,7 +5,6 @@ module Liberty.Tokens
     , Token (..)
     ) where
 
-import Data.Text (Text)
 
 data Lexer a = L Pos a
   deriving (Show, Eq)
