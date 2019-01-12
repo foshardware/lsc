@@ -8,11 +8,9 @@ module LSC.Arboresence where
 
 import Control.Monad
 import Control.Monad.Trans
-import Data.Default
 import Data.Foldable
 import Data.Map (assocs)
 import Data.Vector ((!))
-import qualified Data.Vector as Vector
 import Data.SBV
 import Data.SBV.Control
 import Data.Text (unpack)
@@ -22,10 +20,10 @@ import LSC.Types
 
 
 pnr :: NetGraph -> LSC NetGraph
-pnr netlist@(NetGraph name pins _ gates nets) = do
+pnr netlist@(NetGraph ident pins _ gates nets) = do
 
   debug
-    [ "start pnr @ module", unpack name
+    [ "start pnr @ module", unpack ident
     , "-", show $ length gates, "gates"
     , "-", show $ length nets, "nets"
     ]
@@ -42,7 +40,7 @@ pnr netlist@(NetGraph name pins _ gates nets) = do
 
   result <- checkResult nodes edges
 
-  debug ["stop  pnr @ module", unpack name]
+  debug ["stop  pnr @ module", unpack ident]
 
   pure netlist
     { gateVector = maybe (gateVector netlist) fst result
@@ -60,10 +58,8 @@ placement nodes _ = do
   let right  = foldr1 smax [ x | Rect _ (x, _) <- inner ]
   let top    = foldr1 smax [ x | Rect _ (_, x) <- inner ]
 
-  let tie = floor $ sqrt $ fromIntegral $ length nodes :: Integer
-
-  let width  = sum [ right - left | Rect (left, _) (right, _) <- inner ]
-      height = sum [ top - bottom | Rect (_, bottom) (_, top) <- inner ]
+  let width  = sum [ r - l | Rect (l, _) (r, _) <- inner ]
+      height = sum [ t - b | Rect (_, b) (_, t) <- inner ]
 
   liftSMT $ constrain
     $   left   .== literal 0
@@ -175,8 +171,8 @@ arboresence nodes net = do
     | (j, source) <- sources
     , (i, assignments) <- assocs $ contacts net
     , sink <- assignments
-    , let (gate, Rect (  sinkLeft,   sinkBottom) _) = nodes ! gateIndex i
-    , let (from, Rect (sourceLeft, sourceBottom) _) = nodes ! gateIndex j
+    , let (_, Rect (  sinkLeft,   sinkBottom) _) = nodes ! gateIndex i
+    , let (_, Rect (sourceLeft, sourceBottom) _) = nodes ! gateIndex j
     , pinDir sink == In
     , Rect (l, b) (r, t) <- take 1 $ portRects $ pinPort source
     , Rect (m, c) (s, u) <- take 1 $ portRects $ pinPort sink

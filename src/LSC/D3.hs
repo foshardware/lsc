@@ -4,7 +4,6 @@
 module LSC.D3 where
 
 import Data.Aeson
-import Data.Char
 import Data.Foldable (toList)
 import Data.Maybe
 import Data.Text (unpack, isPrefixOf)
@@ -120,7 +119,7 @@ leaves :: D3Dag -> Leaves
 leaves (D3Dag n k []) = Map.singleton k n
 leaves (D3Dag _ _ xs) = Map.unionsWith (+) (leaves <$> xs)
 
-
+primitive :: Identifier -> Bool
 primitive x = any (`isPrefixOf` x)
   ["BUF", "AND", "AOI", "NOR", "OAI", "XNOR", "MUX", "INV", "NAND", "NOR", "OR", "XOR", "DFF"]
 

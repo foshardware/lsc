@@ -8,9 +8,8 @@ import Data.Default
 import Data.Foldable
 import Data.Map
   ( assocs, lookup
-  , union, unions
   , singleton
-  , fromList, fromListWith, fromAscList
+  , fromList, fromListWith
   )
 import Data.Maybe
 import qualified Data.Vector as Vector
@@ -44,8 +43,8 @@ fromBLIF (BLIF (Model name inputs outputs clocks commands : submodels)) = do
   let edges = nets
 
   subGraphs <- fromList <$> sequence
-        [ (,) name <$> fromBLIF (BLIF [submodel])
-        | submodel@(Model name _ _ _ _) <- submodels
+        [ (,) i <$> fromBLIF (BLIF [submodel])
+        | submodel@(Model i _ _ _ _) <- submodels
         ]
 
   pure $ NetGraph

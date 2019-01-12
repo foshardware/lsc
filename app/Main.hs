@@ -8,7 +8,7 @@ import Control.Monad.Trans.Maybe
 
 import Data.Foldable (for_)
 
-import qualified Data.ByteString.Lazy as Bytes
+import qualified Data.ByteString.Lazy.Char8 as Bytes
 
 import qualified Data.Text.IO as Text
 import qualified Data.Text.Lazy.IO as Pipe
@@ -18,7 +18,6 @@ import System.Environment
 import System.IO
 import System.Process
 
-import BLIF.Builder
 import BLIF.Parser
 import LEF.Parser
 import Verilog.Parser

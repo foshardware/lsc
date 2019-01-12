@@ -2,7 +2,6 @@
 
 module LSC.SVG where
 
-import Control.Monad
 import Data.Foldable
 import Data.String
 import Data.Map (assocs)
@@ -60,10 +59,9 @@ place _ = pure ()
 
 
 route :: Arboresence -> S.Svg
-route (net, pins, paths) = do
+route (_, pins, paths) = do
   follow ("blue", "blue") `mapM_` paths
   follow ("black", "blue") pins
-route _ = pure ()
 
 
 follow :: Options -> Path -> S.Svg
@@ -93,11 +91,11 @@ svgPaths netlist = Circuit2D
 
   where
 
-    inducePins (i, cons) =
-      [ Rect (l + x, b + y) (r + x, t + y)
-      | pin <- cons
+    inducePins (i, pins) =
+      [ Rect (l' + x, b + y) (r + x, t + y)
+      | pin <- pins
       , Rect (x, y) _ <- take 1 $ gatePath $ gateVector netlist V.! gateIndex i
-      , Rect (l, b) (r, t) <- take 1 $ portRects $ pinPort pin
+      , Rect (l', b) (r, t) <- take 1 $ portRects $ pinPort pin
       ]
 
 

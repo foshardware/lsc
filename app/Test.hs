@@ -9,12 +9,10 @@ import Control.Monad.Trans.Maybe
 import Data.FileEmbed
 import Data.Text (Text)
 import Data.Text.Encoding
-import Data.Text.Lazy.Builder
 
 import System.Exit
 import System.IO
 
-import BLIF.Builder
 import BLIF.Parser
 import LEF.Parser
 
