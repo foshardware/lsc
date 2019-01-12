@@ -239,6 +239,17 @@ data Circuit2D a = Circuit2D [(Gate, Path)] a
 data Rect a = Rect (a, a) (a, a)
   deriving (Eq, Show)
 
+left, bottom, right, top :: Rect a -> a
+left   (Rect (a, _) _) = a
+bottom (Rect (_, a) _) = a
+right  (Rect _ (a, _)) = a
+top    (Rect _ (_, a)) = a
+
+width, height :: Num a => Rect a -> a
+width  r = right r - left r
+height r = top r - bottom r
+
+
 instance Functor Rect where
   fmap f (Rect (a, b) (c, d)) = Rect (f a, f b) (f c, f d)
 

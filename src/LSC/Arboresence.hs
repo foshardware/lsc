@@ -20,7 +20,7 @@ import LSC.Types
 
 
 pnr :: NetGraph -> LSC NetGraph
-pnr netlist@(NetGraph ident pins _ gates nets) = do
+pnr netlist@(NetGraph ident abstract _ gates nets) = do
 
   debug
     [ "start pnr @ module", unpack ident
@@ -33,9 +33,10 @@ pnr netlist@(NetGraph ident pins _ gates nets) = do
 
   nodes <- sequence $ freeGatePolygon <$> gates
 
-  edges <- sequence $ arboresence nodes <$> nets
+  (area, pins) <- placement nodes abstract
 
-  placement nodes pins
+  edges <- sequence $ arboresence nodes pins <$> nets
+
   collision nodes
 
   result <- checkResult nodes edges
@@ -48,24 +49,38 @@ pnr netlist@(NetGraph ident pins _ gates nets) = do
     }
 
 
-placement nodes _ | length nodes < 1 = pure ()
-placement nodes _ = do
+placement nodes (AbstractGate _ pins) = do
 
-  let inner = snd <$> toList nodes
+  area <- freeRectangle
 
-  let left   = foldr1 smin [ x | Rect (x, _) _ <- inner ]
-  let bottom = foldr1 smin [ x | Rect (_, x) _ <- inner ]
-  let right  = foldr1 smax [ x | Rect _ (x, _) <- inner ]
-  let top    = foldr1 smax [ x | Rect _ (_, x) <- inner ]
-
-  let width  = sum [ r - l | Rect (l, _) (r, _) <- inner ]
-      height = sum [ t - b | Rect (_, b) (_, t) <- inner ]
+  abstract <- sequence
+    [ freePinPolygon area pin
+    | pin <- pins
+    , pinDir pin == In
+    ]
 
   liftSMT $ constrain
-    $   left   .== literal 0
-    .&& right  .<= width
-    .&& bottom .== literal 0
-    .&& top    .<= height
+    $   bottom area .== foldr1 smin (bottom . snd <$> nodes)
+    .&& right  area .== foldr1 smax (right  . snd <$> nodes)
+    .&& top    area .== foldr1 smax (top    . snd <$> nodes)
+
+  liftSMT $ constrain
+    $   left area
+        .== foldr1 smin (left . snd <$> abstract)
+
+    .&& foldr1 smax (right . snd <$> abstract)
+        .<= foldr1 smin (left . snd <$> nodes)
+
+  let w = sum $ width  . snd <$> nodes
+      h = sum $ height . snd <$> nodes
+
+  liftSMT $ constrain
+    $   left   area .== literal 0
+    .&& right  area .<= w
+    .&& bottom area .== literal 0
+    .&& top    area .<= h
+
+  pure (area, abstract)
 
 
 collision nodes = do
@@ -75,20 +90,18 @@ collision nodes = do
       liftSMT $ do
 
         constrain
-          $   left2 .>= right1
-          .|| left1 .>= right2
-          .|| bottom1 .>= top2
-          .|| bottom2 .>= top1
+          $   left b .>= right a
+          .|| left a .>= right b
+          .|| bottom a .>= top b
+          .|| bottom b .>= top a
 
         softConstrain
-          $   left2 .== right1
-          .|| left1 .== right2
-          .|| bottom1 .== top2
-          .|| bottom2 .== top1
+          $   left b .== right a
+          .|| left a .== right b
+          .|| bottom a .== top b
+          .|| bottom b .== top a
 
-    | ((_, path1), (_, path2)) <- distinctPairs $ toList nodes
-    , let Rect (left1, bottom1) (right1, top1) = path1
-    , let Rect (left2, bottom2) (right2, top2) = path2
+    | ((_, a), (_, b)) <- distinctPairs $ toList nodes
     ]
 
 
@@ -99,48 +112,52 @@ distinctPairs (x : xs) = fmap (x, ) xs ++ distinctPairs xs
 
 freeGatePolygon gate = do
 
-  path @ (Rect (left, bottom) (right, top)) <- freeRectangle
+  path <- freeRectangle
 
   dimensions <- lookupDimensions gate <$> ask
-  for_ dimensions $ \ (width, height) -> liftSMT $ constrain
-    $   right - left .== literal width
-    .&& top - bottom .== literal height
+  for_ dimensions $ \ (w, h) -> liftSMT $ constrain
+    $   right path - left path .== literal w
+    .&& top path - bottom path .== literal h
 
   pure (gate, path)
 
 
-overlap
-  (Rect (left1, bottom1) (right1, top1))
-  (Rect (left2, bottom2) (right2, top2))
-  = do
-    liftSMT $ constrain
-      $   left1   .== left2
-      .&& bottom1 .== bottom2
-      .&& right1  .== right2
-      .&& top1    .== top2
+freePinPolygon area pin = do
+
+  path <- freeRectangle
+
+  std <- standardPin <$> ask
+  liftSMT $ constrain
+    $   left path .>= left area
+    .&& right path - left path .== literal (width  std)
+    .&& top path - bottom path .== literal (height std)
+
+  pure (pin, path)
 
 
-pinConnect
-  (Rect (left1, bottom1) (right1, top1))
-  (Rect (left2, bottom2) (right2, top2))
-  = do
-    liftSMT $ constrain
-      $   left1   .== left2   .&& bottom1 .== bottom2 .&& right1 .== right2
-      .|| left1   .== left2   .&& bottom1 .== bottom2 .&& top1   .== top2
-      .|| left1   .== left2   .&& right1  .== right2  .&& top1   .== top2
-      .|| bottom1 .== bottom2 .&& right1  .== right2  .&& top1   .== top2
+overlap a b = do
+  liftSMT $ constrain
+    $   left a   .== left b
+    .&& bottom a .== bottom b
+    .&& right a  .== right b
+    .&& top a    .== top b
 
 
-pathCombine
-  (Rect (left1, bottom1) (right1, top1))
-  (Rect (left2, bottom2) (right2, top2))
-  = do
-    liftSMT $ constrain
-      $   (right1 .== left2 .|| right2 .== left1) .&& (top1 .== top2 .|| bottom1 .== bottom2)
-      .|| (bottom1 .== top2 .|| bottom2 .== top1) .&& (left1 .== left2 .|| right1 .== right2)
+pinConnect a b = do
+  liftSMT $ constrain
+    $   left a   .== left b   .&& bottom a .== bottom b .&& right a .== right b
+    .|| left a   .== left b   .&& bottom a .== bottom b .&& top a   .== top b
+    .|| left a   .== left b   .&& right a  .== right b  .&& top a   .== top b
+    .|| bottom a .== bottom b .&& right a  .== right b  .&& top a   .== top b
 
 
-arboresence nodes net = do
+pathCombine a b = do
+  liftSMT $ constrain
+    $   (right a .== left b .|| right b .== left a) .&& (top a .== top b .|| bottom a .== bottom b)
+    .|| (bottom a .== top b .|| bottom b .== top a) .&& (left a .== left b .|| right a .== right b)
+
+
+arboresence nodes pins net = do
 
   sources <- sequence
     [ do
@@ -157,12 +174,12 @@ arboresence nodes net = do
       target <- freeRectangle
 
       pinConnect start $ Rect
-        (sourceLeft + literal l, sourceBottom + literal b)
-        (sourceLeft + literal r, sourceBottom + literal t)
+        (left src + literal l, bottom src + literal b)
+        (left src + literal r, bottom src + literal t)
 
       pinConnect target $ Rect
-        (sinkLeft + literal m, sinkBottom + literal c)
-        (sinkLeft + literal s, sinkBottom + literal u)
+        (left snk + literal m, bottom snk + literal c)
+        (left snk + literal s, bottom snk + literal u)
 
       pathCombine start target
 
@@ -171,8 +188,8 @@ arboresence nodes net = do
     | (j, source) <- sources
     , (i, assignments) <- assocs $ contacts net
     , sink <- assignments
-    , let (_, Rect (  sinkLeft,   sinkBottom) _) = nodes ! gateIndex i
-    , let (_, Rect (sourceLeft, sourceBottom) _) = nodes ! gateIndex j
+    , let (_, snk) = nodes ! gateIndex i
+    , let (_, src) = nodes ! gateIndex j
     , pinDir sink == In
     , Rect (l, b) (r, t) <- take 1 $ portRects $ pinPort source
     , Rect (m, c) (s, u) <- take 1 $ portRects $ pinPort sink
