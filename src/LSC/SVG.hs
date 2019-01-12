@@ -65,15 +65,25 @@ route (_, pins, paths) = do
 
 
 follow :: Options -> Path -> S.Svg
-follow (stroke, fill) (Rect (left, bottom) (right, top) : xs) = do
+follow (stroke, fill) (x : xs) = do
 
   S.path
-    ! A.d (mkPath $ m left bottom *> l left top *> l right top *> l right bottom *> z)
+    ! A.d (mkPath pen)
     ! A.stroke stroke
     ! A.fill fill
     ! A.strokeWidth "4"
 
   follow (stroke, fill) xs
+
+  where
+
+    pen = do
+      left x `m` bottom x
+      left x `l` top x
+      right x `l` top x
+      right x `l` bottom x
+      z
+
 
 follow _ _ = pure ()
 
@@ -92,10 +102,10 @@ svgPaths netlist = Circuit2D
   where
 
     inducePins (i, pins) =
-      [ Rect (l' + x, b + y) (r + x, t + y)
+      [ Rect (left r + x, bottom r + y) (right r + x, top r + y)
       | pin <- pins
       , Rect (x, y) _ <- take 1 $ gatePath $ gateVector netlist V.! gateIndex i
-      , Rect (l', b) (r, t) <- take 1 $ portRects $ pinPort pin
+      , r <- take 1 $ portRects $ pinPort pin
       ]
 
 
