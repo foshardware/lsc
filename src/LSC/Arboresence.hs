@@ -72,17 +72,9 @@ placement nodes (inputs, outputs, _) = do
     .&& top    .<= height
 
   sequence_
-    [ liftSMT $ constrain $ x .== left
-    | (g, Rect (x, _) _) <- toList nodes
-    , any (`elem` inputs) $ gateWires g
-    , not $ any (`elem` outputs) $ gateWires g
-    ]
-
-  sequence_
     [ liftSMT $ constrain $ x .== right
     | (g, Rect _ (x, _)) <- toList nodes
     , any (`elem` outputs) $ gateWires g
-    , not $ any (`elem` inputs) $ gateWires g
     ]
 
 
@@ -164,7 +156,7 @@ arboresence nodes net = do
     [ do
       pure (gate, source)
     | (gate, assignments) <- assocs $ contacts net
-    , (_, source) <- assignments
+    , source <- assignments
     , pinDir source == Out
     ]
 
@@ -188,7 +180,7 @@ arboresence nodes net = do
 
     | (j, source) <- sources
     , (i, assignments) <- assocs $ contacts net
-    , (_, sink) <- assignments
+    , sink <- assignments
     , let (gate, Rect (  sinkLeft,   sinkBottom) _) = nodes ! gateIndex i
     , let (from, Rect (sourceLeft, sourceBottom) _) = nodes ! gateIndex j
     , pinDir sink == In

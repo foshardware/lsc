@@ -33,7 +33,7 @@ fromBLIF (BLIF (Model name inputs outputs clocks commands : submodels)) = do
         ]
 
   let nets = fromListWith mappend
-        [ (net, Net net mempty (singleton gate [(contact, pin)]))
+        [ (net, Net net mempty (singleton gate [pin]))
         | gate@(Gate ident _ assignments _ _) <- toList nodes
         , (contact, net) <- assocs assignments
         , com <- maybeToList $ lookup ident $ components technology

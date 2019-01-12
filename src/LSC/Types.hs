@@ -31,7 +31,8 @@ import System.IO
 
 data NetGraph = NetGraph
   { modelName  :: Text
-  , modelPins  :: ([Text], [Text], [Text]) 
+  , modelPins  :: ([Text], [Text], [Text])
+  -- , modelGate  :: AbstractGate
   , subModels  :: Map Text NetGraph
   , gateVector :: Vector Gate
   , netMapping :: Map Identifier Net
@@ -50,7 +51,7 @@ instance Monoid NetGraph where
   mappend = (<>)
 
 
-type Contact = (Identifier, Pin)
+type Contact = Pin
 
 data Net = Net
   { netIdent :: Identifier
@@ -94,6 +95,12 @@ instance Ord Gate where
 
 instance Default Gate where
   def = Gate "default" mempty def def def
+
+
+data AbstractGate = AbstractGate
+  { abstractGatePath :: Path
+  , abstractPins     :: [Pin]
+  } deriving Show
 
 
 data Component = Component

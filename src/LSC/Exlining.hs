@@ -216,7 +216,7 @@ buildName = showt . abs . hash . foldMap ( \ g -> foldMap id (gateWires g) <> ga
 direction :: Gate -> Identifier -> Identifier -> Map Identifier Net -> Maybe Dir
 direction gate contact net edges
   = pure . pinDir
-  =<< lookup contact
+  =<< lookup contact . fmap (\p -> (pinIdent p, p))
   =<< Map.lookup gate . contacts
   =<< Map.lookup net edges
 
