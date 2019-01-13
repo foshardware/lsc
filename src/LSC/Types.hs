@@ -95,7 +95,7 @@ instance Default Gate where
 
 data AbstractGate = AbstractGate
   { abstractGatePath :: Path
-  , abstractPins     :: [Pin]
+  , abstractContacts :: [Contact]
   } deriving Show
 
 instance Default AbstractGate where
@@ -223,11 +223,6 @@ debug msg = do
   when enabled $ liftIO $ do
     timestamp <- show . round <$> getPOSIXTime
     hPutStrLn stderr $ unwords $ timestamp : "-" : msg
-
-
-type Stage1 = Circuit2D ()
-
-type Stage2 = Circuit2D [Arboresence]
 
 
 type Arboresence = (Net, [Rectangle], [Path])
