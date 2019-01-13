@@ -71,14 +71,11 @@ placement nodes (AbstractGate _ pins) = do
     .&& foldr1 smax (right . snd <$> abstract)
         .<= foldr1 smin (left . snd <$> nodes)
 
-  let w = sum $ width  . snd <$> nodes
-      h = sum $ height . snd <$> nodes
-
   liftSMT $ constrain
     $   left   area .== literal 0
-    .&& right  area .<= w
+    .&& right  area .<= sum (width  . snd <$> nodes)
     .&& bottom area .== literal 0
-    .&& top    area .<= h
+    .&& top    area .<= sum (height . snd <$> nodes)
 
   pure (area, abstract)
 
@@ -157,11 +154,10 @@ pathCombine a b = do
     .|| (bottom a .== top b .|| bottom b .== top a) .&& (left a .== left b .|| right a .== right b)
 
 
-arboresence nodes pins net = do
+arboresence nodes outer net = do
 
-  sources <- sequence
-    [ do
-      pure $ Rect
+  sources <- pure $
+    [ Rect
         (left src + literal l, bottom src + literal b)
         (left src + literal r, bottom src + literal t)
     | (j, assignments) <- assocs $ contacts net
@@ -169,6 +165,11 @@ arboresence nodes pins net = do
     , pinDir source == Out
     , let (gate, src) = nodes ! gateIndex j
     , Rect (l, b) (r, t) <- take 1 $ portRects $ pinPort source
+    ] ++
+    [ rect
+    | (pin, rect) <- outer
+    , pinDir pin == In
+    , pinIdent pin == netIdent net
     ]
 
   hyperedge <- sequence
