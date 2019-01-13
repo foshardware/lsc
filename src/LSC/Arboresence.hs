@@ -37,7 +37,8 @@ pnr netlist@(NetGraph ident abstract _ gates nets) = do
 
   edges <- sequence $ arboresence nodes pins <$> nets
 
-  collision nodes
+  disjointGates nodes
+  disjointNets edges
 
   result <- checkResult nodes edges
 
@@ -57,6 +58,11 @@ placement nodes (AbstractGate _ pins) = do
     [ freePinPolygon area pin
     | pin <- pins
     , pinDir pin == In
+    ]
+
+  sequence_
+    [ apart a b
+    | ((_, a), (_, b)) <- distinctPairs abstract
     ]
 
   liftSMT $ constrain
@@ -80,25 +86,22 @@ placement nodes (AbstractGate _ pins) = do
   pure (area, abstract)
 
 
-collision nodes = do
+disjointGates nodes = do
   sequence_
     [ do
-
-      liftSMT $ do
-
-        constrain
-          $   left b .>= right a
-          .|| left a .>= right b
-          .|| bottom a .>= top b
-          .|| bottom b .>= top a
-
-        softConstrain
-          $   left b .== right a
-          .|| left a .== right b
-          .|| bottom a .== top b
-          .|| bottom b .== top a
-
+      disjoint a b
+      cling a b
     | ((_, a), (_, b)) <- distinctPairs $ toList nodes
+    ]
+
+
+disjointNets edges = do
+  sequence_
+    [ do
+      apart a b
+    | ((_, as), (_, bs)) <- distinctPairs $ toList edges
+    , a <- as
+    , b <- bs
     ]
 
 
@@ -126,13 +129,38 @@ freePinPolygon area pin = do
   std <- standardPin <$> ask
   liftSMT $ constrain
     $   left path .>= left area
-    .&& right path - left path .== literal (width  std)
-    .&& top path - bottom path .== literal (height std)
+    .&& width path .== literal (width std)
+    .&& height path .== literal (height std)
 
   pure (pin, path)
 
 
-overlap a b = do
+apart a b = do
+  l <- lambda <$> ask
+  liftSMT $ constrain
+    $   left b - right a .> literal l
+    .|| left a - right b .> literal l
+    .|| bottom a - top b .> literal l
+    .|| bottom b - top a .> literal l
+
+
+disjoint a b = do
+  liftSMT $ constrain
+    $   left b .>= right a
+    .|| left a .>= right b
+    .|| bottom a .>= top b
+    .|| bottom b .>= top a
+
+
+cling a b = do
+  liftSMT $ softConstrain
+    $   left b .== right a
+    .|| left a .== right b
+    .|| bottom a .== top b
+    .|| bottom b .== top a
+
+
+congruent a b = do
   liftSMT $ constrain
     $   left a   .== left b
     .&& bottom a .== bottom b
