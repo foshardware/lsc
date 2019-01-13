@@ -77,6 +77,14 @@ placement nodes (AbstractGate _ pins) = do
     .&& foldr1 smax (right . snd <$> abstract)
         .<= foldr1 smin (left . snd <$> nodes)
 
+  let outputs = [ ident | Pin ident dir _ <- pins, dir == Out ]
+
+  sequence_
+    [ liftSMT $ constrain $ right rect .== right area
+    | (g, rect) <- toList nodes
+    , any (`elem` outputs) $ gateWires g
+    ]
+
   liftSMT $ constrain
     $   left   area .== literal 0
     .&& right  area .<= sum (width  . snd <$> nodes)
