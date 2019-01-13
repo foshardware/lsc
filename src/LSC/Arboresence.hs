@@ -161,10 +161,14 @@ arboresence nodes pins net = do
 
   sources <- sequence
     [ do
-      pure (gate, source)
-    | (gate, assignments) <- assocs $ contacts net
+      pure $ Rect
+        (left src + literal l, bottom src + literal b)
+        (left src + literal r, bottom src + literal t)
+    | (j, assignments) <- assocs $ contacts net
     , source <- assignments
     , pinDir source == Out
+    , let (gate, src) = nodes ! gateIndex j
+    , Rect (l, b) (r, t) <- take 1 $ portRects $ pinPort source
     ]
 
   hyperedge <- sequence
@@ -173,9 +177,7 @@ arboresence nodes pins net = do
       start  <- freeRectangle
       target <- freeRectangle
 
-      pinConnect start $ Rect
-        (left src + literal l, bottom src + literal b)
-        (left src + literal r, bottom src + literal t)
+      pinConnect start source
 
       pinConnect target $ Rect
         (left snk + literal m, bottom snk + literal c)
@@ -185,13 +187,11 @@ arboresence nodes pins net = do
 
       pure [start, target]
 
-    | (j, source) <- sources
+    | source <- sources
     , (i, assignments) <- assocs $ contacts net
     , sink <- assignments
     , let (_, snk) = nodes ! gateIndex i
-    , let (_, src) = nodes ! gateIndex j
     , pinDir sink == In
-    , Rect (l, b) (r, t) <- take 1 $ portRects $ pinPort source
     , Rect (m, c) (s, u) <- take 1 $ portRects $ pinPort sink
     ]
 
