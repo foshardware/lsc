@@ -40,13 +40,14 @@ pnr netlist@(NetGraph ident abstract _ gates nets) = do
   disjointGates nodes
   disjointNets edges
 
-  result <- checkResult nodes edges
+  result <- checkResult area pins nodes edges
 
   debug ["stop  pnr @ module", unpack ident]
 
   pure netlist
-    { gateVector = maybe (gateVector netlist) fst result
-    , netMapping = maybe (netMapping netlist) snd result
+    { modelGate  = maybe (modelGate  netlist) snd result
+    , gateVector = maybe (gateVector netlist) (fst . fst) result
+    , netMapping = maybe (netMapping netlist) (snd . fst) result
     }
 
 
@@ -243,7 +244,7 @@ freePolygon n = sequence $ replicate n freePoint
 freePoint = liftSMT $ (,) <$> free_ <*> free_
 
 
-checkResult nodes edges = do
+checkResult area pins nodes edges = do
 
   liftSMT $ query $ do
     result <- checkSat
@@ -254,7 +255,10 @@ checkResult nodes edges = do
         gates <- sequence (gateAssign <$> nodes)
         nets  <- sequence (netAssign  <$> edges)
 
-        pure $ Just (gates, nets)
+        inpts <- sequence (pinAssign  <$> pins)
+        pad <- rectangle area
+
+        pure $ Just ((gates, nets), AbstractGate [pad] inpts)
 
       Unsat -> do
 
@@ -275,9 +279,12 @@ checkResult nodes edges = do
     gateAssign (gate, xs) = rectangle xs
       >>= \ path -> pure gate { gatePath = pure path }
 
+    pinAssign (pin, xs) = rectangle xs
+      >>= \ path -> pure pin { pinPort = Port mempty [path] }
+
     netAssign (net, edge) = sequence (rectangle <$> edge)
       >>= \ paths -> pure net { netPaths = pure paths }
 
-    rectangle (Rect (left, bottom) (right, top)) = Rect
-      <$> ((, ) <$> getValue left  <*> getValue bottom)
-      <*> ((, ) <$> getValue right <*> getValue top)
+    rectangle r = Rect
+      <$> ((, ) <$> getValue (left r)  <*> getValue (bottom r))
+      <*> ((, ) <$> getValue (right r) <*> getValue (top r))
