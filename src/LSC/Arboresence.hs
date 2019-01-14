@@ -63,11 +63,6 @@ placement nodes = do
   area <- freeRectangle
 
   liftSMT $ constrain
-    $   bottom area .== foldr1 smin (bottom . snd <$> nodes)
-    .&& right  area .== foldr1 smax (right  . snd <$> nodes)
-    .&& top    area .== foldr1 smax (top    . snd <$> nodes)
-
-  liftSMT $ constrain
     $   left   area .== literal 0
     .&& right  area .<= literal 2 * sum (width  . snd <$> nodes)
     .&& bottom area .== literal 0
@@ -133,6 +128,10 @@ pinPolygon area pin = do
   if pinDir pin == In
     then liftSMT $ constrain $  left path .==  left area
     else liftSMT $ constrain $ right path .== right area
+
+  liftSMT $ constrain
+    $   bottom path .>= bottom area
+    .&&    top path .<=    top area
 
   pure (pin, path)
 
@@ -230,6 +229,17 @@ powerRing nodes = do
   (w, h) <- standardPin <$> ask
 
   sequence_ $ inside (inner ring) . snd <$> nodes
+
+  liftSMT $ constrain
+    $   width (left ring) .== width (bottom ring)
+    .&& width (bottom ring) .== width (right ring)
+    .&& width (right ring) .== width (top ring)
+    .&& width (top ring) .== literal w
+
+    .&& height (left ring) .== height (bottom ring)
+    .&& height (bottom ring) .== height (right ring)
+    .&& height (right ring) .== height (top ring)
+    .&& height (top ring) .== literal h
 
   pure ring
 
