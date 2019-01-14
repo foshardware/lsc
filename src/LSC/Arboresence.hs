@@ -134,17 +134,16 @@ freePinPolygon pin = do
   pure (pin, path)
 
 
-inside (Rect (l, b) (r, t)) x = do
+inside a b = do
   d <- lambda <$> ask
   liftSMT $ constrain
-    $     left x - right l .> literal d
-    .&& bottom x -   top b .> literal d
-    .&&   left r - right x .> literal d
-    .&& bottom t -   top x .> literal d
+    $     left b -   left a .> literal d
+    .&& bottom b - bottom a .> literal d
+    .&&  right b -  right a .> literal d
+    .&&    top b -    top a .> literal d
 
 
-outside = inside
-
+outside = disjoint
 
 disjoint a b = do
   d <- lambda <$> ask
@@ -223,7 +222,7 @@ powerRing nodes = do
 
   (w, h) <- standardPin <$> ask
 
-  sequence_ $ inside ring . snd <$> nodes
+  sequence_ $ inside (ringInner ring) . snd <$> nodes
 
   pure ring
 
