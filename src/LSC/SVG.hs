@@ -61,6 +61,8 @@ place _ = pure ()
 
 
 route :: Arboresence Path -> Svg
+route (net,  _, paths) | netIdent net == "vdd" = do
+  follow ("green", "green") `mapM_` paths
 route (_, pins, paths) = do
   follow ("blue", "blue") `mapM_` paths
   follow ("black", "blue") pins

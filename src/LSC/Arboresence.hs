@@ -146,8 +146,8 @@ alignRight = flip alignLeft
 inside i o = do
   d <- lambda <$> ask
   liftSMT $ constrain
-    $     left o -   left i .> literal d
-    .&& bottom o - bottom i .> literal d
+    $     left i -   left o .> literal d
+    .&& bottom i - bottom o .> literal d
     .&&  right o -  right i .> literal d
     .&&    top o -    top i .> literal d
 
@@ -231,14 +231,10 @@ powerRing nodes = do
   sequence_ $ (`inside` inner ring) . snd <$> nodes
 
   liftSMT $ constrain
-    $   width (left ring) .== width (bottom ring)
-    .&& width (bottom ring) .== width (right ring)
-    .&& width (right ring) .== width (top ring)
-    .&& width (top ring) .== literal w
+    $   width (left ring) .==  width (right ring)
+    .&& width (right ring) .== literal w
 
-    .&& height (left ring) .== height (bottom ring)
-    .&& height (bottom ring) .== height (right ring)
-    .&& height (right ring) .== height (top ring)
+    .&& height (bottom ring) .== height (top ring)
     .&& height (top ring) .== literal h
 
   pure ring
