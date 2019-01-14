@@ -31,15 +31,18 @@ pnr netlist@(NetGraph ident (AbstractGate _ contacts) _ gates nets) = do
   liftSMT $ do
     setOption $ ProduceUnsatCores True
 
-  pins <- sequence $ freePinPolygon <$> contacts
 
   nodes <- sequence $ freeGatePolygon <$> gates
 
-  area <- placement nodes pins
+  area <- placement nodes
+
+  pins <- sequence $ pinPolygon area <$> contacts
 
   ring <- powerRing nodes
 
   edges <- sequence $ arboresence nodes pins <$> nets
+
+  alignPins ring pins
 
   disjointGates nodes
   disjointNets edges
@@ -55,7 +58,7 @@ pnr netlist@(NetGraph ident (AbstractGate _ contacts) _ gates nets) = do
     }
 
 
-placement nodes pins = do
+placement nodes = do
 
   area <- freeRectangle
 
@@ -65,27 +68,23 @@ placement nodes pins = do
     .&& top    area .== foldr1 smax (top    . snd <$> nodes)
 
   liftSMT $ constrain
-    $   sAnd [   left r .==   left area | r <- snd <$> pins ]
-    .&& sAnd [ bottom r .>= bottom area | r <- snd <$> pins ]
-
-    .&& foldr1 smax (right . snd <$> pins)
-        .<= foldr1 smin (left . snd <$> nodes)
-
-  let outputs = [ ident | (Pin ident dir _, _) <- pins, dir == Out ]
-
-  sequence_
-    [ liftSMT $ constrain $ right rect .== right area
-    | (g, rect) <- toList nodes
-    , any (`elem` outputs) $ gateWires g
-    ]
-
-  liftSMT $ constrain
     $   left   area .== literal 0
     .&& right  area .<= literal 2 * sum (width  . snd <$> nodes)
     .&& bottom area .== literal 0
     .&& top    area .<= literal 2 * sum (height . snd <$> nodes)
 
   pure area
+
+
+alignPins ring pins = do
+
+  sequence_ $ [ rect `alignLeft` outer ring | (p, rect) <- pins, pinDir p ==  In ]
+  sequence_ $ [ outer ring `alignLeft` rect | (p, rect) <- pins, pinDir p == Out ]
+
+  sequence_
+    [ disjoint a b
+    | ((_, a), (_, b)) <- distinctPairs $ toList pins
+    ]
 
 
 disjointGates nodes = do
@@ -121,17 +120,28 @@ freeGatePolygon gate = do
   pure (gate, path)
 
 
-freePinPolygon pin = do
+pinPolygon area pin = do
 
   path <- freeRectangle
 
   (w, h) <- standardPin <$> ask
+
   liftSMT $ constrain
-    $     left path .>= literal 0
-    .&&  width path .== literal w
+    $    width path .== literal w
     .&& height path .== literal h
 
+  if pinDir pin == In
+    then liftSMT $ constrain $  left path .==  left area
+    else liftSMT $ constrain $ right path .== right area
+
   pure (pin, path)
+
+
+alignLeft l r = do
+  d <- lambda <$> ask
+  liftSMT $ constrain $ left r - right l .> literal d
+
+alignRight = flip alignLeft
 
 
 inside a b = do
@@ -222,7 +232,7 @@ powerRing nodes = do
 
   (w, h) <- standardPin <$> ask
 
-  sequence_ $ inside (ringInner ring) . snd <$> nodes
+  sequence_ $ inside (inner ring) . snd <$> nodes
 
   pure ring
 

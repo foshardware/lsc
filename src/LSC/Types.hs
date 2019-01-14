@@ -255,9 +255,9 @@ instance Functor Rect where
 
 type Ring a = Rect (Rect a)
 
-ringInner, ringOuter :: Ring a -> Rect a
-ringInner (Rect (l, b) (r, t)) = Rect (right l, top b) (left r, bottom t)
-ringOuter (Rect (l, b) (r, t)) = Rect (left l, bottom b) (right r, top t)
+inner, outer :: Ring a -> Rect a
+inner (Rect (l, b) (r, t)) = Rect (right l, top b) (left r, bottom t)
+outer (Rect (l, b) (r, t)) = Rect (left l, bottom b) (right r, top t)
 
 type Rectangle = Rect Integer
 
