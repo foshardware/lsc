@@ -232,13 +232,13 @@ debug msg = do
     hPutStrLn stderr $ unwords $ timestamp : "-" : msg
 
 
-type Arboresence = (Net, [Rectangle], [Path])
+type Arboresence a = (Net, a, [a])
 
-data Circuit2D a = Circuit2D [(Gate, Path)] a
+data Circuit2D a = Circuit2D [(Gate, a)] [Arboresence a]
   deriving (Eq, Show)
 
-
 newtype Comp z a = Comp [(z, Rect a)]
+  deriving (Eq, Show)
 
 type Geometry = Comp Integer Integer
 

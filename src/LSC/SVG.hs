@@ -19,7 +19,9 @@ import Text.Blaze.Svg.Renderer.Text (renderSvg)
 import LSC.Types
 
 
-type Circuit = Circuit2D [Arboresence]
+type Circuit = Circuit2D Path
+
+type Svg = S.Svg
 
 type Options = (S.AttributeValue, S.AttributeValue)
 
@@ -32,7 +34,7 @@ plot :: NetGraph -> Lazy.Text
 plot = renderSvg . svgDoc . scaleDown 100 . svgPaths
 
 
-svgDoc :: Circuit -> S.Svg
+svgDoc :: Circuit -> Svg
 svgDoc (Circuit2D nodes edges) = S.docTypeSvg
   ! A.version "1.1"
   ! A.width "100000"
@@ -42,7 +44,7 @@ svgDoc (Circuit2D nodes edges) = S.docTypeSvg
     route `mapM_` edges
 
 
-place :: (Gate, Path) -> S.Svg
+place :: (Gate, Path) -> Svg
 place (g, path@(Rect (x, y) _ : _)) = do
 
   S.text_
@@ -58,13 +60,13 @@ place (g, path@(Rect (x, y) _ : _)) = do
 place _ = pure ()
 
 
-route :: Arboresence -> S.Svg
+route :: Arboresence Path -> Svg
 route (_, pins, paths) = do
   follow ("blue", "blue") `mapM_` paths
   follow ("black", "blue") pins
 
 
-follow :: Options -> Path -> S.Svg
+follow :: Options -> Path -> Svg
 follow (stroke, fill) (x : xs) = do
 
   S.path
@@ -133,6 +135,6 @@ scaleDown n (Circuit2D nodes edges) = Circuit2D
   ]
 
 
-renderText :: Text -> S.Svg
+renderText :: Text -> Svg
 renderText = fromString . Text.unpack
 
