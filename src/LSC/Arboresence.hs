@@ -180,24 +180,10 @@ pathCombine a b = do
     .|| left  a .== left  b .&& bottom a .== bottom b
 
 
-
 arboresence nodes pins net = do
 
-  sources <- pure $
-    [ Rect
-        (left src + literal l, bottom src + literal b)
-        (left src + literal r, bottom src + literal t)
-    | (j, assignments) <- assocs $ netPins net
-    , source <- assignments
-    , pinDir source == Out
-    , let (gate, src) = nodes ! gateIndex j
-    , Rect (l, b) (r, t) <- take 1 $ portRects $ pinPort source
-    ] ++
-    [ rect
-    | (pin, rect) <- pins
-    , pinDir pin == In
-    , pinIdent pin == netIdent net
-    ]
+  let sources = vertices Out
+      sinks   = vertices In
 
   hyperedge <- sequence
     [ do
@@ -206,24 +192,35 @@ arboresence nodes pins net = do
       target <- freeRectangle
 
       pinConnect start source
-
-      pinConnect target $ Rect
-        (left snk + literal m, bottom snk + literal c)
-        (left snk + literal s, bottom snk + literal u)
+      pinConnect target sink
 
       pathCombine start target
 
       pure [start, target]
 
     | source <- sources
-    , (i, assignments) <- assocs $ netPins net
-    , sink <- assignments
-    , let (_, snk) = nodes ! gateIndex i
-    , pinDir sink == In
-    , Rect (m, c) (s, u) <- take 1 $ portRects $ pinPort sink
+    , sink   <- sinks
     ]
 
   pure (net, join hyperedge)
+
+  where
+
+    vertices dir =
+      [ Rect
+          (left src + literal l, bottom src + literal b)
+          (left src + literal r, bottom src + literal t)
+      | (j, assignments) <- assocs $ netPins net
+      , source <- assignments
+      , pinDir source == dir
+      , let (gate, src) = nodes ! gateIndex j
+      , Rect (l, b) (r, t) <- take 1 $ portRects $ pinPort source
+      ] ++
+      [ rect
+      | (pin, rect) <- pins
+      , pinDir pin /= dir
+      , pinIdent pin == netIdent net
+      ]
 
 
 powerRing nodes = do
