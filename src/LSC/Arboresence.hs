@@ -316,7 +316,7 @@ checkResult area pins ring nodes edges = do
       >>= \ path -> pure gate { gatePath = pure path }
 
     pinAssign (pin, xs) = rectangle xs
-      >>= \ path -> pure pin { pinPort = Port mempty [path] }
+      >>= \ path -> pure pin { pinPort = Port Metal1 [path] }
 
     netAssign (net, edge) = sequence (rectangle <$> edge)
       >>= \ paths -> pure net { netPaths = pure paths }

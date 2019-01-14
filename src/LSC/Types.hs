@@ -127,13 +127,19 @@ instance Default Pin where
   def = Pin mempty In def
 
 
+data Layer
+  = AnyLayer
+  | Metal1 | Metal2 | Metal3
+  deriving (Eq, Ord, Enum, Show)
+
+
 data Port = Port
-  { portLayer :: Text
+  { portLayer :: Layer
   , portRects :: [Rectangle]
   } deriving Show
 
 instance Default Port where
-  def = Port mempty mempty
+  def = Port AnyLayer mempty
 
 
 data Dir = In | Out | InOut

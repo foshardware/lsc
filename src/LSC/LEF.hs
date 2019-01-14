@@ -1,4 +1,5 @@
 {-# OPTIONS_GHC -fno-warn-missing-signatures #-}
+{-# LANGUAGE OverloadedStrings #-}
 
 module LSC.LEF where
 
@@ -31,9 +32,14 @@ pins t (MacroPin ident options _ : rest) = (ident, Pin ident (direction options)
 pins t (_ : rest) = pins t rest
 pins _ [] = []
 
-port t (MacroPinPort (MacroPinPortLayer ident : rest) : _) = Port ident (portRectangles t rest)
+port t (MacroPinPort (MacroPinPortLayer ident : rest) : _) = Port (layer ident) (portRectangles t rest)
 port t (_ : rest) = port t rest
-port _ [] = Port mempty mempty
+port _ [] = Port AnyLayer mempty
+
+layer "metal1" = Metal1
+layer "metal2" = Metal2
+layer "metal3" = Metal3
+layer _ = AnyLayer
 
 portRectangles t (MacroPinPortRect a b c d : rest) = Rect
   (ceiling $ a * scaleFactor t, ceiling $ b * scaleFactor t)
