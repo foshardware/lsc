@@ -72,9 +72,8 @@ placement nodes (AbstractGate _ pins) = do
     .&& top    area .== foldr1 smax (top    . snd <$> nodes)
 
   liftSMT $ constrain
-    $   sAll (.== left area) (left . snd <$> abstract)
-    .&& bottom area
-        .== foldr1 smin (bottom . snd <$> abstract)
+    $   sAnd [ left   r .== left   area | r <- snd <$> abstract ]
+    .&& sAnd [ bottom r .>= bottom area | r <- snd <$> abstract ]
 
     .&& foldr1 smax (right . snd <$> abstract)
         .<= foldr1 smin (left . snd <$> nodes)
