@@ -106,9 +106,9 @@ instance Default AbstractGate where
   def = AbstractGate mempty mempty def
 
 
-data Component = Component
-  { componentPins :: Map Text Pin
-  , componentDimensions :: (Integer, Integer)
+data Cell = Cell
+  { cellPins :: Map Text Pin
+  , cellDims :: (Integer, Integer)
   } deriving Show
 
 data Pin = Pin
@@ -143,7 +143,7 @@ data Dir = In | Out | InOut
 data Technology = Technology
   { scaleFactor    :: Double
   , featureSize    :: Double
-  , components     :: Map Text Component
+  , stdCells       :: Map Text Cell
   , standardPin    :: (Integer, Integer)
   , enableDebug    :: Bool
   } deriving Show
@@ -155,8 +155,7 @@ lambda :: Technology -> Integer
 lambda t = ceiling $ scaleFactor t * featureSize t
 
 lookupDimensions :: Gate -> Technology -> Maybe (Integer, Integer)
-lookupDimensions g tech = componentDimensions
-  <$> lookup (gateIdent g) (components tech)
+lookupDimensions g tech = cellDims <$> lookup (gateIdent g) (stdCells tech)
 
 type BootstrapT m = StateT Technology m
 type Bootstrap = State Technology
@@ -237,6 +236,24 @@ type Arboresence = (Net, [Rectangle], [Path])
 
 data Circuit2D a = Circuit2D [(Gate, Path)] a
   deriving (Eq, Show)
+
+
+newtype Comp z a = Comp [(z, Rect a)]
+
+type Geometry = Comp Integer Integer
+
+type SGeometry = Comp SInteger SInteger
+
+
+instance Functor (Comp z) where
+  fmap f (Comp xs) = Comp [ (z, fmap f a) | (z, a) <- xs ]
+
+instance Semigroup (Comp z a) where
+  Comp a <> Comp b = Comp (a <> b)
+
+instance Monoid (Comp z a) where
+  mempty = Comp mempty
+  mappend = (<>)
 
 
 data Rect a = Rect (a, a) (a, a)

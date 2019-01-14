@@ -36,8 +36,8 @@ fromBLIF (BLIF (Model name inputs outputs clocks commands : submodels)) = do
         [ (net, Net net mempty (singleton gate [pin]))
         | gate@(Gate ident _ assignments _) <- toList nodes
         , (contact, net) <- assocs assignments
-        , com <- maybeToList $ lookup ident $ components technology
-        , pin <- maybeToList $ lookup contact $ componentPins com
+        , com <- maybeToList $ lookup ident $ stdCells technology
+        , pin <- maybeToList $ lookup contact $ cellPins com
         ]
 
   let edges = nets

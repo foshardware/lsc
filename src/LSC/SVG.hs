@@ -110,9 +110,9 @@ svgPaths netlist = Circuit2D
       , rect <- portRects $ pinPort p
       ]
 
-    inducePins (i, pins) =
+    inducePins (i, ps) =
       [ Rect (left r + x, bottom r + y) (right r + x, top r + y)
-      | pin <- pins
+      | pin <- ps
       , Rect (x, y) _ <- take 1 $ gatePath $ gateVector netlist V.! gateIndex i
       , r <- take 1 $ portRects $ pinPort pin
       ]

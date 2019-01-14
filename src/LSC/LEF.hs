@@ -19,8 +19,8 @@ fromLEF (LEF options _ _ _ _ macros) = do
 
     let tech = technology
     in technology
-    { components = Map.fromList
-        [ (name, Component
+    { stdCells = Map.fromList
+        [ (name, Cell
             (Map.fromList $ pins tech macroOptions)
             (dims tech macroOptions))
         | Macro name macroOptions _ <- macros
