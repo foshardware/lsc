@@ -64,9 +64,9 @@ placement nodes = do
 
   liftSMT $ constrain
     $   left   area .== literal 0
-    .&& right  area .<= literal 2 * sum (width  . snd <$> nodes)
+    .&& right  area .<= literal 4 * sum (width  . snd <$> nodes)
     .&& bottom area .== literal 0
-    .&& top    area .<= literal 2 * sum (height . snd <$> nodes)
+    .&& top    area .<= literal 4 * sum (height . snd <$> nodes)
 
   pure area
 
@@ -143,13 +143,13 @@ alignLeft l r = do
 alignRight = flip alignLeft
 
 
-inside a b = do
+inside i o = do
   d <- lambda <$> ask
   liftSMT $ constrain
-    $     left b -   left a .> literal d
-    .&& bottom b - bottom a .> literal d
-    .&&  right b -  right a .> literal d
-    .&&    top b -    top a .> literal d
+    $     left o -   left i .> literal d
+    .&& bottom o - bottom i .> literal d
+    .&&  right o -  right i .> literal d
+    .&&    top o -    top i .> literal d
 
 
 outside = disjoint
@@ -228,7 +228,7 @@ powerRing nodes = do
 
   (w, h) <- standardPin <$> ask
 
-  sequence_ $ inside (inner ring) . snd <$> nodes
+  sequence_ $ (`inside` inner ring) . snd <$> nodes
 
   liftSMT $ constrain
     $   width (left ring) .== width (bottom ring)
@@ -267,6 +267,8 @@ freeRectangle = do
   liftSMT $ constrain
     $   width  area .>= 0
     .&& height area .>= 0
+    .&&   left area .>= 0
+    .&& bottom area .>= 0
 
   pure area
 
