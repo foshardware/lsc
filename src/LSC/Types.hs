@@ -69,8 +69,11 @@ instance Monoid Net where
   mempty = Net mempty mempty mempty
   mappend = (<>)
 
+vdd :: Net
+vdd = Net "vdd" mempty mempty
 
-type Wire = Text
+
+type Wire = Path
 
 type Identifier = Text
 
@@ -94,12 +97,13 @@ instance Default Gate where
 
 
 data AbstractGate = AbstractGate
-  { abstractGatePath :: Path
-  , abstractContacts :: [Contact]
+  { abstractGatePath  :: Path
+  , abstractGatePower :: Path
+  , abstractGatePins  :: [Contact]
   } deriving Show
 
 instance Default AbstractGate where
-  def = AbstractGate mempty mempty
+  def = AbstractGate mempty mempty def
 
 
 data Component = Component
@@ -251,6 +255,12 @@ height r = top r - bottom r
 
 instance Functor Rect where
   fmap f (Rect (a, b) (c, d)) = Rect (f a, f b) (f c, f d)
+
+instance Foldable Rect where
+  foldMap f r = foldMap f [left r, bottom r, right r, top r]
+
+instance Default a => Default (Rect a) where
+  def = Rect def def
 
 
 type Ring a = Rect (Rect a)

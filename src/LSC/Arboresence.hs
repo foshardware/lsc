@@ -20,7 +20,7 @@ import LSC.Types
 
 
 pnr :: NetGraph -> LSC NetGraph
-pnr netlist@(NetGraph ident (AbstractGate _ contacts) _ gates nets) = do
+pnr netlist@(NetGraph ident (AbstractGate _ _ contacts) _ gates nets) = do
 
   debug
     [ "start pnr @ module", unpack ident
@@ -288,12 +288,13 @@ checkResult area pins ring nodes edges = do
       Sat -> do
 
         pad <- rectangle area
+        power <- sequence $ rectangle <$> toList ring
         inpts <- sequence (pinAssign  <$> pins)
 
         gates <- sequence (gateAssign <$> nodes)
         nets  <- sequence (netAssign  <$> edges)
 
-        pure $ Just ((gates, nets), AbstractGate [pad] inpts)
+        pure $ Just ((gates, nets), AbstractGate [pad] power inpts)
 
       Unsat -> do
 

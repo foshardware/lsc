@@ -95,13 +95,15 @@ svgPaths netlist = Circuit2D
   | gate <- toList $ gateVector netlist
   ]
 
-  [ (net, outerPins net (modelGate netlist) ++ (inducePins =<< assocs (netPins net)), netPaths net)
-  | net <- toList $ netMapping netlist
+  [ (net, outerPins net ++ (inducePins =<< assocs (netPins net)), netPaths net)
+  | net <- vdd { netPaths = [ring] } : toList (netMapping netlist)
   ]
 
   where
 
-    outerPins net (AbstractGate _ pins) =
+    AbstractGate _ ring pins = modelGate netlist
+
+    outerPins net =
       [ rect
       | p <- pins
       , pinIdent p == netIdent net

@@ -49,7 +49,7 @@ fromBLIF (BLIF (Model name inputs outputs clocks commands : submodels)) = do
 
   pure $ NetGraph
     name
-    (AbstractGate mempty $ [ Pin i In def | i <- inputs ++ clocks] ++ [ Pin i Out def | i <- outputs])
+    (AbstractGate mempty mempty $ [ Pin i In def | i <- inputs ++ clocks] ++ [ Pin i Out def | i <- outputs])
     subGraphs
     nodes
     edges
