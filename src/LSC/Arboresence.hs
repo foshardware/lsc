@@ -20,7 +20,7 @@ import LSC.Types
 
 
 pnr :: NetGraph -> LSC NetGraph
-pnr netlist@(NetGraph ident abstract _ gates nets) = do
+pnr netlist@(NetGraph ident _ _ gates nets) = do
 
   debug
     [ "start pnr @ module", unpack ident
@@ -33,14 +33,22 @@ pnr netlist@(NetGraph ident abstract _ gates nets) = do
 
   nodes <- sequence $ freeGatePolygon <$> gates
 
-  (area, pins) <- placement nodes abstract
+  pins <- sequence
+    [ freePinPolygon pin
+    | pin <- abstractContacts $ modelGate netlist
+    , pinDir pin == In
+    ]
+
+  area <- placement nodes pins
+
+  ring <- powerRing nodes
 
   edges <- sequence $ arboresence nodes pins <$> nets
 
   disjointGates nodes
   disjointNets edges
 
-  result <- checkResult area pins nodes edges
+  result <- checkResult area pins ring nodes edges
 
   debug ["stop  pnr @ module", unpack ident]
 
@@ -51,20 +59,9 @@ pnr netlist@(NetGraph ident abstract _ gates nets) = do
     }
 
 
-placement nodes (AbstractGate _ pins) = do
+placement nodes pins = do
 
   area <- freeRectangle
-
-  abstract <- sequence
-    [ freePinPolygon area pin
-    | pin <- pins
-    , pinDir pin == In
-    ]
-
-  sequence_
-    [ apart a b
-    | ((_, a), (_, b)) <- distinctPairs abstract
-    ]
 
   liftSMT $ constrain
     $   bottom area .== foldr1 smin (bottom . snd <$> nodes)
@@ -72,13 +69,13 @@ placement nodes (AbstractGate _ pins) = do
     .&& top    area .== foldr1 smax (top    . snd <$> nodes)
 
   liftSMT $ constrain
-    $   sAnd [ left   r .== left   area | r <- snd <$> abstract ]
-    .&& sAnd [ bottom r .>= bottom area | r <- snd <$> abstract ]
+    $   sAnd [ left   r .== left   area | r <- snd <$> pins ]
+    .&& sAnd [ bottom r .>= bottom area | r <- snd <$> pins ]
 
-    .&& foldr1 smax (right . snd <$> abstract)
+    .&& foldr1 smax (right . snd <$> pins)
         .<= foldr1 smin (left . snd <$> nodes)
 
-  let outputs = [ ident | Pin ident dir _ <- pins, dir == Out ]
+  let outputs = [ ident | (Pin ident dir _, _) <- pins, dir == Out ]
 
   sequence_
     [ liftSMT $ constrain $ right rect .== right area
@@ -92,22 +89,19 @@ placement nodes (AbstractGate _ pins) = do
     .&& bottom area .== literal 0
     .&& top    area .<= literal 2 * sum (height . snd <$> nodes)
 
-  pure (area, abstract)
+  pure area
 
 
 disjointGates nodes = do
   sequence_
-    [ do
-      disjoint a b
-      cling a b
+    [ disjoint a b
     | ((_, a), (_, b)) <- distinctPairs $ toList nodes
     ]
 
 
 disjointNets edges = do
   sequence_
-    [ do
-      apart a b
+    [ disjoint a b
     | ((_, as), (_, bs)) <- distinctPairs $ toList edges
     , a <- as
     , b <- bs
@@ -131,42 +125,38 @@ freeGatePolygon gate = do
   pure (gate, path)
 
 
-freePinPolygon area pin = do
+freePinPolygon pin = do
 
   path <- freeRectangle
 
-  std <- standardPin <$> ask
+  (w, h) <- standardPin <$> ask
   liftSMT $ constrain
-    $   left path .>= left area
-    .&& width path .== literal (width std)
-    .&& height path .== literal (height std)
+    $     left path .>= literal 0
+    .&&  width path .== literal w
+    .&& height path .== literal h
 
   pure (pin, path)
 
 
-apart a b = do
+inside (Rect (l, b) (r, t)) x = do
+  d <- lambda <$> ask
+  liftSMT $ constrain
+    $     left x - right l .> literal d
+    .&& bottom x -   top b .> literal d
+    .&&   left r - right x .> literal d
+    .&& bottom t -   top x .> literal d
+
+
+outside = inside
+
+
+disjoint a b = do
   d <- lambda <$> ask
   liftSMT $ constrain
     $   left b - right a .> literal d
     .|| left a - right b .> literal d
     .|| bottom a - top b .> literal d
     .|| bottom b - top a .> literal d
-
-
-disjoint a b = do
-  liftSMT $ constrain
-    $   left b .>= right a
-    .|| left a .>= right b
-    .|| bottom a .>= top b
-    .|| bottom b .>= top a
-
-
-cling a b = do
-  liftSMT $ softConstrain
-    $   left b .== right a
-    .|| left a .== right b
-    .|| bottom a .== top b
-    .|| bottom b .== top a
 
 
 pinConnect a b = do
@@ -231,6 +221,33 @@ arboresence nodes outer net = do
   pure (net, join hyperedge)
 
 
+powerRing nodes = do
+  
+  ring <- freeRing
+
+  (w, h) <- standardPin <$> ask
+
+  sequence_ $ inside ring . snd <$> nodes
+
+  pure ring
+
+
+freeRing = do
+
+  l <- freeRectangle
+  b <- freeRectangle
+  r <- freeRectangle
+  t <- freeRectangle
+
+  liftSMT $ constrain
+    $    left l .==  left b .&& bottom b .== bottom l
+    .&&  left l .==  left t .&&    top t .==    top l
+    .&& right r .== right b .&& bottom b .== bottom r
+    .&& right r .== right t .&&    top t .==    top r
+
+  pure $ Rect (l, b) (r, t)
+
+
 freeRectangle = do
 
   area <- Rect <$> freePoint <*> freePoint
@@ -248,7 +265,7 @@ freePolygon n = sequence $ replicate n freePoint
 freePoint = liftSMT $ (,) <$> free_ <*> free_
 
 
-checkResult area pins nodes edges = do
+checkResult area pins ring nodes edges = do
 
   liftSMT $ query $ do
     result <- checkSat
@@ -256,11 +273,11 @@ checkResult area pins nodes edges = do
 
       Sat -> do
 
+        pad <- rectangle area
+        inpts <- sequence (pinAssign  <$> pins)
+
         gates <- sequence (gateAssign <$> nodes)
         nets  <- sequence (netAssign  <$> edges)
-
-        inpts <- sequence (pinAssign  <$> pins)
-        pad <- rectangle area
 
         pure $ Just ((gates, nets), AbstractGate [pad] inpts)
 

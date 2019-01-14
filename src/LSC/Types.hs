@@ -140,12 +140,12 @@ data Technology = Technology
   { scaleFactor    :: Double
   , featureSize    :: Double
   , components     :: Map Text Component
-  , standardPin    :: Rectangle
+  , standardPin    :: (Integer, Integer)
   , enableDebug    :: Bool
   } deriving Show
 
 instance Default Technology where
-  def = Technology 1000 1 mempty (Rect (0, 0) (1000, 1000)) True
+  def = Technology 1000 1 mempty (1000, 1000) True
 
 lambda :: Technology -> Integer
 lambda t = ceiling $ scaleFactor t * featureSize t
@@ -251,6 +251,9 @@ height r = top r - bottom r
 
 instance Functor Rect where
   fmap f (Rect (a, b) (c, d)) = Rect (f a, f b) (f c, f d)
+
+
+type Ring a = Rect (Rect a)
 
 
 type Rectangle = Rect Integer
