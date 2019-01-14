@@ -20,7 +20,7 @@ import LSC.Types
 
 
 pnr :: NetGraph -> LSC NetGraph
-pnr netlist@(NetGraph ident _ _ gates nets) = do
+pnr netlist@(NetGraph ident (AbstractGate _ contacts) _ gates nets) = do
 
   debug
     [ "start pnr @ module", unpack ident
@@ -31,13 +31,9 @@ pnr netlist@(NetGraph ident _ _ gates nets) = do
   liftSMT $ do
     setOption $ ProduceUnsatCores True
 
-  nodes <- sequence $ freeGatePolygon <$> gates
+  pins <- sequence $ freePinPolygon <$> contacts
 
-  pins <- sequence
-    [ freePinPolygon pin
-    | pin <- abstractContacts $ modelGate netlist
-    , pinDir pin == In
-    ]
+  nodes <- sequence $ freeGatePolygon <$> gates
 
   area <- placement nodes pins
 
@@ -69,7 +65,7 @@ placement nodes pins = do
     .&& top    area .== foldr1 smax (top    . snd <$> nodes)
 
   liftSMT $ constrain
-    $   sAnd [ left   r .== left   area | r <- snd <$> pins ]
+    $   sAnd [   left r .==   left area | r <- snd <$> pins ]
     .&& sAnd [ bottom r .>= bottom area | r <- snd <$> pins ]
 
     .&& foldr1 smax (right . snd <$> pins)
@@ -176,20 +172,20 @@ pathCombine a b = do
 
 
 
-arboresence nodes outer net = do
+arboresence nodes pins net = do
 
   sources <- pure $
     [ Rect
         (left src + literal l, bottom src + literal b)
         (left src + literal r, bottom src + literal t)
-    | (j, assignments) <- assocs $ contacts net
+    | (j, assignments) <- assocs $ netPins net
     , source <- assignments
     , pinDir source == Out
     , let (gate, src) = nodes ! gateIndex j
     , Rect (l, b) (r, t) <- take 1 $ portRects $ pinPort source
     ] ++
     [ rect
-    | (pin, rect) <- outer
+    | (pin, rect) <- pins
     , pinDir pin == In
     , pinIdent pin == netIdent net
     ]
@@ -211,7 +207,7 @@ arboresence nodes outer net = do
       pure [start, target]
 
     | source <- sources
-    , (i, assignments) <- assocs $ contacts net
+    , (i, assignments) <- assocs $ netPins net
     , sink <- assignments
     , let (_, snk) = nodes ! gateIndex i
     , pinDir sink == In

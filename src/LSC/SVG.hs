@@ -95,7 +95,7 @@ svgPaths netlist = Circuit2D
   | gate <- toList $ gateVector netlist
   ]
 
-  [ (net, outerPins net (modelGate netlist) ++ (inducePins =<< assocs (contacts net)), netPaths net)
+  [ (net, outerPins net (modelGate netlist) ++ (inducePins =<< assocs (netPins net)), netPaths net)
   | net <- toList $ netMapping netlist
   ]
 

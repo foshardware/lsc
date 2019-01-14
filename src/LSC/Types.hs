@@ -53,7 +53,7 @@ type Contact = Pin
 data Net = Net
   { netIdent :: Identifier
   , netPaths :: [Path]
-  , contacts :: Map Gate [Contact]
+  , netPins  :: Map Gate [Contact]
   } deriving Show
 
 instance Eq Net where
