@@ -72,8 +72,9 @@ placement nodes (AbstractGate _ pins) = do
     .&& top    area .== foldr1 smax (top    . snd <$> nodes)
 
   liftSMT $ constrain
-    $   left area
-        .== foldr1 smin (left . snd <$> abstract)
+    $   sAll (.== left area) (left . snd <$> abstract)
+    .&& bottom area
+        .== foldr1 smin (bottom . snd <$> abstract)
 
     .&& foldr1 smax (right . snd <$> abstract)
         .<= foldr1 smin (left . snd <$> nodes)
@@ -88,9 +89,9 @@ placement nodes (AbstractGate _ pins) = do
 
   liftSMT $ constrain
     $   left   area .== literal 0
-    .&& right  area .<= sum (width  . snd <$> nodes)
+    .&& right  area .<= literal 2 * sum (width  . snd <$> nodes)
     .&& bottom area .== literal 0
-    .&& top    area .<= sum (height . snd <$> nodes)
+    .&& top    area .<= literal 2 * sum (height . snd <$> nodes)
 
   pure (area, abstract)
 
@@ -145,12 +146,12 @@ freePinPolygon area pin = do
 
 
 apart a b = do
-  l <- lambda <$> ask
+  d <- lambda <$> ask
   liftSMT $ constrain
-    $   left b - right a .> literal l
-    .|| left a - right b .> literal l
-    .|| bottom a - top b .> literal l
-    .|| bottom b - top a .> literal l
+    $   left b - right a .> literal d
+    .|| left a - right b .> literal d
+    .|| bottom a - top b .> literal d
+    .|| bottom b - top a .> literal d
 
 
 disjoint a b = do
@@ -169,14 +170,6 @@ cling a b = do
     .|| bottom b .== top a
 
 
-congruent a b = do
-  liftSMT $ constrain
-    $   left a   .== left b
-    .&& bottom a .== bottom b
-    .&& right a  .== right b
-    .&& top a    .== top b
-
-
 pinConnect a b = do
   liftSMT $ constrain
     $   left a   .== left b   .&& bottom a .== bottom b .&& right a .== right b
@@ -187,8 +180,11 @@ pinConnect a b = do
 
 pathCombine a b = do
   liftSMT $ constrain
-    $   (right a .== left b .|| right b .== left a) .&& (top a .== top b .|| bottom a .== bottom b)
-    .|| (bottom a .== top b .|| bottom b .== top a) .&& (left a .== left b .|| right a .== right b)
+    $   right a .== right b .&& top a .== top b
+    .|| left  a .== left  b .&& top a .== top b
+    .|| right a .== right b .&& bottom a .== bottom b
+    .|| left  a .== left  b .&& bottom a .== bottom b
+
 
 
 arboresence nodes outer net = do
@@ -236,7 +232,16 @@ arboresence nodes outer net = do
   pure (net, join hyperedge)
 
 
-freeRectangle = Rect <$> freePoint <*> freePoint
+freeRectangle = do
+
+  area <- Rect <$> freePoint <*> freePoint
+
+  liftSMT $ constrain
+    $   width  area .>= 0
+    .&& height area .>= 0
+
+  pure area
+
 
 freePolygon n = sequence $ replicate n freePoint
 

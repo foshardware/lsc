@@ -1,0 +1,6 @@
+
+.model top
+.inputs A B
+.outputs C 
+.subckt AND2X2 A=A B=B Y=C
+.end
