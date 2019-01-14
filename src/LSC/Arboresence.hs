@@ -34,15 +34,13 @@ pnr netlist@(NetGraph ident (AbstractGate _ _ contacts) _ gates nets) = do
 
   nodes <- sequence $ freeGatePolygon <$> gates
 
-  area <- placement nodes
-
-  pins <- sequence $ pinPolygon area <$> contacts
+  pins <- sequence $ freePinPolygon <$> contacts
 
   ring <- powerRing nodes
 
-  edges <- sequence $ arboresence nodes pins <$> nets
+  area <- placement nodes ring pins
 
-  alignPins ring pins
+  edges <- sequence $ arboresence nodes pins <$> nets
 
   disjointGates nodes
   disjointNets edges
@@ -58,28 +56,40 @@ pnr netlist@(NetGraph ident (AbstractGate _ _ contacts) _ gates nets) = do
     }
 
 
-placement nodes = do
+placement nodes ring pins = do
 
   area <- freeRectangle
 
   liftSMT $ constrain
     $   left   area .== literal 0
-    .&& right  area .<= literal 4 * sum (width  . snd <$> nodes)
     .&& bottom area .== literal 0
-    .&& top    area .<= literal 4 * sum (height . snd <$> nodes)
 
-  pure area
+  outer ring `inside` area
 
+  sequence_ [ rect `alignLeft` outer ring | (p, rect) <- pins, pinDir p ==  In ]
+  sequence_ [ outer ring `alignLeft` rect | (p, rect) <- pins, pinDir p == Out ]
 
-alignPins ring pins = do
-
-  sequence_ $ [ rect `alignLeft` outer ring | (p, rect) <- pins, pinDir p ==  In ]
-  sequence_ $ [ outer ring `alignLeft` rect | (p, rect) <- pins, pinDir p == Out ]
+  sequence_
+    [ liftSMT $ constrain $ left path .== left area
+    | (p, path) <- pins
+    , pinDir p == In
+    ]
+  sequence_
+    [ liftSMT $ constrain $ right path .== right area
+    | (p, path) <- pins
+    , pinDir p == Out
+    ]
+  sequence_
+    [ liftSMT $ constrain $ bottom path .>= bottom area .&& top path .<= top area
+    | (p, path) <- pins
+    ]
 
   sequence_
     [ disjoint a b
     | ((_, a), (_, b)) <- distinctPairs $ toList pins
     ]
+
+  pure area
 
 
 disjointGates nodes = do
@@ -115,7 +125,7 @@ freeGatePolygon gate = do
   pure (gate, path)
 
 
-pinPolygon area pin = do
+freePinPolygon pin = do
 
   path <- freeRectangle
 
@@ -124,14 +134,6 @@ pinPolygon area pin = do
   liftSMT $ constrain
     $    width path .== literal w
     .&& height path .== literal h
-
-  if pinDir pin == In
-    then liftSMT $ constrain $  left path .==  left area
-    else liftSMT $ constrain $ right path .== right area
-
-  liftSMT $ constrain
-    $   bottom path .>= bottom area
-    .&&    top path .<=    top area
 
   pure (pin, path)
 
