@@ -40,7 +40,7 @@ pnr netlist@(NetGraph ident (AbstractGate _ _ contacts) _ gates nets) = do
 
   area <- placement nodes ring pins
 
-  edges <- sequence $ arboresence 4 nodes pins <$> nets
+  edges <- sequence $ arboresence 6 nodes pins <$> nets
 
   disjointGates nodes
   disjointNets edges
@@ -133,6 +133,12 @@ freeWirePolygon net = do
 
   path <- freeRectangle
 
+  (w, h) <- standardPin <$> ask
+
+  liftSMT $ constrain
+      $    width path .== literal w
+      .|| height path .== literal h
+
   pure (net, path)
 
 
@@ -201,14 +207,6 @@ arboresence n nodes pins net = do
 
       connect src source
       connect snk sink
-
-      (w, h) <- standardPin <$> ask
-      sequence_
-        [ liftSMT $ constrain
-            $    width path .== literal w
-            .|| height path .== literal h
-        | path <- jogs
-        ]
 
       sequence_ [ connect i j | i <- wire | j <- drop 1 wire ]
 
