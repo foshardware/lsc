@@ -3,6 +3,7 @@
 
 module LSC.D3 where
 
+import Control.Lens hiding ((.=))
 import Data.Aeson
 import Data.Foldable (toList)
 import Data.Maybe
@@ -88,13 +89,16 @@ instance ToJSON (DAG NetGraph) where
 
     where
 
-    tree = build dependencies (unpack $ LSC.modelName netlist, 1)
+    tree = build dependencies (unpack $ netlist ^. identifier, 1)
 
     (_, stages) = eval tree
 
     dependencies = Map.fromList $
-      [ ( unpack $ LSC.modelName m
-        , fmap unpack $ filter (not . primitive) $ fmap gateIdent $ toList $ gateVector m
+      [ ( unpack $ m ^. identifier
+        , [ unpack $ g ^. identifier
+          | g <- toList $ m ^. gates
+          , not $ primitive $ g ^. identifier
+          ]
         )
       | m <- flattenHierarchy netlist
       ]

@@ -2,11 +2,12 @@
 
 module LSC.SVG where
 
+import Control.Lens
 import Data.Foldable
 import Data.String
 import Data.Map (assocs)
 import Data.Text hiding (take)
-import qualified Data.Vector as V
+import Data.Vector (indexM)
 import qualified Data.Text as Text
 import qualified Data.Text.Lazy    as Lazy
 import qualified Data.Text.Lazy.IO as Lazy
@@ -53,7 +54,7 @@ place (g, path@(Rect (x, y) _ : _)) = do
     ! A.fontSize "24"
     ! A.fontFamily "monospace"
     ! A.transform (fromString $ "rotate(90 "++ show (x + 8) ++","++ show (y + 24)  ++")")
-    $ renderText $ gateIdent g
+    $ renderText $ g ^. identifier
 
   follow ("black", "transparent") path
 
@@ -61,11 +62,11 @@ place _ = pure ()
 
 
 route :: Arboresence Path -> Svg
-route (net,  _, paths) | netIdent net == "vdd" = do
-  follow ("green", "green") `mapM_` paths
-route (_, pins, paths) = do
-  follow ("blue", "blue") `mapM_` paths
-  follow ("black", "blue") pins
+route (net, _, path) | net ^. identifier == "vdd" = do
+  follow ("green", "green") path
+route (_, pin, path) = do
+  follow ("blue", "blue") path
+  follow ("black", "blue") pin
 
 
 follow :: Options -> Path -> Svg
@@ -95,30 +96,30 @@ follow _ _ = pure ()
 svgPaths :: NetGraph -> Circuit
 svgPaths netlist = Circuit2D
 
-  [ (gate, gatePath gate)
-  | gate <- toList $ gateVector netlist
+  [ (gate, gate ^. geometry)
+  | gate <- toList $ netlist ^. gates
   ]
 
-  [ (net, outerPins net ++ (inducePins =<< assocs (netPins net)), netPaths net)
-  | net <- vdd { netPaths = [ring] } : toList (netMapping netlist)
+  [ (net, outerPins net ++ (inducePins =<< assocs (net ^. contacts)), net ^. geometry)
+  | net <- (vdd & geometry .~ (netlist ^. supercell . powerRing)) : toList (netlist ^. nets)
   ]
 
   where
 
-    AbstractGate _ ring pins = modelGate netlist
-
+    outerPins :: Net -> Path
     outerPins net =
       [ rect
-      | p <- pins
-      , pinIdent p == netIdent net
-      , rect <- portRects $ pinPort p
+      | pin <- toList $ netlist ^. supercell . pins
+      , view identifier pin == view identifier net
+      , rect <- pin ^. port . geometry
       ]
 
+    inducePins :: (Gate, [Pin]) -> Path
     inducePins (i, ps) =
       [ Rect (left r + x, bottom r + y) (right r + x, top r + y)
       | pin <- ps
-      , Rect (x, y) _ <- take 1 $ gatePath $ gateVector netlist V.! gateIndex i
-      , r <- take 1 $ portRects $ pinPort pin
+      , Rect (x, y) _ <- take 1 . view geometry =<< indexM (netlist ^. gates) (i ^. integer)
+      , r <- take 1 $ pin ^. port . geometry
       ]
 
 
@@ -130,10 +131,9 @@ scaleDown n (Circuit2D nodes edges) = Circuit2D
   , let f = fmap . fmap
   ]
 
-  [ (net, g (`div` n) pins, f (`div` n) paths)
-  | (net, pins, paths) <- edges
-  , let f = fmap . fmap . fmap
-  , let g = fmap . fmap
+  [ (net, f (`div` n) ps, f (`div` n) path)
+  | (net, ps, path) <- edges
+  , let f = fmap . fmap
   ]
 
 

@@ -2,9 +2,16 @@
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE FunctionalDependencies #-}
+{-# LANGUAGE DuplicateRecordFields #-}
+
 
 module LSC.Types where
 
+import Control.Lens hiding (element)
 import Data.Default
 import Data.Foldable
 import Data.Function (on)
@@ -31,137 +38,70 @@ import System.IO
 
 
 data NetGraph = NetGraph
-  { modelName  :: Text
-  , modelGate  :: AbstractGate
-  , subModels  :: Map Text NetGraph
-  , gateVector :: Vector Gate
-  , netMapping :: Map Identifier Net
+  { _identifier  :: Identifier
+  , _supercell   :: AbstractGate
+  , _subcells    :: Map Identifier NetGraph
+  , _gates       :: Vector Gate
+  , _nets        :: Map Identifier Net
   } deriving Show
-
-instance Default NetGraph where
-  def = NetGraph mempty def mempty mempty mempty
-
-
-flattenHierarchy :: NetGraph -> [NetGraph]
-flattenHierarchy netlist
-  = netlist
-  : join [ flattenHierarchy model | model <- toList $ subModels netlist ]
-
 
 type Contact = Pin
 
 data Net = Net
-  { netIdent :: Identifier
-  , netPaths :: [Path]
-  , netPins  :: Map Gate [Contact]
+  { _identifier :: Identifier
+  , _geometry   :: Path
+  , _contacts   :: Map Gate [Contact]
   } deriving Show
-
-instance Eq Net where
-  w == v = netIdent w == netIdent v
-
-instance Ord Net where
-  w `compare` v = netIdent w `compare` netIdent v
-
-instance Semigroup Net where
-  Net i ns as <> Net _ os bs = Net i (ns <> os) (unionWith mappend as bs)
-
-instance Monoid Net where
-  mempty = Net mempty mempty mempty
-  mappend = (<>)
-
-vdd :: Net
-vdd = Net "vdd" mempty mempty
-
-
-type Wire = Path
 
 type Identifier = Text
 
-type Index = Int
-
 data Gate = Gate
-  { gateIdent :: Identifier
-  , gatePath  :: Path
-  , gateWires :: Map Identifier Identifier
-  , gateIndex :: Index
+  { _identifier :: Identifier
+  , _geometry   :: Path
+  , _wires      :: Map Identifier Identifier
+  , _integer    :: Int
   } deriving Show
-
-instance Eq Gate where
-  g == h = gateIndex g == gateIndex h
-
-instance Ord Gate where
-  g `compare` h = gateIndex g `compare` gateIndex h
-
-instance Default Gate where
-  def = Gate mempty mempty mempty def
 
 
 data AbstractGate = AbstractGate
-  { abstractGatePath  :: Path
-  , abstractGatePower :: Path
-  , abstractGatePins  :: [Contact]
+  { _geometry  :: Path
+  , _powerRing :: Path
+  , _pins      :: Map Identifier Pin
   } deriving Show
 
-instance Default AbstractGate where
-  def = AbstractGate mempty mempty def
-
-
 data Cell = Cell
-  { cellPins :: Map Text Pin
-  , cellDims :: (Integer, Integer)
+  { _pins       :: Map Identifier Pin
+  , _dimensions :: (Integer, Integer)
   } deriving Show
 
 data Pin = Pin
-  { pinIdent :: Text
-  , pinDir   :: Dir
-  , pinPort  :: Port
+  { _identifier :: Identifier
+  , _dir        :: Dir
+  , _port       :: Port
   } deriving Show
 
-instance Eq Pin where
-  p == q = pinIdent p == pinIdent q
+data Port = Port
+  { _layer    :: Layer
+  , _geometry :: Path
+  } deriving Show
 
-instance Ord Pin where
-  compare = compare `on` pinIdent
 
-instance Default Pin where
-  def = Pin mempty In def
-
+data Dir = In | Out | InOut
+  deriving (Eq, Show)
 
 data Layer
   = AnyLayer
   | Metal1 | Metal2 | Metal3
   deriving (Eq, Ord, Enum, Show)
 
-
-data Port = Port
-  { portLayer :: Layer
-  , portRects :: [Rectangle]
-  } deriving Show
-
-instance Default Port where
-  def = Port AnyLayer mempty
-
-
-data Dir = In | Out | InOut
-  deriving (Eq, Show)
-
-
 data Technology = Technology
-  { scaleFactor    :: Double
-  , featureSize    :: Double
-  , stdCells       :: Map Text Cell
-  , standardPin    :: (Integer, Integer)
-  , enableDebug    :: Bool
+  { _scaleFactor    :: Double
+  , _featureSize    :: Double
+  , _stdCells       :: Map Text Cell
+  , _standardPin    :: (Integer, Integer)
+  , _enableDebug    :: Bool
   } deriving Show
 
-instance Default Technology where
-  def = Technology 1000 1 mempty (1000, 1000) True
-
-lambda :: Technology -> Integer
-lambda t = ceiling $ scaleFactor t * featureSize t
-
-lookupDimensions :: Gate -> Technology -> Maybe (Integer, Integer)
-lookupDimensions g tech = cellDims <$> lookup (gateIdent g) (stdCells tech)
 
 type BootstrapT m = StateT Technology m
 type Bootstrap = State Technology
@@ -230,18 +170,6 @@ liftSMT = lift . LST . lift
 ask :: LSC Technology
 ask = lift $ LST Reader.ask
 
-debug :: [String] -> LSC ()
-debug msg = do
-  enabled <- enableDebug <$> ask
-  when enabled $ liftIO $ do
-    timestamp <- show . round <$> getPOSIXTime
-    hPutStrLn stderr $ unwords $ timestamp : "-" : msg
-
-
-type Arboresence a = (Net, a, [a])
-
-data Circuit2D a = Circuit2D [(Gate, a)] [Arboresence a]
-  deriving (Eq, Show)
 
 newtype Comp z a = Comp [(z, Rect a)]
   deriving (Eq, Show)
@@ -296,7 +224,101 @@ type Rectangle = Rect Integer
 
 type Path = [Rectangle]
 
-type SRectangle = Rect SInteger
+type SRect = Rect SInteger
 
-type SPath = [SRectangle]
+type SPath = [SRect]
 
+
+makeFieldsNoPrefix ''NetGraph
+
+instance Default NetGraph where
+  def = NetGraph mempty def mempty mempty mempty
+
+flattenHierarchy :: NetGraph -> [NetGraph]
+flattenHierarchy netlist
+  = netlist
+  : join [ flattenHierarchy model | model <- toList $ netlist ^. subcells ]
+
+
+makeFieldsNoPrefix ''AbstractGate
+
+instance Default AbstractGate where
+  def = AbstractGate mempty mempty def
+
+
+makeFieldsNoPrefix ''Net
+
+instance Eq Net where
+  (==) = (==) `on` view identifier
+
+instance Ord Net where
+  compare = compare `on` view identifier
+
+instance Semigroup Net where
+  Net i ns as <> Net _ os bs = Net i (ns <> os) (unionWith mappend as bs)
+
+instance Monoid Net where
+  mempty = Net mempty mempty mempty
+  mappend = (<>)
+
+vdd :: Net
+vdd = Net "vdd" mempty mempty
+
+
+makeFieldsNoPrefix ''Gate
+
+instance Eq Gate where
+  (==) = (==) `on` view integer
+
+instance Ord Gate where
+  compare = compare `on` view integer
+
+instance Default Gate where
+  def = Gate mempty mempty mempty def
+
+
+type Arboresence a = (Net, a, a)
+
+data Circuit2D a = Circuit2D [(Gate, a)] [Arboresence a]
+  deriving (Eq, Show)
+
+
+makeFieldsNoPrefix ''Cell
+
+
+makeFieldsNoPrefix ''Pin
+
+instance Eq Pin where
+  (==) = (==) `on` view identifier
+
+instance Ord Pin where
+  compare = compare `on` view identifier
+
+instance Default Pin where
+  def = Pin mempty In def
+
+
+makeFieldsNoPrefix ''Port
+
+instance Default Port where
+  def = Port AnyLayer mempty
+
+
+makeFieldsNoPrefix ''Technology
+
+instance Default Technology where
+  def = Technology 1000 1 mempty (1000, 1000) True
+
+
+lookupDimensions :: Gate -> Technology -> Maybe (Integer, Integer)
+lookupDimensions g tech = view dimensions <$> lookup (g ^. identifier) (tech ^. stdCells)
+
+lambda :: Technology -> Integer
+lambda t = ceiling $ view scaleFactor t * view featureSize t
+
+debug :: [String] -> LSC ()
+debug msg = do
+  enabled <- view enableDebug <$> ask
+  when enabled $ liftIO $ do
+    timestamp <- show . round <$> getPOSIXTime
+    hPutStrLn stderr $ unwords $ timestamp : "-" : msg

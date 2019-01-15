@@ -4,6 +4,7 @@ module LSC.BLIF where
 
 import Control.Monad.Reader
 
+import Control.Lens
 import Data.Default
 import Data.Foldable
 import Data.Map
@@ -25,31 +26,38 @@ fromBLIF (BLIF (Model name inputs outputs clocks commands : submodels)) = do
 
   technology <- ask
 
-  let gates = join $ toGates 0 <$> commands
-
   let nodes = Vector.fromList
-        [ gate { gateIndex = i }
-        | (i, gate) <- zip [0.. ] gates
+        [ gate & integer .~ i
+        | i    <- [0.. ]
+        | gate <- join $ toGates 0 <$> commands
         ]
 
-  let nets = fromListWith mappend
+  let edges = fromListWith mappend
         [ (net, Net net mempty (singleton gate [pin]))
         | gate@(Gate ident _ assignments _) <- toList nodes
         , (contact, net) <- assocs assignments
-        , com <- maybeToList $ lookup ident $ stdCells technology
-        , pin <- maybeToList $ lookup contact $ cellPins com
+        , com <- maybeToList $ lookup ident $ technology ^. stdCells
+        , pin <- maybeToList $ lookup contact $ com ^. pins
         ]
-
-  let edges = nets
 
   subGraphs <- fromList <$> sequence
         [ (,) i <$> fromBLIF (BLIF [submodel])
         | submodel@(Model i _ _ _ _) <- submodels
         ]
 
+  let ps =
+        [ (i, Pin i In def)
+        | i <- inputs ++ clocks
+        ] ++
+        [ (i, Pin i Out def)
+        | i <- outputs
+        ]
+
+  let superCell = def & pins .~ fromList ps
+
   pure $ NetGraph
     name
-    (AbstractGate mempty mempty $ [ Pin i In def | i <- inputs ++ clocks] ++ [ Pin i Out def | i <- outputs])
+    superCell
     subGraphs
     nodes
     edges
@@ -73,6 +81,6 @@ toGates _ _ = []
 
 
 toSubcircuit :: Gate -> Command
-toSubcircuit (Gate ident _ wires _) = Subcircuit ident (assocs wires)
+toSubcircuit gate = Subcircuit (gate ^. identifier) (assocs $ gate ^. wires)
 
 

@@ -1,16 +1,18 @@
 {-# OPTIONS_GHC -fno-warn-missing-signatures #-}
 
+{-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE ParallelListComp #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 
 module LSC.Arboresence where
 
+import Control.Lens hiding ((.>), inside)
 import Control.Monad
 import Control.Monad.Trans
 import Data.Foldable
 import Data.Map (assocs)
-import Data.Vector ((!))
+import Data.Vector (Vector, (!))
 import Data.SBV
 import Data.SBV.Control
 import Data.Text (unpack)
@@ -20,43 +22,42 @@ import LSC.Types
 
 
 pnr :: NetGraph -> LSC NetGraph
-pnr netlist@(NetGraph ident (AbstractGate _ _ contacts) _ gates nets) = do
+pnr netlist = do
 
   debug
-    [ "start pnr @ module", unpack ident
-    , "-", show $ length gates, "gates"
-    , "-", show $ length nets, "nets"
+    [ "start pnr @ module", unpack $ netlist ^. identifier
+    , "-", show $ length $ netlist ^. gates, "gates"
+    , "-", show $ length $ netlist ^. nets, "nets"
     ]
 
   liftSMT $ do
     setOption $ ProduceUnsatCores True
 
 
-  nodes <- sequence $ freeGatePolygon <$> gates
+  nodes <- sequence $ freeGatePolygon <$> (netlist ^. gates)
 
-  pins <- sequence $ freePinPolygon <$> contacts
+  outerPins <- sequence $ freePinPolygon <$> (netlist ^. supercell . pins)
 
-  ring <- powerRing nodes
+  ring <- powerUpAndGround nodes
 
-  area <- placement nodes ring pins
+  area <- placement nodes ring outerPins
 
-  edges <- sequence $ arboresence 4 nodes pins <$> nets
+  edges <- sequence $ arboresence 4 nodes outerPins <$> (netlist ^. nets)
 
   disjointGates nodes
   disjointNets edges
 
-  result <- checkResult area pins ring nodes edges
+  result <- checkResult area outerPins ring nodes edges
 
-  debug ["stop  pnr @ module", unpack ident]
+  debug ["stop  pnr @ module", unpack $ netlist ^. identifier]
 
-  pure netlist
-    { modelGate  = maybe (modelGate  netlist) snd result
-    , gateVector = maybe (gateVector netlist) (fst . fst) result
-    , netMapping = maybe (netMapping netlist) (snd . fst) result
-    }
+  pure $ netlist
+    & supercell .~ maybe (netlist ^. supercell) snd result
+    & gates .~ maybe (netlist ^. gates) (fst . fst) result
+    & nets .~ maybe (netlist ^. nets) (snd . fst) result
 
 
-placement nodes ring pins = do
+placement nodes ring outerPins = do
 
   area <- freeRectangle
 
@@ -71,26 +72,26 @@ placement nodes ring pins = do
     [ liftSMT $ constrain
         $   left path .== left area
         .&& left (outer ring) - left path .> d
-    | (p, path) <- pins
-    , pinDir p == In
+    | (pin, path) <- toList outerPins
+    , pin ^. dir == In
     ]
   sequence_
     [ liftSMT $ constrain
         $   right path .== right area
         .&& right path - right (outer ring) .> d
-    | (p, path) <- pins
-    , pinDir p == Out
+    | (pin, path) <- toList outerPins
+    , pin ^. dir == Out
     ]
   sequence_
     [ liftSMT $ constrain
         $   bottom path .>= bottom (inner ring)
         .&&    top path .<=    top (inner ring)
-    | (p, path) <- pins
+    | (_, path) <- toList outerPins
     ]
 
   sequence_
     [ disjoint a b
-    | ((_, a), (_, b)) <- distinctPairs $ toList pins
+    | ((_, a), (_, b)) <- distinctPairs $ toList outerPins
     ]
 
   pure area
@@ -121,8 +122,8 @@ freeGatePolygon gate = do
 
   path <- freeRectangle
 
-  dimensions <- lookupDimensions gate <$> ask
-  for_ dimensions $ \ (w, h) -> liftSMT $ constrain
+  dims <- lookupDimensions gate <$> ask
+  for_ dims $ \ (w, h) -> liftSMT $ constrain
     $   right path - left path .== literal w
     .&& top path - bottom path .== literal h
 
@@ -133,7 +134,7 @@ freeWirePolygon net = do
 
   path <- freeRectangle
 
-  (w, h) <- standardPin <$> ask
+  (w, h) <- view standardPin <$> ask
 
   liftSMT $ constrain
       $    width path .== literal w
@@ -146,7 +147,7 @@ freePinPolygon pin = do
 
   path <- freeRectangle
 
-  (w, h) <- standardPin <$> ask
+  (w, h) <- view standardPin <$> ask
 
   liftSMT $ constrain
     $    width path .== literal w
@@ -190,8 +191,7 @@ connect a b = do
     .|| bottom a .== bottom b .&&  right a .==  right b .&&   top a .==   top b
 
 
-arboresence n     _    _   _ | n < 1 = undefined
-arboresence n nodes pins net = do
+arboresence n nodes outerPins net = do
 
   hyperedge <- sequence
     [ do
@@ -213,28 +213,28 @@ arboresence n nodes pins net = do
 
   where
 
-    vertices dir =
+    vertices d =
       [ Rect
           (left src + literal l, bottom src + literal b)
           (left src + literal r, bottom src + literal t)
-      | (j, assignments) <- assocs $ netPins net
+      | (j, assignments) <- assocs $ net ^. contacts
       , source <- assignments
-      , pinDir source == dir
-      , let (gate, src) = nodes ! gateIndex j
-      , Rect (l, b) (r, t) <- take 1 $ portRects $ pinPort source
+      , source ^. dir == d
+      , let (gate, src) = nodes ! view integer j
+      , Rect (l, b) (r, t) <- take 1 $ source ^. port . geometry
       ] ++
-      [ rect
-      | (pin, rect) <- pins
-      , pinDir pin /= dir
-      , pinIdent pin == netIdent net
+      [ path
+      | (pin, path) <- toList outerPins
+      , pin ^. dir /= d
+      , view identifier pin == view identifier net
       ]
 
 
-powerRing nodes = do
+powerUpAndGround nodes = do
   
   ring <- freeRing
 
-  (w, h) <- standardPin <$> ask
+  (w, h) <- view standardPin <$> ask
 
   sequence_ $ (`inside` inner ring) . snd <$> nodes
 
@@ -283,7 +283,7 @@ freePolygon n = sequence $ replicate n freePoint
 freePoint = liftSMT $ (,) <$> free_ <*> free_
 
 
-checkResult area pins ring nodes edges = do
+checkResult area outerPins ring nodes edges = do
 
   liftSMT $ query $ do
     result <- checkSat
@@ -292,13 +292,12 @@ checkResult area pins ring nodes edges = do
       Sat -> do
 
         pad <- rectangle area
-        power <- sequence $ rectangle <$> toList ring
-        inpts <- sequence (pinAssign  <$> pins)
+        a <- sequence $  rectangle <$> toList ring
+        b <- sequence $  pinAssign <$> outerPins
+        c <- sequence $ gateAssign <$> nodes
+        d <- sequence $  netAssign <$> edges
 
-        gates <- sequence (gateAssign <$> nodes)
-        nets  <- sequence (netAssign  <$> edges)
-
-        pure $ Just ((gates, nets), AbstractGate [pad] power inpts)
+        pure $ Just ((c, d), AbstractGate [pad] a b)
 
       Unsat -> do
 
@@ -317,13 +316,13 @@ checkResult area pins ring nodes edges = do
   where
 
     gateAssign (gate, xs) = rectangle xs
-      >>= \ path -> pure gate { gatePath = pure path }
+      >>= \ path -> pure $ gate & geometry .~ pure path
 
     pinAssign (pin, xs) = rectangle xs
-      >>= \ path -> pure pin { pinPort = Port Metal1 [path] }
+      >>= \ path -> pure $ pin & port .~ Port Metal1 [path]
 
     netAssign (net, edge) = sequence (rectangle <$> edge)
-      >>= \ paths -> pure net { netPaths = pure paths }
+      >>= \ path -> pure $ net & geometry .~ path
 
     rectangle r = Rect
       <$> ((, ) <$> getValue (left r)  <*> getValue (bottom r))

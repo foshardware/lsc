@@ -2,6 +2,8 @@
 
 module Main where
 
+import Control.Lens (set)
+
 import Control.Monad
 import Control.Monad.Trans
 import Control.Monad.Trans.Maybe
@@ -94,7 +96,7 @@ program = do
       circuit2d <- lift $ runLSC
         ( do
           tech
-          bootstrap $ \ t -> t { enableDebug = Debug `elem` fmap fst opts } )
+          bootstrap $ set enableDebug $ Debug `elem` fmap fst opts )
         ( stage1 1 netlist )
 
       when (Compile `elem` fmap fst opts)
