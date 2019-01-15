@@ -198,22 +198,16 @@ arboresence n nodes pins net = do
   hyperedge <- sequence
     [ do
 
-      src <- snd <$> freeWirePolygon net
-      snk <- snd <$> freeWirePolygon net
-
       jogs <- sequence $ replicate n $ snd <$> freeWirePolygon net
 
       let wire = [src] ++ jogs ++ [snk]
-
-      connect src source
-      connect snk sink
 
       sequence_ [ connect i j | i <- wire | j <- drop 1 wire ]
 
       pure wire
 
-    | source <- sources
-    , sink   <- sinks
+    | src <- sources
+    , snk <- sinks
     ]
 
   pure (net, join hyperedge)
