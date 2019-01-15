@@ -40,7 +40,7 @@ pnr netlist@(NetGraph ident (AbstractGate _ _ contacts) _ gates nets) = do
 
   area <- placement nodes ring pins
 
-  edges <- sequence $ arboresence nodes pins <$> nets
+  edges <- sequence $ arboresence 1 nodes pins <$> nets
 
   disjointGates nodes
   disjointNets edges
@@ -66,21 +66,25 @@ placement nodes ring pins = do
 
   outer ring `inside` area
 
-  sequence_ [ rect `alignLeft` outer ring | (p, rect) <- pins, pinDir p ==  In ]
-  sequence_ [ outer ring `alignLeft` rect | (p, rect) <- pins, pinDir p == Out ]
-
+  d <- literal . lambda <$> ask
   sequence_
-    [ liftSMT $ constrain $ left path .== left area
+    [ liftSMT $ constrain
+        $   left path .== left area
+        .&& left (outer ring) - left path .> d
     | (p, path) <- pins
     , pinDir p == In
     ]
   sequence_
-    [ liftSMT $ constrain $ right path .== right area
+    [ liftSMT $ constrain
+        $   right path .== right area
+        .&& right path - right (outer ring) .> d
     | (p, path) <- pins
     , pinDir p == Out
     ]
   sequence_
-    [ liftSMT $ constrain $ bottom path .>= bottom area .&& top path .<= top area
+    [ liftSMT $ constrain
+        $   bottom path .>= bottom (inner ring)
+        .&&    top path .<=    top (inner ring)
     | (p, path) <- pins
     ]
 
@@ -125,6 +129,13 @@ freeGatePolygon gate = do
   pure (gate, path)
 
 
+freeWirePolygon net = do
+
+  path <- freeRectangle
+
+  pure (net, path)
+
+
 freePinPolygon pin = do
 
   path <- freeRectangle
@@ -165,30 +176,37 @@ disjoint a b = do
     .|| bottom b - top a .> literal d
 
 
-pinConnect a b = do
-  liftSMT $ constrain
-    $   left a   .== left b   .&& bottom a .== bottom b .&& right a .== right b
-    .|| left a   .== left b   .&& bottom a .== bottom b .&& top a   .== top b
-    .|| left a   .== left b   .&& right a  .== right b  .&& top a   .== top b
-    .|| bottom a .== bottom b .&& right a  .== right b  .&& top a   .== top b
-
-
-pathCombine a b = do
+strongConnect a b = do
 
   liftSMT $ constrain
-    $   right a .== right b .&& top a .== top b
-    .|| left  a .== left  b .&& top a .== top b
-    .|| right a .== right b .&& bottom a .== bottom b
-    .|| left  a .== left  b .&& bottom a .== bottom b
+    $     left a .==   left b .&& bottom a .== bottom b .&& right a .== right b
+    .||   left a .==   left b .&& bottom a .== bottom b .&&   top a .==   top b
+    .||   left a .==   left b .&&  right a .==  right b .&&   top a .==   top b
+    .|| bottom a .== bottom b .&&  right a .==  right b .&&   top a .==   top b
 
   liftSMT $ softConstrain
-    $   left a   .== left b   .&& bottom a .== bottom b .&& right a .== right b
-    .|| left a   .== left b   .&& bottom a .== bottom b .&& top a   .== top b
-    .|| left a   .== left b   .&& right a  .== right b  .&& top a   .== top b
-    .|| bottom a .== bottom b .&& right a  .== right b  .&& top a   .== top b
+    $     left a .==   left b
+    .&& bottom a .== bottom b
+    .&&  right a .==  right b
+    .&&    top a .==    top b
 
 
-arboresence nodes pins net = do
+weakConnect a b = do
+
+  liftSMT $ constrain
+    $   right a .== right b .&&    top a .==    top b
+    .||  left a .==  left b .&&    top a .==    top b
+    .|| right a .== right b .&& bottom a .== bottom b
+    .||  left a .==  left b .&& bottom a .== bottom b
+
+  liftSMT $ softConstrain
+    $     left a .==   left b .&& bottom a .== bottom b .&& right a .== right b
+    .||   left a .==   left b .&& bottom a .== bottom b .&&   top a .==   top b
+    .||   left a .==   left b .&&  right a .==  right b .&&   top a .==   top b
+    .|| bottom a .== bottom b .&&  right a .==  right b .&&   top a .==   top b
+
+
+arboresence n nodes pins net = do
 
   let sources = vertices Out
       sinks   = vertices In
@@ -196,15 +214,19 @@ arboresence nodes pins net = do
   hyperedge <- sequence
     [ do
 
-      start  <- freeRectangle
-      target <- freeRectangle
+      src <- snd <$> freeWirePolygon net
+      snk <- snd <$> freeWirePolygon net
 
-      pinConnect start source
-      pinConnect target sink
+      jogs <- sequence $ replicate n $ snd <$> freeWirePolygon net
 
-      pathCombine start target
+      let wire = [src] ++ jogs ++ [snk]
 
-      pure [start, target]
+      strongConnect src source
+      strongConnect snk sink
+
+      sequence_ [ weakConnect i j | i <- wire | j <- drop 1 wire ]
+
+      pure wire
 
     | source <- sources
     , sink   <- sinks
