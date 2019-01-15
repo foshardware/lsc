@@ -40,7 +40,7 @@ pnr netlist@(NetGraph ident (AbstractGate _ _ contacts) _ gates nets) = do
 
   area <- placement nodes ring pins
 
-  edges <- sequence $ arboresence 6 nodes pins <$> nets
+  edges <- sequence $ arboresence 4 nodes pins <$> nets
 
   disjointGates nodes
   disjointNets edges
@@ -190,24 +190,23 @@ connect a b = do
     .|| bottom a .== bottom b .&&  right a .==  right b .&&   top a .==   top b
 
 
+arboresence n     _    _   _ | n < 1 = undefined
 arboresence n nodes pins net = do
-
-  let sources = vertices Out
-      sinks   = vertices In
 
   hyperedge <- sequence
     [ do
 
-      jogs <- sequence $ replicate n $ snd <$> freeWirePolygon net
+      wire <- sequence $ replicate n $ snd <$> freeWirePolygon net
 
-      let wire = [src] ++ jogs ++ [snk]
+      src `connect` head wire
+      snk `connect` last wire
 
       sequence_ [ connect i j | i <- wire | j <- drop 1 wire ]
 
       pure wire
 
-    | src <- sources
-    , snk <- sinks
+    | src <- vertices Out
+    , snk <- vertices In
     ]
 
   pure (net, join hyperedge)
