@@ -169,22 +169,7 @@ disjoint a b = do
     .|| bottom b - top a .> literal d
 
 
-strongConnect a b = do
-
-  liftSMT $ constrain
-    $     left a .==   left b .&& bottom a .== bottom b .&& right a .== right b
-    .||   left a .==   left b .&& bottom a .== bottom b .&&   top a .==   top b
-    .||   left a .==   left b .&&  right a .==  right b .&&   top a .==   top b
-    .|| bottom a .== bottom b .&&  right a .==  right b .&&   top a .==   top b
-
-  liftSMT $ softConstrain
-    $     left a .==   left b
-    .&& bottom a .== bottom b
-    .&&  right a .==  right b
-    .&&    top a .==    top b
-
-
-weakConnect a b = do
+connect a b = do
 
   liftSMT $ constrain
     $   right a .== right b .&&    top a .==    top b
@@ -214,8 +199,8 @@ arboresence n nodes pins net = do
 
       let wire = [src] ++ jogs ++ [snk]
 
-      strongConnect src source
-      strongConnect snk sink
+      connect src source
+      connect snk sink
 
       (w, h) <- standardPin <$> ask
       sequence_
@@ -225,7 +210,7 @@ arboresence n nodes pins net = do
         | path <- jogs
         ]
 
-      sequence_ [ weakConnect i j | i <- wire | j <- drop 1 wire ]
+      sequence_ [ connect i j | i <- wire | j <- drop 1 wire ]
 
       pure wire
 
