@@ -99,6 +99,7 @@ data Technology = Technology
   , _featureSize    :: Double
   , _stdCells       :: Map Text Cell
   , _standardPin    :: (Integer, Integer)
+  , _rowSize        :: Integer
   , _enableDebug    :: Bool
   } deriving Show
 
@@ -315,7 +316,7 @@ instance Default Port where
 makeFieldsNoPrefix ''Technology
 
 instance Default Technology where
-  def = Technology 1000 1 mempty (1000, 1000) True
+  def = Technology 1000 1 mempty (1000, 1000) 20000 True
 
 
 lookupDimensions :: Gate -> Technology -> Maybe (Integer, Integer)
@@ -323,6 +324,10 @@ lookupDimensions g tech = view dimensions <$> lookup (g ^. identifier) (tech ^. 
 
 lambda :: Technology -> Integer
 lambda tech = ceiling $ view scaleFactor tech * view featureSize tech
+
+divideArea :: Foldable f => f a -> Technology -> [Integer]
+divideArea xs tech = take n $ iterate (join (+)) (tech ^. rowSize)
+  where n = floor $ sqrt $ fromIntegral $ length xs
 
 debug :: [String] -> LSC ()
 debug msg = do

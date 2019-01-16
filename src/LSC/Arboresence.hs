@@ -271,10 +271,9 @@ powerUpAndGround nodes = do
 
   (w, h) <- view standardPin <$> ask
 
-  let xs = [20000, 40000 ..] :: [Integer]
-      wire x = ring ^. l & l .~ literal x & r .~ literal (x + w)
+  xs <- divideArea nodes <$> ask
 
-  let grid = wire <$> take 2 xs
+  let grid = [ ring ^. l & l .~ literal x & r .~ literal (x + w) | x <- xs ]
 
   d <- literal . lambda <$> ask
   sequence_
