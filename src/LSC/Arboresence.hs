@@ -261,7 +261,7 @@ freeRing = do
     .&& view r right .==  view r bottom .&& view b bottom .== view b right
     .&& view r right .==  view r top    .&&    view t top .== view t right
 
-  pure $ Ring left bottom right top
+  pure $ Rect left bottom right top
 
 
 freeRectangle = do
@@ -286,7 +286,7 @@ checkResult area rim ring nodes edges = do
       Sat -> do
 
         pad <- rectangle area
-        p <- sequence $  rectangle <$> fromSRing ring
+        p <- sequence $  rectangle <$> toList ring
         q <- sequence $  pinAssign <$> rim
         c <- sequence $ gateAssign <$> nodes
         d <- sequence $  netAssign <$> edges

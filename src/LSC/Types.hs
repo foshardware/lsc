@@ -198,7 +198,7 @@ type SRect = Rect SInteger
 
 type SPath = [SRect]
 
-type SRing = Ring SInteger
+type SRing = Rect SRect
 
 
 data Rect a = Rect
@@ -206,16 +206,7 @@ data Rect a = Rect
   , _b :: a
   , _r :: a
   , _t :: a
-  }
-  deriving (Eq, Show)
-
-data Ring a = Ring
-  { _l :: Rect a
-  , _b :: Rect a
-  , _r :: Rect a
-  , _t :: Rect a
-  }
-  deriving (Eq, Show)
+  } deriving (Eq, Show)
 
 
 makeFieldsNoPrefix ''Rect
@@ -239,33 +230,11 @@ instance Default a => Default (Rect a) where
   def = Rect def def def def
 
 
-makeFieldsNoPrefix ''Ring
+type Ring a = (Rect (Rect a))
 
 inner, outer :: Ring a -> Rect a
 inner p = Rect (p ^. l . r) (p ^. b . t) (p ^. r . l) (p ^. t . b)
 outer p = Rect (p ^. l . l) (p ^. b . b) (p ^. r . r) (p ^. t . t)
-
-fromSRing :: SRing -> SPath
-fromSRing ring = [ring ^. l, ring ^. b, ring ^. r, ring ^. t]
-
-
-instance Functor Ring where
-  fmap f p = Ring
-    (p ^. l . to (fmap f))
-    (p ^. b . to (fmap f))
-    (p ^. r . to (fmap f))
-    (p ^. t . to (fmap f))
-
-instance Foldable Ring where
-  foldMap f p = mconcat
-    [ foldMap f $ p ^. l
-    , foldMap f $ p ^. b
-    , foldMap f $ p ^. r
-    , foldMap f $ p ^. t
-    ]
-
-instance Default a => Default (Ring a) where
-  def = Ring def def def def
 
 
 makeFieldsNoPrefix ''NetGraph
