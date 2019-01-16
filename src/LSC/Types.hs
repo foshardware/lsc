@@ -99,7 +99,7 @@ data Technology = Technology
   , _featureSize    :: Double
   , _stdCells       :: Map Text Cell
   , _standardPin    :: (Integer, Integer)
-  , _powerRowSize   :: Integer
+  , _rowSize        :: Integer
   , _enableDebug    :: Bool
   } deriving Show
 
@@ -326,9 +326,9 @@ lambda :: Technology -> Integer
 lambda tech = ceiling $ view scaleFactor tech * view featureSize tech
 
 divideArea :: Foldable f => f a -> Technology -> [Integer]
-divideArea xs = take n . iterate (join (+)) . view powerRowSize
-  where n = succ $ ceiling $ sqrt $ fromIntegral $ length xs
 
+divideArea xs tech = take n $ iterate (join (+)) (tech ^. rowSize)
+  where n = floor $ sqrt $ fromIntegral $ length xs
 
 debug :: [String] -> LSC ()
 debug msg = do
