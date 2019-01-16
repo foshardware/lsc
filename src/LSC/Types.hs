@@ -190,36 +190,6 @@ instance Monoid (Comp z a) where
   mappend = (<>)
 
 
-data Rect a = Rect (a, a) (a, a)
-  deriving (Eq, Show)
-
-left, bottom, right, top :: Rect a -> a
-left   (Rect (a, _) _) = a
-bottom (Rect (_, a) _) = a
-right  (Rect _ (a, _)) = a
-top    (Rect _ (_, a)) = a
-
-width, height :: Num a => Rect a -> a
-width  r = right r - left r
-height r = top r - bottom r
-
-
-instance Functor Rect where
-  fmap f (Rect (a, b) (c, d)) = Rect (f a, f b) (f c, f d)
-
-instance Foldable Rect where
-  foldMap f r = foldMap f [left r, bottom r, right r, top r]
-
-instance Default a => Default (Rect a) where
-  def = Rect def def
-
-
-type Ring a = Rect (Rect a)
-
-inner, outer :: Ring a -> Rect a
-inner (Rect (l, b) (r, t)) = Rect (right l, top b) (left r, bottom t)
-outer (Rect (l, b) (r, t)) = Rect (left l, bottom b) (right r, top t)
-
 type Rectangle = Rect Integer
 
 type Path = [Rectangle]
@@ -227,6 +197,75 @@ type Path = [Rectangle]
 type SRect = Rect SInteger
 
 type SPath = [SRect]
+
+type SRing = Ring SInteger
+
+
+data Rect a = Rect
+  { _l :: a
+  , _b :: a
+  , _r :: a
+  , _t :: a
+  }
+  deriving (Eq, Show)
+
+data Ring a = Ring
+  { _l :: Rect a
+  , _b :: Rect a
+  , _r :: Rect a
+  , _t :: Rect a
+  }
+  deriving (Eq, Show)
+
+
+makeFieldsNoPrefix ''Rect
+
+width, height :: Num a => Rect a -> a
+width  p = p ^. r - p ^. l
+height p = p ^. t - p ^. b
+
+
+instance Functor Rect where
+  fmap f p = Rect
+    (p ^. l . to f)
+    (p ^. b . to f)
+    (p ^. r . to f)
+    (p ^. t . to f)
+
+instance Foldable Rect where
+  foldMap f p = foldMap f [p ^. l, p ^. b, p ^. r, p ^. t]
+
+instance Default a => Default (Rect a) where
+  def = Rect def def def def
+
+
+makeFieldsNoPrefix ''Ring
+
+inner, outer :: Ring a -> Rect a
+inner p = Rect (p ^. l . r) (p ^. b . t) (p ^. r . l) (p ^. t . b)
+outer p = Rect (p ^. l . l) (p ^. b . b) (p ^. r . r) (p ^. t . t)
+
+fromSRing :: SRing -> SPath
+fromSRing ring = [ring ^. l, ring ^. b, ring ^. r, ring ^. t]
+
+
+instance Functor Ring where
+  fmap f p = Ring
+    (p ^. l . to (fmap f))
+    (p ^. b . to (fmap f))
+    (p ^. r . to (fmap f))
+    (p ^. t . to (fmap f))
+
+instance Foldable Ring where
+  foldMap f p = mconcat
+    [ foldMap f $ p ^. l
+    , foldMap f $ p ^. b
+    , foldMap f $ p ^. r
+    , foldMap f $ p ^. t
+    ]
+
+instance Default a => Default (Ring a) where
+  def = Ring def def def def
 
 
 makeFieldsNoPrefix ''NetGraph
@@ -314,7 +353,7 @@ lookupDimensions :: Gate -> Technology -> Maybe (Integer, Integer)
 lookupDimensions g tech = view dimensions <$> lookup (g ^. identifier) (tech ^. stdCells)
 
 lambda :: Technology -> Integer
-lambda t = ceiling $ view scaleFactor t * view featureSize t
+lambda tech = ceiling $ view scaleFactor tech * view featureSize tech
 
 debug :: [String] -> LSC ()
 debug msg = do

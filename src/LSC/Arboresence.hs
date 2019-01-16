@@ -11,7 +11,7 @@ import Control.Lens hiding ((.>), inside)
 import Control.Monad
 import Control.Monad.Trans
 import Data.Foldable
-import Data.Map (assocs)
+import Data.Map (Map, assocs)
 import Data.Vector (Vector, (!))
 import Data.SBV
 import Data.SBV.Control
@@ -36,18 +36,18 @@ pnr netlist = do
 
   nodes <- sequence $ freeGatePolygon <$> (netlist ^. gates)
 
-  outerPins <- sequence $ freePinPolygon <$> (netlist ^. supercell . pins)
+  ring  <- powerUpAndGround nodes
 
-  ring <- powerUpAndGround nodes
+  rim   <- sequence $ freePinPolygon <$> (netlist ^. supercell . pins)
 
-  area <- placement nodes ring outerPins
+  area  <- placement ring rim
 
-  edges <- sequence $ arboresence 4 nodes outerPins <$> (netlist ^. nets)
+  edges <- sequence $ arboresence 4 nodes rim <$> (netlist ^. nets)
 
   disjointGates nodes
   disjointNets edges
 
-  result <- checkResult area outerPins ring nodes edges
+  result <- checkResult area rim ring nodes edges
 
   debug ["stop  pnr @ module", unpack $ netlist ^. identifier]
 
@@ -57,41 +57,41 @@ pnr netlist = do
     & nets .~ maybe (netlist ^. nets) (snd . fst) result
 
 
-placement nodes ring outerPins = do
+placement ring rim = do
 
   area <- freeRectangle
 
   liftSMT $ constrain
-    $     left area .== literal 0
-    .&& bottom area .== literal 0
+    $   view l area .== literal 0
+    .&& view b area .== literal 0
 
   outer ring `inside` area
 
   d <- literal . lambda <$> ask
   sequence_
     [ liftSMT $ constrain
-        $   left path .== left area
-        .&& left (outer ring) - left path .> d
-    | (pin, path) <- toList outerPins
+        $   view l path .== view l area
+        .&& view l (outer ring) - view l path .> d
+    | (pin, path) <- toList rim
     , pin ^. dir == In
     ]
   sequence_
     [ liftSMT $ constrain
-        $   right path .== right area
-        .&& right path - right (outer ring) .> d
-    | (pin, path) <- toList outerPins
+        $   view r path .== view r area
+        .&& view r path - view r (outer ring) .> d
+    | (pin, path) <- toList rim
     , pin ^. dir == Out
     ]
   sequence_
     [ liftSMT $ constrain
-        $   bottom path .>= bottom (inner ring)
-        .&&    top path .<=    top (inner ring)
-    | (_, path) <- toList outerPins
+        $   view b path .>= view b (inner ring)
+        .&&    view t path .<=    view t (inner ring)
+    | (_, path) <- toList rim
     ]
 
   sequence_
-    [ disjoint a b
-    | ((_, a), (_, b)) <- distinctPairs $ toList outerPins
+    [ disjoint p q
+    | ((_, p), (_, q)) <- distinctPairs $ toList rim
     ]
 
   pure area
@@ -99,17 +99,17 @@ placement nodes ring outerPins = do
 
 disjointGates nodes = do
   sequence_
-    [ disjoint a b
-    | ((_, a), (_, b)) <- distinctPairs $ toList nodes
+    [ disjoint p q
+    | ((_, p), (_, q)) <- distinctPairs $ toList nodes
     ]
 
 
 disjointNets edges = do
   sequence_
-    [ disjoint a b
+    [ disjoint p q
     | ((_, as), (_, bs)) <- distinctPairs $ toList edges
-    , a <- as
-    , b <- bs
+    , p <- as
+    , q <- bs
     ]
 
 
@@ -124,8 +124,8 @@ freeGatePolygon gate = do
 
   dims <- lookupDimensions gate <$> ask
   for_ dims $ \ (w, h) -> liftSMT $ constrain
-    $   right path - left path .== literal w
-    .&& top path - bottom path .== literal h
+    $   view r path - view l path .== literal w
+    .&& view t path - view b path .== literal h
 
   pure (gate, path)
 
@@ -159,39 +159,37 @@ freePinPolygon pin = do
 inside i o = do
   d <- lambda <$> ask
   liftSMT $ constrain
-    $     left i -   left o .> literal d
-    .&& bottom i - bottom o .> literal d
-    .&&  right o -  right i .> literal d
-    .&&    top o -    top i .> literal d
+    $   view l i - view l o .> literal d
+    .&& view b i - view b o .> literal d
+    .&& view r o - view r i .> literal d
+    .&& view t o - view t i .> literal d
 
 
-outside = disjoint
-
-disjoint a b = do
+disjoint p q = do
   d <- lambda <$> ask
   liftSMT $ constrain
-    $   left b - right a .> literal d
-    .|| left a - right b .> literal d
-    .|| bottom a - top b .> literal d
-    .|| bottom b - top a .> literal d
+    $   view l q - view r p .> literal d
+    .|| view l p - view r q .> literal d
+    .|| view b p - view t q .> literal d
+    .|| view b q - view t p .> literal d
 
 
-connect a b = do
+connect p q = do
 
   liftSMT $ constrain
-    $   right a .== right b .&&    top a .==    top b
-    .||  left a .==  left b .&&    top a .==    top b
-    .|| right a .== right b .&& bottom a .== bottom b
-    .||  left a .==  left b .&& bottom a .== bottom b
+    $   view r p .== view r q .&& view t p .== view t q
+    .|| view l p .== view l q .&& view t p .== view t q
+    .|| view r p .== view r q .&& view b p .== view b q
+    .|| view l p .== view l q .&& view b p .== view b q
 
   liftSMT $ softConstrain
-    $     left a .==   left b .&& bottom a .== bottom b .&& right a .== right b
-    .||   left a .==   left b .&& bottom a .== bottom b .&&   top a .==   top b
-    .||   left a .==   left b .&&  right a .==  right b .&&   top a .==   top b
-    .|| bottom a .== bottom b .&&  right a .==  right b .&&   top a .==   top b
+    $   view l p .== view l q .&& view b p .== view b q .&& view r p .== view r q
+    .|| view l p .== view l q .&& view b p .== view b q .&& view t p .== view t q
+    .|| view l p .== view l q .&& view r p .== view r q .&& view t p .== view t q
+    .|| view b p .== view b q .&& view r p .== view r q .&& view t p .== view t q
 
 
-arboresence n nodes outerPins net = do
+arboresence n nodes rim net = do
 
   hyperedge <- sequence
     [ do
@@ -215,16 +213,18 @@ arboresence n nodes outerPins net = do
 
     vertices d =
       [ Rect
-          (left src + literal l, bottom src + literal b)
-          (left src + literal r, bottom src + literal t)
+          (view l src + literal (view l p))
+          (view b src + literal (view b p))
+          (view l src + literal (view r p))
+          (view b src + literal (view t p))
       | (j, assignments) <- assocs $ net ^. contacts
       , source <- assignments
       , source ^. dir == d
       , let (gate, src) = nodes ! view integer j
-      , Rect (l, b) (r, t) <- take 1 $ source ^. port . geometry
+      , p <- take 1 $ source ^. port . geometry
       ] ++
       [ path
-      | (pin, path) <- toList outerPins
+      | (pin, path) <- toList rim
       , pin ^. dir /= d
       , view identifier pin == view identifier net
       ]
@@ -239,51 +239,45 @@ powerUpAndGround nodes = do
   sequence_ $ (`inside` inner ring) . snd <$> nodes
 
   liftSMT $ constrain
-    $   width (left ring) .==  width (right ring)
-    .&& width (right ring) .== literal w
+    $   width (view l ring) .==  width (view r ring)
+    .&& width (view r ring) .== literal w
 
-    .&& height (bottom ring) .== height (top ring)
-    .&& height (top ring) .== literal h
+    .&& height (view b ring) .== height (view t ring)
+    .&& height (view t ring) .== literal h
 
   pure ring
 
 
 freeRing = do
 
-  l <- freeRectangle
-  b <- freeRectangle
-  r <- freeRectangle
-  t <- freeRectangle
+  left   <- freeRectangle
+  bottom <- freeRectangle
+  right  <- freeRectangle
+  top    <- freeRectangle
 
   liftSMT $ constrain
-    $    left l .==  left b .&& bottom b .== bottom l
-    .&&  left l .==  left t .&&    top t .==    top l
-    .&& right r .== right b .&& bottom b .== bottom r
-    .&& right r .== right t .&&    top t .==    top r
+    $    view l left .==  view l bottom .&& view b bottom .==  view b left
+    .&&  view l left .==  view l top    .&&    view t top .==  view t left
+    .&& view r right .==  view r bottom .&& view b bottom .== view b right
+    .&& view r right .==  view r top    .&&    view t top .== view t right
 
-  pure $ Rect (l, b) (r, t)
+  pure $ Ring left bottom right top
 
 
 freeRectangle = do
 
-  area <- Rect <$> freePoint <*> freePoint
+  area <- liftSMT $ Rect <$> free_ <*> free_ <*> free_ <*> free_
 
   liftSMT $ constrain
     $   width  area .>= 0
     .&& height area .>= 0
-    .&&   left area .>= 0
-    .&& bottom area .>= 0
+    .&& view l area .>= 0
+    .&& view b area .>= 0
 
   pure area
 
 
-freePolygon n = sequence $ replicate n freePoint
-
-
-freePoint = liftSMT $ (,) <$> free_ <*> free_
-
-
-checkResult area outerPins ring nodes edges = do
+checkResult area rim ring nodes edges = do
 
   liftSMT $ query $ do
     result <- checkSat
@@ -292,12 +286,12 @@ checkResult area outerPins ring nodes edges = do
       Sat -> do
 
         pad <- rectangle area
-        a <- sequence $  rectangle <$> toList ring
-        b <- sequence $  pinAssign <$> outerPins
+        p <- sequence $  rectangle <$> fromSRing ring
+        q <- sequence $  pinAssign <$> rim
         c <- sequence $ gateAssign <$> nodes
         d <- sequence $  netAssign <$> edges
 
-        pure $ Just ((c, d), AbstractGate [pad] a b)
+        pure $ Just ((c, d), AbstractGate [pad] p q)
 
       Unsat -> do
 
@@ -324,6 +318,8 @@ checkResult area outerPins ring nodes edges = do
     netAssign (net, edge) = sequence (rectangle <$> edge)
       >>= \ path -> pure $ net & geometry .~ path
 
-    rectangle r = Rect
-      <$> ((, ) <$> getValue (left r)  <*> getValue (bottom r))
-      <*> ((, ) <$> getValue (right r) <*> getValue (top r))
+    rectangle path = Rect
+      <$> getValue (path ^. l)
+      <*> getValue (path ^. b)
+      <*> getValue (path ^. r)
+      <*> getValue (path ^. t)

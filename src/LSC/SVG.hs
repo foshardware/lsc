@@ -12,7 +12,7 @@ import qualified Data.Text as Text
 import qualified Data.Text.Lazy    as Lazy
 import qualified Data.Text.Lazy.IO as Lazy
 
-import Text.Blaze.Svg11 ((!), mkPath, m, l, z)
+import Text.Blaze.Svg11 ((!), mkPath)
 import qualified Text.Blaze.Svg11 as S
 import qualified Text.Blaze.Svg11.Attributes as A
 import Text.Blaze.Svg.Renderer.Text (renderSvg)
@@ -25,6 +25,12 @@ type Circuit = Circuit2D Path
 type Svg = S.Svg
 
 type Options = (S.AttributeValue, S.AttributeValue)
+
+m_, l_:: Integer -> Integer -> S.Path
+z_ :: S.Path
+m_ = S.m
+l_ = S.l
+z_ = S.z
 
 
 plotStdout :: NetGraph -> IO ()
@@ -46,7 +52,9 @@ svgDoc (Circuit2D nodes edges) = S.docTypeSvg
 
 
 place :: (Gate, Path) -> Svg
-place (g, path@(Rect (x, y) _ : _)) = do
+place (g, path@(p : _)) = do
+
+  let (x, y) = (p ^. l, p ^. b)
 
   S.text_
     ! A.x (S.toValue $ x + 42)
@@ -70,7 +78,7 @@ route (_, pin, path) = do
 
 
 follow :: Options -> Path -> Svg
-follow (stroke, fill) (x : xs) = do
+follow (stroke, fill) (p : xs) = do
 
   S.path
     ! A.d (mkPath pen)
@@ -83,11 +91,11 @@ follow (stroke, fill) (x : xs) = do
   where
 
     pen = do
-      left x `m` bottom x
-      left x `l` top x
-      right x `l` top x
-      right x `l` bottom x
-      z
+      m_ (p ^. l) (p ^. b)
+      l_ (p ^. l) (p ^. t)
+      l_ (p ^. r) (p ^. t)
+      l_ (p ^. r) (p ^. b)
+      z_
 
 
 follow _ _ = pure ()
@@ -116,10 +124,10 @@ svgPaths netlist = Circuit2D
 
     inducePins :: (Gate, [Pin]) -> Path
     inducePins (i, ps) =
-      [ Rect (left r + x, bottom r + y) (right r + x, top r + y)
+      [ Rect (q ^. l + p ^. l) (q ^. b + p ^. b) (q ^. r + p ^. l) (q ^. t + p ^. b)
       | pin <- ps
-      , Rect (x, y) _ <- take 1 . view geometry =<< indexM (netlist ^. gates) (i ^. integer)
-      , r <- take 1 $ pin ^. port . geometry
+      , p <- take 1 . view geometry =<< indexM (netlist ^. gates) (i ^. integer)
+      , q <- take 1 $ pin ^. port . geometry
       ]
 
 
