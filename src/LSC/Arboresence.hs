@@ -39,14 +39,11 @@ pnr netlist = do
 
   rim <- sequence $ freePinPolygon <$> (netlist ^. supercell . pins)
 
-  rows <- divide area . ceiling . sqrt . fromIntegral $ length nodes
-
-  (ring, grid) <- powerUpAndGround rows nodes
+  (ring, grid) <- powerUpAndGround nodes
 
   edges <- sequence $ arboresence 4 nodes rim <$> (netlist ^. nets)
 
   placement area ring rim
-  alignment nodes rows
 
   disjointGates nodes
   disjointNets edges
@@ -59,12 +56,13 @@ pnr netlist = do
 
         pad <- pure <$> getValueRect area
         ps <- sequence $ getValueRect <$> toList ring
+        gr <- sequence $ getValueRect <$> grid
         qs <- sequence $  setPinGeometry <$> rim
         ns <- sequence $  setNetGeometry <$> edges
         gs <- sequence $ setGateGeometry <$> nodes
 
         pure $ netlist
-          & supercell .~ AbstractGate pad ps qs
+          & supercell .~ AbstractGate pad (gr ++ ps) qs
           & gates     .~ gs
           & nets      .~ ns
 
@@ -89,7 +87,12 @@ pnr netlist = do
 
 alignment nodes rows = do
 
-  pure ()
+  liftSMT $ constrain $ sAnd
+    [ path ^. l .== x
+    | (_, path) <- toList nodes
+    | x <- join $ repeat rows
+    ]
+
 
 placement area ring rim = do
 
@@ -221,19 +224,6 @@ connect p q = do
     .|| view b p .== view b q .&& view r p .== view r q .&& view t p .== view t q
 
 
-divide area n = do
-
-  rows <- sequence $ replicate n $ liftSMT free_
-
-  liftSMT $ constrain $ allEqual
-    [ q - p
-    | p <- [area ^. l] ++ rows
-    | q <- rows ++ [area ^. r]
-    ]
-
-  pure rows
-
-
 arboresence n nodes rim net = do
 
   hyperedge <- sequence
@@ -275,15 +265,24 @@ arboresence n nodes rim net = do
       ]
 
 
-powerUpAndGround _ nodes = do
-
-  let grid = ()
+powerUpAndGround nodes = do
 
   ring <- freeRing
 
   (w, h) <- view standardPin <$> ask
 
-  sequence_ $ (`inside` inner ring) . snd <$> nodes
+  let xs = [20000, 40000 ..] :: [Integer]
+      wire x = ring ^. l & l .~ literal x & r .~ literal (x + w)
+
+  let grid = wire <$> take 2 xs
+
+  d <- literal . lambda <$> ask
+  sequence_
+    [ inside path $ inner $ ring & r .~ right & l .~ left
+    | (_, path) <- toList nodes
+    | left  <- join $ repeat $ [ring ^. l] ++ grid
+    | right <- join $ repeat $ grid ++ [ring ^. r]
+    ]
 
   liftSMT $ constrain
     $   width (view l ring) .==  width (view r ring)
