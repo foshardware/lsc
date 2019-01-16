@@ -25,31 +25,33 @@ pnr :: NetGraph -> LSC NetGraph
 pnr netlist = do
 
   debug
-    [ "start pnr @ module", unpack $ netlist ^. identifier
-    , "-", show $ length $ netlist ^. gates, "gates"
-    , "-", show $ length $ netlist ^. nets, "nets"
+    [ "start pnr @ module", netlist ^. identifier . to unpack
+    , "-", netlist ^. gates . to length . to show, "gates"
+    , "-", netlist ^. nets . to length . to show, "nets"
     ]
 
   liftSMT $ do
     setOption $ ProduceUnsatCores True
 
+  area <- freeRectangle
 
   nodes <- sequence $ freeGatePolygon <$> (netlist ^. gates)
 
-  ring  <- powerUpAndGround nodes
+  rim <- sequence $ freePinPolygon <$> (netlist ^. supercell . pins)
 
-  rim   <- sequence $ freePinPolygon <$> (netlist ^. supercell . pins)
+  rows <- divide area . ceiling . sqrt . fromIntegral $ length nodes
 
-  area  <- placement ring rim
+  (ring, grid) <- powerUpAndGround rows nodes
 
   edges <- sequence $ arboresence 4 nodes rim <$> (netlist ^. nets)
+
+  placement area ring rim
+  alignment nodes rows
 
   disjointGates nodes
   disjointNets edges
 
-  debug ["stop  pnr @ module", unpack $ netlist ^. identifier]
-
-  liftSMT $ query $ do
+  result <- liftSMT $ query $ do
     result <- checkSat
     case result of
 
@@ -57,9 +59,9 @@ pnr netlist = do
 
         pad <- pure <$> getValueRect area
         ps <- sequence $ getValueRect <$> toList ring
-        qs <- sequence $ setPin  <$> rim
-        gs <- sequence $ setGate <$> nodes
-        ns <- sequence $ setNet  <$> edges
+        qs <- sequence $  setPinGeometry <$> rim
+        ns <- sequence $  setNetGeometry <$> edges
+        gs <- sequence $ setGateGeometry <$> nodes
 
         pure $ netlist
           & supercell .~ AbstractGate pad ps qs
@@ -80,15 +82,20 @@ pnr netlist = do
 
         pure netlist
 
+  debug ["stop  pnr @ module", netlist ^. identifier . to unpack]
+
+  pure result
 
 
-placement ring rim = do
+alignment nodes rows = do
 
-  area <- freeRectangle
+  pure ()
+
+placement area ring rim = do
 
   liftSMT $ constrain
-    $   view l area .== literal 0
-    .&& view b area .== literal 0
+    $   view l area .== 0
+    .&& view b area .== 0
 
   outer ring `inside` area
 
@@ -214,6 +221,19 @@ connect p q = do
     .|| view b p .== view b q .&& view r p .== view r q .&& view t p .== view t q
 
 
+divide area n = do
+
+  rows <- sequence $ replicate n $ liftSMT free_
+
+  liftSMT $ constrain $ allEqual
+    [ q - p
+    | p <- [area ^. l] ++ rows
+    | q <- rows ++ [area ^. r]
+    ]
+
+  pure rows
+
+
 arboresence n nodes rim net = do
 
   hyperedge <- sequence
@@ -255,8 +275,10 @@ arboresence n nodes rim net = do
       ]
 
 
-powerUpAndGround nodes = do
-  
+powerUpAndGround _ nodes = do
+
+  let grid = ()
+
   ring <- freeRing
 
   (w, h) <- view standardPin <$> ask
@@ -270,7 +292,7 @@ powerUpAndGround nodes = do
     .&& height (view b ring) .== height (view t ring)
     .&& height (view t ring) .== literal h
 
-  pure ring
+  pure (ring, grid)
 
 
 freeRing = do
@@ -302,13 +324,13 @@ freeRectangle = do
   pure area
 
 
-setGate (gate, xs) = getValueRect xs
+setGateGeometry (gate, xs) = getValueRect xs
   >>= \ path -> pure $ gate & geometry .~ pure path
 
-setPin (pin, xs) = getValueRect xs
+setPinGeometry (pin, xs) = getValueRect xs
   >>= \ path -> pure $ pin & port .~ Port Metal1 [path]
 
-setNet (net, edge) = sequence (getValueRect <$> edge)
+setNetGeometry (net, edge) = sequence (getValueRect <$> edge)
   >>= \ path -> pure $ net & geometry .~ path
 
 getValueRect path = Rect

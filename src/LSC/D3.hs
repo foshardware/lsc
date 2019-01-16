@@ -20,9 +20,9 @@ import LSC.Types        as LSC
 data D3Dag = D3Dag Integer String [D3Dag]
 
 instance ToJSON D3Dag where
-  toJSON (D3Dag n name children) = object
+  toJSON (D3Dag n name cs) = object
     [ "name" .= unwords [show n, name]
-    , "children" .= toJSON children
+    , "children" .= toJSON cs
     ]
 
 
@@ -109,7 +109,7 @@ eval tree
   = unzip
   $ take 32
   $ takeWhile ( \ (D3Dag _ _ xs, _) -> not $ null xs)
-  $ iterate (\ (t, ls) -> let s = cut ls t in (s, leaves s)) (tree, leaves tree)
+  $ iterate (\ (l, ls) -> let s = cut ls l in (s, leaves s)) (tree, leaves tree)
 
 cut :: Leaves -> D3Dag -> D3Dag
 cut ls (D3Dag n k xs)
