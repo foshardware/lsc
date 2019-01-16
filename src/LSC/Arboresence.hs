@@ -47,14 +47,39 @@ pnr netlist = do
   disjointGates nodes
   disjointNets edges
 
-  result <- checkResult area rim ring nodes edges
-
   debug ["stop  pnr @ module", unpack $ netlist ^. identifier]
 
-  pure $ netlist
-    & supercell .~ maybe (netlist ^. supercell) snd result
-    & gates .~ maybe (netlist ^. gates) (fst . fst) result
-    & nets .~ maybe (netlist ^. nets) (snd . fst) result
+  liftSMT $ query $ do
+    result <- checkSat
+    case result of
+
+      Sat -> do
+
+        pad <- pure <$> getValueRect area
+        ps <- sequence $ getValueRect <$> toList ring
+        qs <- sequence $ setPin  <$> rim
+        gs <- sequence $ setGate <$> nodes
+        ns <- sequence $ setNet  <$> edges
+
+        pure $ netlist
+          & supercell .~ AbstractGate pad ps qs
+          & gates     .~ gs
+          & nets      .~ ns
+
+      Unsat -> do
+
+        unsat <- getUnsatCore
+        liftIO $ sequence_ $ hPutStrLn stderr <$> unsat
+
+        pure netlist
+
+      _ -> do
+
+        reason <- getUnknownReason
+        liftIO $ hPutStrLn stderr $ show reason
+
+        pure netlist
+
 
 
 placement ring rim = do
@@ -277,49 +302,17 @@ freeRectangle = do
   pure area
 
 
-checkResult area rim ring nodes edges = do
+setGate (gate, xs) = getValueRect xs
+  >>= \ path -> pure $ gate & geometry .~ pure path
 
-  liftSMT $ query $ do
-    result <- checkSat
-    case result of
+setPin (pin, xs) = getValueRect xs
+  >>= \ path -> pure $ pin & port .~ Port Metal1 [path]
 
-      Sat -> do
+setNet (net, edge) = sequence (getValueRect <$> edge)
+  >>= \ path -> pure $ net & geometry .~ path
 
-        pad <- rectangle area
-        p <- sequence $  rectangle <$> toList ring
-        q <- sequence $  pinAssign <$> rim
-        c <- sequence $ gateAssign <$> nodes
-        d <- sequence $  netAssign <$> edges
-
-        pure $ Just ((c, d), AbstractGate [pad] p q)
-
-      Unsat -> do
-
-        unsat <- getUnsatCore
-        liftIO $ sequence_ $ hPutStrLn stderr <$> unsat
-
-        pure Nothing
-
-      _ -> do
-
-        reason <- getUnknownReason
-        liftIO $ hPutStrLn stderr $ show reason
-
-        pure Nothing
-
-  where
-
-    gateAssign (gate, xs) = rectangle xs
-      >>= \ path -> pure $ gate & geometry .~ pure path
-
-    pinAssign (pin, xs) = rectangle xs
-      >>= \ path -> pure $ pin & port .~ Port Metal1 [path]
-
-    netAssign (net, edge) = sequence (rectangle <$> edge)
-      >>= \ path -> pure $ net & geometry .~ path
-
-    rectangle path = Rect
-      <$> getValue (path ^. l)
-      <*> getValue (path ^. b)
-      <*> getValue (path ^. r)
-      <*> getValue (path ^. t)
+getValueRect path = Rect
+  <$> getValue (path ^. l)
+  <*> getValue (path ^. b)
+  <*> getValue (path ^. r)
+  <*> getValue (path ^. t)
