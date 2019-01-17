@@ -89,8 +89,19 @@ data Dir = In | Out | InOut
 
 data Layer
   = AnyLayer
-  | Metal1 | Metal2 | Metal3
-  deriving (Eq, Ord, Enum, Show)
+  | Metal1
+  | Metal2
+  | Metal3
+  deriving (Eq, Ord, Enum, Read, Show)
+
+metal1, metal2, metal3 :: SLayer
+metal1   = slayer Metal1
+metal2   = slayer Metal2
+metal3   = slayer Metal3
+
+slayer :: Layer -> SLayer
+slayer = literal . toEnum . fromEnum
+
 
 data Technology = Technology
   { _scaleFactor    :: Double
@@ -184,9 +195,9 @@ type SRing = Ring SInteger SInteger
 
 
 data Component l a
-  = Rect                 { _l :: a, _b :: a, _r :: a, _t :: a }
-  | Via     { _layer :: l, _l :: a, _b :: a, _r :: a, _t :: a }
-  | Layered { _layer :: l, _l :: a, _b :: a, _r :: a, _t :: a }
+  = Rect    { _l :: a, _b :: a, _r :: a, _t :: a }
+  | Via     { _l :: a, _b :: a, _r :: a, _t :: a, _z :: [l] }
+  | Layered { _l :: a, _b :: a, _r :: a, _t :: a, _z :: [l] }
   deriving (Eq, Show)
 
 
@@ -197,14 +208,14 @@ width  p = p ^. r - p ^. l
 height p = p ^. t - p ^. b
 
 integrate :: l -> Component l a -> Component l a
-integrate n (Rect x1 y1 x2 y2) = Layered n x1 y1 x2 y2
-integrate n rect = set layer n rect
+integrate layer (Rect x1 y1 x2 y2) = Layered x1 y1 x2 y2 (pure layer)
+integrate layer rect = over z (layer :) rect
 
 
 instance Functor (Component l) where
-  fmap f (Rect        x1 y1 x2 y2) = Rect        (f x1) (f y1) (f x2) (f y2)
-  fmap f (Via     lay x1 y1 x2 y2) = Via     lay (f x1) (f y1) (f x2) (f y2)
-  fmap f (Layered lay x1 y1 x2 y2) = Layered lay (f x1) (f y1) (f x2) (f y2)
+  fmap f (Rect    x1 y1 x2 y2)       = Rect    (f x1) (f y1) (f x2) (f y2)
+  fmap f (Via     x1 y1 x2 y2 layer) = Via     (f x1) (f y1) (f x2) (f y2) layer
+  fmap f (Layered x1 y1 x2 y2 layer) = Layered (f x1) (f y1) (f x2) (f y2) layer
 
 instance Foldable (Component l) where
   foldMap f p = foldMap f [p ^. l, p ^. b, p ^. r, p ^. t]

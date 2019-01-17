@@ -24,7 +24,9 @@ type Circuit = Circuit2D Path
 
 type Svg = S.Svg
 
-type Options = (S.AttributeValue, S.AttributeValue)
+type Arg = S.AttributeValue
+
+type Args = (Arg, Arg)
 
 m_, l_:: Integer -> Integer -> S.Path
 z_ :: S.Path
@@ -64,29 +66,27 @@ place (g, path@(p : _)) = do
     ! A.transform (fromString $ "rotate(90 "++ show (x + 8) ++","++ show (y + 24)  ++")")
     $ renderText $ g ^. identifier
 
-  follow ("black", "transparent") path
+  follow path
 
 place _ = pure ()
 
 
 route :: Arboresence Path -> Svg
-route (net, _, path) | net ^. identifier == "vdd" = do
-  follow ("green", "green") path
 route (_, pin, path) = do
-  follow ("blue", "blue") path
-  follow ("black", "blue") pin
+  follow path
+  follow pin
 
 
-follow :: Options -> Path -> Svg
-follow (stroke, fill) (p : xs) = do
+follow :: Path -> Svg
+follow (p : xs) = do
 
   S.path
     ! A.d (mkPath pen)
-    ! A.stroke stroke
-    ! A.fill fill
+    ! A.stroke (p ^. z . to stroke)
+    ! A.fill (p ^. z . to fill)
     ! A.strokeWidth "4"
 
-  follow (stroke, fill) xs
+  follow xs
 
   where
 
@@ -97,8 +97,20 @@ follow (stroke, fill) (p : xs) = do
       l_ (p ^. r) (p ^. b)
       z_
 
+follow _ = pure ()
 
-follow _ _ = pure ()
+
+stroke :: [Layer] -> Arg
+stroke (Metal1 : _) = "blue"
+stroke (Metal2 : _) = "red"
+stroke (Metal3 : _) = "green"
+stroke _ = "black"
+
+fill :: [Layer] -> Arg
+fill (Metal1 : _) = "blue"
+fill (Metal2 : _) = "red"
+fill (Metal3 : _) = "green"
+fill _ = "blue"
 
 
 svgPaths :: NetGraph -> Circuit

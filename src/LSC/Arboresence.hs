@@ -55,9 +55,9 @@ pnr netlist = do
 
       Sat -> do
 
-        pad <- pure <$> getValueRect area
-        ps <- sequence $ getValueRect <$> power
-        gr <- sequence $ getValueRect <$> ground
+        pad <- pure <$> getLayered area
+        ps <- sequence $ getLayered <$> power
+        gr <- sequence $ getLayered <$> ground
         qs <- sequence $  setPinGeometry <$> rim
         ns <- sequence $  setNetGeometry <$> edges
         gs <- sequence $ setGateGeometry <$> nodes
@@ -221,7 +221,7 @@ arboresence n nodes rim net = do
   hyperedge <- sequence
     [ do
 
-      wire <- sequence $ replicate n $ snd <$> freeWirePolygon net
+      wire <- sequence $ replicate n $ integrate metal1 . snd <$> freeWirePolygon net
 
       src `connect` head wire
       snk `connect` last wire
@@ -259,9 +259,6 @@ arboresence n nodes rim net = do
 
 powerUpAndGround nodes = do
 
-  let metal2 = literal $ toEnum $ fromEnum Metal2 :: SInteger
-      metal3 = literal $ toEnum $ fromEnum Metal3 :: SInteger
-
   (w, h) <- view standardPin <$> ask
 
   ring <- freeRing
@@ -270,8 +267,8 @@ powerUpAndGround nodes = do
 
   let grid = [ ring ^. l & l .~ literal x & r .~ literal (x + w) | x <- xs ]
 
-  let power  = [ p & layer .~ metal2 | p <- toList ring ++ grid ]
-      ground = [ p & layer .~ metal3 | p <- toList ring ++ grid ]
+  let power  = [ integrate metal2 p | p <- toList ring ++ grid ]
+      ground = [ integrate metal3 p | p <- toList ring ++ grid ]
 
   d <- literal . lambda <$> ask
   sequence_
@@ -320,17 +317,21 @@ freeRectangle = do
   pure area
 
 
-setGateGeometry (gate, xs) = getValueRect xs
+setGateGeometry (gate, xs) = getLayered xs
   >>= \ path -> pure $ gate & geometry .~ pure path
 
-setPinGeometry (pin, xs) = getValueRect xs
+setPinGeometry (pin, xs) = getLayered xs
   >>= \ path -> pure $ pin & ports .~ pure path
 
-setNetGeometry (net, edge) = sequence (getValueRect <$> edge)
+setNetGeometry (net, edge) = sequence (getLayered <$> edge)
   >>= \ path -> pure $ net & geometry .~ path
 
-getValueRect path = Rect
+getLayered path = Layered
   <$> getValue (path ^. l)
   <*> getValue (path ^. b)
   <*> getValue (path ^. r)
   <*> getValue (path ^. t)
+  <*> mapM getLayerValue (path ^. z)
+
+getLayerValue :: SLayer -> Query Layer
+getLayerValue x = toEnum . fromEnum <$> getValue x
