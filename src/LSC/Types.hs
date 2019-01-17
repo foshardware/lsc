@@ -77,13 +77,10 @@ data Cell = Cell
 data Pin = Pin
   { _identifier :: Identifier
   , _dir        :: Dir
-  , _port       :: Port
+  , _ports      :: [Port]
   } deriving Show
 
-data Port = Port
-  { _layer    :: Layer
-  , _geometry :: Path
-  } deriving Show
+type Port = Component Layer Integer
 
 
 data Dir = In | Out | InOut
@@ -172,9 +169,7 @@ ask :: LSC Technology
 ask = lift $ LST Reader.ask
 
 
-type Rectangle = Component Layer Integer
-
-type Path = [Rectangle]
+type Path = [Component Layer Integer]
 
 type Ring l a = Component () (Component l a)
 
@@ -285,12 +280,6 @@ instance Ord Pin where
 
 instance Default Pin where
   def = Pin mempty In def
-
-
-makeFieldsNoPrefix ''Port
-
-instance Default Port where
-  def = Port AnyLayer mempty
 
 
 makeFieldsNoPrefix ''Technology

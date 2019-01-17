@@ -256,7 +256,7 @@ arboresence n nodes rim net = do
       , source <- assignments
       , source ^. dir == d
       , let (gate, src) = nodes ! view integer j
-      , p <- take 1 $ source ^. port . geometry
+      , p <- take 1 $ source ^. ports
       ] ++
       [ path
       | (pin, path) <- toList rim
@@ -325,7 +325,7 @@ setGateGeometry (gate, xs) = getValueRect xs
   >>= \ path -> pure $ gate & geometry .~ pure path
 
 setPinGeometry (pin, xs) = getValueRect xs
-  >>= \ path -> pure $ pin & port .~ Port Metal1 [path]
+  >>= \ path -> pure $ pin & ports .~ pure path
 
 setNetGeometry (net, edge) = sequence (getValueRect <$> edge)
   >>= \ path -> pure $ net & geometry .~ path

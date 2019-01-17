@@ -24,28 +24,29 @@ fromLEF (LEF options _ _ _ _ macros) = do
     , let d = dims tech macroOptions
     ]
 
-macroPins tech (MacroPin ident options _ : rest) = (ident, Pin ident (direction options) (macroPort tech options)) : macroPins tech rest
+macroPins tech (MacroPin ident options _ : rest) = (ident, Pin ident (direction options) (macroPorts tech options)) : macroPins tech rest
 macroPins tech (_ : rest) = macroPins tech rest
 macroPins _ [] = []
 
-macroPort tech (MacroPinPort (MacroPinPortLayer ident : rest) : _) = Port (portLayer ident) (portRectangles tech rest)
-macroPort tech (_ : rest) = macroPort tech rest
-macroPort _ [] = Port AnyLayer mempty
+macroPorts tech (MacroPinPort (MacroPinPortLayer ident : rest) : _) = portRectangles tech ident rest
+macroPorts tech (_ : rest) = macroPorts tech rest
+macroPorts _ [] = []
 
 portLayer "metal1" = Metal1
 portLayer "metal2" = Metal2
 portLayer "metal3" = Metal3
 portLayer _ = AnyLayer
 
-portRectangles tech (MacroPinPortRect x1 y1 x2 y2 : rest) = Rect
+portRectangles tech ident (MacroPinPortRect x1 y1 x2 y2 : rest) = Layered
+  (portLayer ident)
   (ceiling $ x1 * g)
   (ceiling $ y1 * g)
   (ceiling $ x2 * g)
   (ceiling $ y2 * g)
-  : portRectangles tech rest
+  : portRectangles tech ident rest
   where g = scale tech
-portRectangles tech (_ : rest) = portRectangles tech rest
-portRectangles _ [] = []
+portRectangles tech ident (_ : rest) = portRectangles tech ident rest
+portRectangles _ _ [] = []
 
 dims tech (MacroSize x y : _) = (ceiling $ x * g, ceiling $ y * g)
   where g = scale tech

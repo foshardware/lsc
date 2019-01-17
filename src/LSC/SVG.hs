@@ -116,10 +116,10 @@ svgPaths netlist = Circuit2D
 
     outerPins :: Net -> Path
     outerPins net =
-      [ rect
+      [ port
       | pin <- toList $ netlist ^. supercell . pins
       , view identifier pin == view identifier net
-      , rect <- pin ^. port . geometry
+      , port <- pin ^. ports
       ]
 
     inducePins :: (Gate, [Pin]) -> Path
@@ -127,7 +127,7 @@ svgPaths netlist = Circuit2D
       [ Rect (q ^. l + p ^. l) (q ^. b + p ^. b) (q ^. r + p ^. l) (q ^. t + p ^. b)
       | pin <- ps
       , p <- take 1 . view geometry =<< indexM (netlist ^. gates) (i ^. integer)
-      , q <- take 1 $ pin ^. port . geometry
+      , q <- take 1 $ pin ^. ports
       ]
 
 
