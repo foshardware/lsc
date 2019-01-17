@@ -65,7 +65,8 @@ data Gate = Gate
 
 data AbstractGate = AbstractGate
   { _geometry  :: Path
-  , _powerRing :: Path
+  , _vdd       :: Path
+  , _gnd       :: Path
   , _pins      :: Map Identifier Pin
   } deriving Show
 
@@ -171,7 +172,7 @@ ask = lift $ LST Reader.ask
 
 type Path = [Component Layer Integer]
 
-type Ring l a = Component () (Component l a)
+type Ring l a = Component l (Component l a)
 
 type SComponent = Component SLayer SInteger
 
@@ -194,6 +195,10 @@ makeFieldsNoPrefix ''Component
 width, height :: Num a => Component l a -> a
 width  p = p ^. r - p ^. l
 height p = p ^. t - p ^. b
+
+integrate :: l -> Component l a -> Component l a
+integrate n (Rect x1 y1 x2 y2) = Layered n x1 y1 x2 y2
+integrate n rect = set layer n rect
 
 
 instance Functor (Component l) where
@@ -227,7 +232,7 @@ flattenHierarchy netlist
 makeFieldsNoPrefix ''AbstractGate
 
 instance Default AbstractGate where
-  def = AbstractGate mempty mempty def
+  def = AbstractGate mempty mempty mempty mempty
 
 
 makeFieldsNoPrefix ''Net
@@ -244,9 +249,6 @@ instance Semigroup Net where
 instance Monoid Net where
   mempty = Net mempty mempty mempty
   mappend = (<>)
-
-vdd :: Net
-vdd = Net "vdd" mempty mempty
 
 
 makeFieldsNoPrefix ''Gate

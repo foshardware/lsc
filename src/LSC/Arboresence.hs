@@ -12,7 +12,8 @@ import Control.Monad
 import Control.Monad.Trans
 import Data.Foldable
 import Data.Map (Map, assocs)
-import Data.Vector (Vector, (!))
+import Data.Semigroup
+import Data.Vector (indexM)
 import Data.SBV
 import Data.SBV.Control
 import Data.Text (unpack)
@@ -39,7 +40,7 @@ pnr netlist = do
 
   rim <- sequence $ freePinPolygon <$> (netlist ^. supercell . pins)
 
-  (ring, grid) <- powerUpAndGround nodes
+  (ring, power, ground) <- powerUpAndGround nodes
 
   edges <- sequence $ arboresence 4 nodes rim <$> (netlist ^. nets)
 
@@ -55,14 +56,14 @@ pnr netlist = do
       Sat -> do
 
         pad <- pure <$> getValueRect area
-        ps <- sequence $ getValueRect <$> toList ring
-        gr <- sequence $ getValueRect <$> grid
+        ps <- sequence $ getValueRect <$> power
+        gr <- sequence $ getValueRect <$> ground
         qs <- sequence $  setPinGeometry <$> rim
         ns <- sequence $  setNetGeometry <$> edges
         gs <- sequence $ setGateGeometry <$> nodes
 
         pure $ netlist
-          & supercell .~ AbstractGate pad (gr ++ ps) qs
+          & supercell .~ AbstractGate pad ps gr qs
           & gates     .~ gs
           & nets      .~ ns
 
@@ -83,15 +84,6 @@ pnr netlist = do
   debug ["stop  pnr @ module", netlist ^. identifier . to unpack]
 
   pure result
-
-
-alignment nodes rows = do
-
-  liftSMT $ constrain $ sAnd
-    [ path ^. l .== x
-    | (_, path) <- toList nodes
-    | x <- join $ repeat rows
-    ]
 
 
 placement area ring rim = do
@@ -255,7 +247,7 @@ arboresence n nodes rim net = do
       | (j, assignments) <- assocs $ net ^. contacts
       , source <- assignments
       , source ^. dir == d
-      , let (gate, src) = nodes ! view integer j
+      , (gate, src) <- indexM nodes $ j ^. integer
       , p <- take 1 $ source ^. ports
       ] ++
       [ path
@@ -267,12 +259,19 @@ arboresence n nodes rim net = do
 
 powerUpAndGround nodes = do
 
-  ring <- freeRing
+  let metal2 = literal $ toEnum $ fromEnum Metal2 :: SInteger
+      metal3 = literal $ toEnum $ fromEnum Metal3 :: SInteger
 
   (w, h) <- view standardPin <$> ask
 
+  ring <- freeRing
+
   xs <- divideArea nodes <$> ask
+
   let grid = [ ring ^. l & l .~ literal x & r .~ literal (x + w) | x <- xs ]
+
+  let power  = [ p & layer .~ metal2 | p <- toList ring ++ grid ]
+      ground = [ p & layer .~ metal3 | p <- toList ring ++ grid ]
 
   d <- literal . lambda <$> ask
   sequence_
@@ -289,7 +288,7 @@ powerUpAndGround nodes = do
     .&& height (view b ring) .== height (view t ring)
     .&& height (view t ring) .== literal h
 
-  pure (ring, grid)
+  pure (ring, power, ground)
 
 
 freeRing = do
