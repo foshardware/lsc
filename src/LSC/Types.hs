@@ -172,68 +172,48 @@ ask :: LSC Technology
 ask = lift $ LST Reader.ask
 
 
-newtype Comp z a = Comp [(z, Rect a)]
-  deriving (Eq, Show)
-
-type Geometry = Comp Integer Integer
-
-type SGeometry = Comp SInteger SInteger
-
-
-instance Functor (Comp z) where
-  fmap f (Comp xs) = Comp [ (z, fmap f a) | (z, a) <- xs ]
-
-instance Semigroup (Comp z a) where
-  Comp a <> Comp b = Comp (a <> b)
-
-instance Monoid (Comp z a) where
-  mempty = Comp mempty
-  mappend = (<>)
-
-
-type Rectangle = Rect Integer
+type Rectangle = Component Layer Integer
 
 type Path = [Rectangle]
 
-type SRect = Rect SInteger
+type Ring l a = Component () (Component l a)
 
-type SPath = [SRect]
+type SComponent = Component SLayer SInteger
 
-type SRing = Rect SRect
+type SLayer = SInteger
 
+type SPath = [SComponent]
 
-data Rect a = Rect
-  { _l :: a
-  , _b :: a
-  , _r :: a
-  , _t :: a
-  } deriving (Eq, Show)
+type SRing = Ring SInteger SInteger
 
 
-makeFieldsNoPrefix ''Rect
+data Component l a
+  = Rect                 { _l :: a, _b :: a, _r :: a, _t :: a }
+  | Via     { _layer :: l, _l :: a, _b :: a, _r :: a, _t :: a }
+  | Layered { _layer :: l, _l :: a, _b :: a, _r :: a, _t :: a }
+  deriving (Eq, Show)
 
-width, height :: Num a => Rect a -> a
+
+makeFieldsNoPrefix ''Component
+
+width, height :: Num a => Component l a -> a
 width  p = p ^. r - p ^. l
 height p = p ^. t - p ^. b
 
 
-instance Functor Rect where
-  fmap f p = Rect
-    (p ^. l . to f)
-    (p ^. b . to f)
-    (p ^. r . to f)
-    (p ^. t . to f)
+instance Functor (Component l) where
+  fmap f (Rect        x1 y1 x2 y2) = Rect        (f x1) (f y1) (f x2) (f y2)
+  fmap f (Via     lay x1 y1 x2 y2) = Via     lay (f x1) (f y1) (f x2) (f y2)
+  fmap f (Layered lay x1 y1 x2 y2) = Layered lay (f x1) (f y1) (f x2) (f y2)
 
-instance Foldable Rect where
+instance Foldable (Component l) where
   foldMap f p = foldMap f [p ^. l, p ^. b, p ^. r, p ^. t]
 
-instance Default a => Default (Rect a) where
+instance Default a => Default (Component l a) where
   def = Rect def def def def
 
 
-type Ring a = (Rect (Rect a))
-
-inner, outer :: Ring a -> Rect a
+inner, outer :: Ring l a -> Component l a
 inner p = Rect (p ^. l . r) (p ^. b . t) (p ^. r . l) (p ^. t . b)
 outer p = Rect (p ^. l . l) (p ^. b . b) (p ^. r . r) (p ^. t . t)
 
