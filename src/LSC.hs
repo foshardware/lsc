@@ -6,7 +6,9 @@ import LSC.Types
 
 
 stage1 :: Int -> NetGraph -> LSC NetGraph
-stage1 _ netlist
-  =   pnr
-      netlist
+stage1 n netlist
+  = fmap last
+  $ concLSC
+  $ replicate (max 1 n)
+  $ pnr netlist
 

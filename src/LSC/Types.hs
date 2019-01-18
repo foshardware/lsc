@@ -34,7 +34,7 @@ import Prelude hiding (lookup)
 
 import Data.SBV
 
-import System.IO
+import System.Console.Concurrent
 
 
 data NetGraph = NetGraph
@@ -156,7 +156,11 @@ instance MonadIO LST where
 
 instance MonadFork LST where
   forkExec (LST m) = do
-    fmap liftIO . liftIO . forkExec . runSMT . runGnosticT m =<< LST Reader.ask
+    fmap liftIO . liftIO
+      . withConcurrentOutput
+      . forkExec
+      . runSMT . runGnosticT m
+      =<< LST Reader.ask
 
 instance MonadParallel LST where
   bindM2 f ma mb = do
@@ -317,4 +321,4 @@ debug msg = do
   enabled <- view enableDebug <$> ask
   when enabled $ liftIO $ do
     timestamp <- show . round <$> getPOSIXTime
-    hPutStrLn stderr $ unwords $ timestamp : "-" : msg
+    errorConcurrent $ unlines [unwords $ timestamp : "-" : msg]

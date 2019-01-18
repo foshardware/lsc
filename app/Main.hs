@@ -8,6 +8,7 @@ import Control.Monad
 import Control.Monad.Trans
 import Control.Monad.Trans.Maybe
 
+import Data.Either (rights)
 import Data.Foldable (for_)
 
 import qualified Data.ByteString.Lazy.Char8 as Bytes
@@ -20,6 +21,8 @@ import System.Environment
 import System.IO
 import System.Process
 
+import Text.Parsec (parse)
+
 import BLIF.Parser
 import LEF.Parser
 import Verilog.Parser
@@ -29,6 +32,7 @@ import LSC.BLIF
 import LSC.D3
 import LSC.LEF
 import LSC.SVG
+import LSC.Numbers
 import LSC.Types
 
 versionString :: String
@@ -49,6 +53,8 @@ program = do
   when (null opts) exit
 
   let arg x = elem x $ fst <$> opts
+
+  let j = last $ 1 : rights [ parse decimal "-j" v | (k, v) <- opts, k == Cores ]
 
   -- print version string
   when (arg Version)
@@ -97,7 +103,7 @@ program = do
         ( do
           tech
           bootstrap $ set enableDebug $ Debug `elem` fmap fst opts )
-        ( stage1 1 netlist )
+        ( stage1 j netlist )
 
       when (Compile `elem` fmap fst opts)
        $ do
@@ -160,8 +166,7 @@ args =
         (OptArg ((Exline, ) . maybe "top" id)   "component")        "just exline and exit"
 
     , Option ['t']      ["test"]       (NoArg  (Test, mempty))      "run tests and exit"
-    , Option ['j']      ["cores"]
-        (OptArg ((Cores,  ) . maybe "1" id) "count")                "use concurrency"
+    , Option ['j']      ["cores"]      (ReqArg (Cores,  ) "count")  "use concurrency"
 
     , Option ['J']      ["json"]       (NoArg  (Json, mempty))      "export json"
     , Option ['u']      ["verilog"]    (ReqArg (Verilog, ) "FILE")  "verilog file"

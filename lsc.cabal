@@ -23,6 +23,7 @@ executable lsc
                      , transformers
                      , mtl
                      , lens
+                     , parsec
                      , text
                      , process
                      , bytestring
@@ -61,6 +62,7 @@ library
                 , monad-loops
                 , monad-parallel
                 , parallel
+                , concurrent-output
                 , unordered-containers
                 , reducers
                 , array
