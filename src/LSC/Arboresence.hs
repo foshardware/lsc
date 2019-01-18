@@ -89,30 +89,30 @@ pnr netlist = do
 placement area ring rim = do
 
   liftSMT $ constrain
-    $   view l area .== 0
-    .&& view b area .== 0
+      $ area ^. l .== 0
+    .&& area ^. b .== 0
 
   outer ring `inside` area
 
   d <- literal . lambda <$> ask
   sequence_
     [ liftSMT $ constrain
-        $   view l path .== view l area
-        .&& view l (outer ring) - view l path .> d
+          $ path ^. l .== area ^. l
+        .&& outer ring ^. l - path ^. l .> d
     | (pin, path) <- toList rim
     , pin ^. dir == In
     ]
   sequence_
     [ liftSMT $ constrain
-        $   view r path .== view r area
-        .&& view r path - view r (outer ring) .> d
+          $ path ^. r .== area ^. r
+        .&& path ^. r - outer ring ^. r .> d
     | (pin, path) <- toList rim
     , pin ^. dir == Out
     ]
   sequence_
     [ liftSMT $ constrain
-        $   view b path .>= view b (inner ring)
-        .&&    view t path .<=    view t (inner ring)
+          $ path ^. b .>= inner ring ^. b
+        .&& path ^. t .<= inner ring ^. t
     | (_, path) <- toList rim
     ]
 
@@ -164,8 +164,8 @@ freeWirePolygon = do
   (w, h) <- view standardPin <$> ask
 
   liftSMT $ constrain
-      $    width path .== literal w
-      .|| height path .== literal h
+      $  width path .== literal w
+    .|| height path .== literal h
 
   pure path
 
@@ -177,7 +177,7 @@ freePinPolygon pin = do
   (w, h) <- view standardPin <$> ask
 
   liftSMT $ constrain
-    $    width path .== literal w
+      $  width path .== literal w
     .&& height path .== literal h
 
   pure (pin, path)
@@ -186,7 +186,7 @@ freePinPolygon pin = do
 inside i o = do
   d <- lambda <$> ask
   liftSMT $ constrain
-    $   view l i - view l o .> literal d
+      $ view l i - view l o .> literal d
     .&& view b i - view b o .> literal d
     .&& view r o - view r i .> literal d
     .&& view t o - view t i .> literal d
@@ -195,7 +195,7 @@ inside i o = do
 disjoint p q = do
   d <- lambda <$> ask
   liftSMT $ constrain
-    $   view l q - view r p .> literal d
+      $ view l q - view r p .> literal d
     .|| view l p - view r q .> literal d
     .|| view b p - view t q .> literal d
     .|| view b q - view t p .> literal d
@@ -212,13 +212,13 @@ equivalent p q = do
 connect p q = do
 
   liftSMT $ constrain
-    $   view r p .== view r q .&& view t p .== view t q
+      $ view r p .== view r q .&& view t p .== view t q
     .|| view l p .== view l q .&& view t p .== view t q
     .|| view r p .== view r q .&& view b p .== view b q
     .|| view l p .== view l q .&& view b p .== view b q
 
   liftSMT $ softConstrain
-    $   view l p .== view l q .&& view b p .== view b q .&& view r p .== view r q
+      $ view l p .== view l q .&& view b p .== view b q .&& view r p .== view r q
     .|| view l p .== view l q .&& view b p .== view b q .&& view t p .== view t q
     .|| view l p .== view l q .&& view r p .== view r q .&& view t p .== view t q
     .|| view b p .== view b q .&& view r p .== view r q .&& view t p .== view t q
@@ -287,7 +287,7 @@ powerUpAndGround nodes = do
 
   sequence_
     [ liftSMT $ constrain
-        $   head grid ^. t .== path ^. t
+          $ head grid ^. t .== path ^. t
         .&& head grid ^. b .== path ^. b
     | path <- init $ tail $ grid
     ]
@@ -319,7 +319,7 @@ powerUpAndGround nodes = do
     ]
 
   liftSMT $ constrain
-    $   ring ^. l . to width .== literal w
+      $ ring ^. l . to width .== literal w
     .&& ring ^. r . to width .== literal w
 
     .&& ring ^. b . to height .== literal h
@@ -339,10 +339,10 @@ freeRing = do
   top    <- freeRectangle
 
   liftSMT $ constrain
-    $    view l left .==  view l bottom .&& view b bottom .==  view b left
-    .&&  view l left .==  view l top    .&&    view t top .==  view t left
-    .&& view r right .==  view r bottom .&& view b bottom .== view b right
-    .&& view r right .==  view r top    .&&    view t top .== view t right
+      $ view l  left .== view l bottom .&& view b bottom .== view b  left
+    .&& view l  left .== view l    top .&& view t    top .== view t  left
+    .&& view r right .== view r bottom .&& view b bottom .== view b right
+    .&& view r right .== view r    top .&& view t    top .== view t right
 
   pure $ Rect left bottom right top
 
@@ -352,10 +352,10 @@ freeRectangle = do
   area <- liftSMT $ Rect <$> free_ <*> free_ <*> free_ <*> free_
 
   liftSMT $ constrain
-    $   width  area .>= 0
+      $  width area .>= 0
     .&& height area .>= 0
-    .&& view l area .>= 0
-    .&& view b area .>= 0
+    .&& area ^. l .>= 0
+    .&& area ^. b .>= 0
 
   pure area
 
