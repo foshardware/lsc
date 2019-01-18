@@ -5,6 +5,7 @@ module LSC.LEF where
 
 import Control.Lens
 import Control.Monad.State (get)
+import Data.Default
 import Data.Map as Map
 
 import LEF.Syntax
@@ -18,7 +19,7 @@ fromLEF (LEF options _ _ _ _ macros) = do
 
   tech <- get
   bootstrap $ set stdCells $ Map.fromList
-    [ (name, Cell c d)
+    [ (name, def & pins .~ c & dimensions .~ d)
     | Macro name macroOptions _ <- macros
     , let c = Map.fromList $ macroPins tech macroOptions
     , let d = dims tech macroOptions

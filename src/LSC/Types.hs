@@ -58,6 +58,8 @@ type Identifier = Text
 data Gate = Gate
   { _identifier :: Identifier
   , _geometry   :: Path
+  , _vdd        :: Pin
+  , _gnd        :: Pin
   , _wires      :: Map Identifier Identifier
   , _integer    :: Int
   } deriving Show
@@ -72,6 +74,8 @@ data AbstractGate = AbstractGate
 
 data Cell = Cell
   { _pins       :: Map Identifier Pin
+  , _vdd        :: Pin
+  , _gnd        :: Pin
   , _dimensions :: (Integer, Integer)
   } deriving Show
 
@@ -275,7 +279,7 @@ instance Ord Gate where
   compare = compare `on` view integer
 
 instance Default Gate where
-  def = Gate mempty mempty mempty def
+  def = Gate mempty mempty def def mempty def
 
 
 type Arboresence a = (Net, a, a)
@@ -285,6 +289,9 @@ data Circuit2D a = Circuit2D [(Gate, a)] [Arboresence a]
 
 
 makeFieldsNoPrefix ''Cell
+
+instance Default Cell where
+  def = Cell mempty def def def
 
 
 makeFieldsNoPrefix ''Pin

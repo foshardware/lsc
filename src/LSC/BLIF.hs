@@ -27,17 +27,21 @@ fromBLIF (BLIF (Model name inputs outputs clocks commands : submodels)) = do
   technology <- ask
 
   let nodes = Vector.fromList
-        [ gate & integer .~ i
+        [ gate
+            & integer .~ i
+            & vdd .~ set ports (pure def) def
+            & gnd .~ set ports (pure def) def
         | i    <- [0.. ]
-        | gate <- join $ toGates 0 <$> commands
+        | gate <- join $ toGates technology <$> commands
+        , comp <- maybeToList $ lookup (gate ^. identifier) (technology ^. stdCells)
         ]
 
   let edges = fromListWith mappend
         [ (net, Net net mempty (singleton gate [pin]))
-        | gate@(Gate ident _ assignments _) <- toList nodes
-        , (contact, net) <- assocs assignments
-        , com <- maybeToList $ lookup ident $ technology ^. stdCells
-        , pin <- maybeToList $ lookup contact $ com ^. pins
+        | gate <- toList nodes
+        , (contact, net) <- assocs $ gate ^. wires
+        , com <- maybeToList $ lookup (gate ^. identifier) (technology ^. stdCells)
+        , pin <- maybeToList $ lookup contact (com ^. pins)
         ]
 
   subGraphs <- fromList <$> sequence
@@ -63,20 +67,16 @@ fromBLIF (BLIF (Model name inputs outputs clocks commands : submodels)) = do
     edges
 
 
-toGates :: Int -> Command -> [Gate]
-toGates i (LibraryGate ident assignments)
-  = [ Gate
-        ident
-        mempty
-        (fromList assignments)
-        i ]
-toGates i (Subcircuit ident assignments)
-  = [ Gate
-        ident
-        mempty
-        (fromList assignments)
-        i ]
-toGates _ _ = []
+toGates :: Technology -> Command -> [Gate]
+toGates tech (LibraryGate ident assignments)
+  = pure $ def
+    & identifier .~ ident
+    & wires .~ fromList assignments
+toGates tech (Subcircuit ident assignments)
+  = pure $ def
+    & identifier .~ ident
+    & wires .~ fromList assignments
+toGates _ _ = mempty
 
 
 

@@ -270,10 +270,16 @@ powerUpAndGround nodes = do
   let power  = [ integrate metal2 p | p <- toList ring ++ grid ]
       ground = [ integrate metal3 p | p <- toList ring ++ grid ]
 
-  d <- literal . lambda <$> ask
-  sequence_
-    [ inside path $ inner $ ring & r .~ right & l .~ left
-    | (_, path) <- toList nodes
+  (ps, gs) <- unzip <$> sequence
+    [ do
+
+      path `inside` inner (ring & r .~ right & l .~ left)
+
+      pure mempty
+
+    | (gate, path) <- toList nodes
+    , p <- take 1 $ gate ^. vdd . ports
+    , g <- take 1 $ gate ^. gnd . ports
     | left  <- join $ repeat $ [ring ^. l] ++ grid
     | right <- join $ repeat $ grid ++ [ring ^. r]
     ]
@@ -285,7 +291,7 @@ powerUpAndGround nodes = do
     .&& height (view b ring) .== height (view t ring)
     .&& height (view t ring) .== literal h
 
-  pure (ring, power, ground)
+  pure (ring, join ps ++ power, join gs ++ ground)
 
 
 freeRing = do

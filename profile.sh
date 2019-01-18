@@ -10,7 +10,7 @@
 
 # stack build --profile --ghc-options=-fprof-auto && stack exec -- lsc -l tests/osu035.lef -b tests/picorv32.blif -c svg -d -j 2 +RTS -p -N2 > result1.svg
 
-stack build --profile --ghc-options=-fprof-auto && stack exec -- lsc -l tests/osu035.lef -b tests/fulladder.blif -c svg -d -j 4 +RTS -p -N2 > result1.svg
+stack build --profile --ghc-options=-fprof-auto && stack exec -- lsc -l tests/osu035.lef -b tests/fulladder.blif -c svg -d +RTS -p -N2 > result1.svg
 
 # stack build --profile --ghc-options=-fprof-auto && stack exec -- lsc -l tests/osu035.lef -b tests/and2.blif -c svg -d -j 2 +RTS -p -N2 > result1.svg
 
