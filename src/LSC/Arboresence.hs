@@ -23,11 +23,11 @@ import System.IO
 import LSC.Types
 
 
-pnr :: NetGraph -> LSC NetGraph
-pnr netlist = do
+routeSat :: NetGraph -> LSC NetGraph
+routeSat netlist = do
 
   debug
-    [ "start pnr @ module", netlist ^. identifier . to unpack
+    [ "start routeSat @ module", netlist ^. identifier . to unpack
     , "-", netlist ^. gates . to length . to show, "gates"
     , "-", netlist ^. nets . to length . to show, "nets"
     ]
@@ -82,7 +82,7 @@ pnr netlist = do
 
         pure netlist
 
-  debug ["stop  pnr @ module", netlist ^. identifier . to unpack]
+  debug ["stop  routeSat @ module", netlist ^. identifier . to unpack]
 
   pure result
 
