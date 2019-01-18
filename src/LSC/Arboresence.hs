@@ -325,8 +325,8 @@ powerUpAndGround nodes = do
     .&& ring ^. b . to height .== literal h
     .&& ring ^. t . to height .== literal h
 
-  let power  = [ integrate metal2 p | p <- toList ring ++ grid ]
-      ground = [ integrate metal3 p | p <- toList ring ++ grid ]
+  let power  = join vs ++ [ integrate metal2 p | p <- toList ring ++ grid ]
+      ground = join gs ++ [ integrate metal3 p | p <- toList ring ++ grid ]
 
   pure (ring, power, ground)
 
