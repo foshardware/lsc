@@ -42,7 +42,7 @@ pnr netlist = do
 
   (ring, power, ground) <- powerUpAndGround nodes
 
-  edges <- sequence $ arboresence 4 nodes rim <$> (netlist ^. nets)
+  edges <- sequence $ arboresence 3 nodes rim <$> (netlist ^. nets)
 
   placement area ring rim
 
@@ -270,15 +270,21 @@ powerUpAndGround nodes = do
   let power  = [ integrate metal2 p | p <- toList ring ++ grid ]
       ground = [ integrate metal3 p | p <- toList ring ++ grid ]
 
-  (ps, gs) <- unzip <$> sequence
+  (vs, gs) <- unzip <$> sequence
     [ do
 
       path `inside` inner (ring & r .~ right & l .~ left)
 
-      pure mempty
+      wv <- integrate metal1 <$> freeRectangle
+      wg <- integrate metal1 <$> freeRectangle
+
+      vs <- integrate metal2 <$> freeRectangle
+      gs <- integrate metal3 <$> freeRectangle
+
+      pure (vs, gs)
 
     | (gate, path) <- toList nodes
-    , p <- take 1 $ gate ^. vdd . ports
+    , v <- take 1 $ gate ^. vdd . ports
     , g <- take 1 $ gate ^. gnd . ports
     | left  <- join $ repeat $ [ring ^. l] ++ grid
     | right <- join $ repeat $ grid ++ [ring ^. r]
@@ -291,7 +297,7 @@ powerUpAndGround nodes = do
     .&& height (view b ring) .== height (view t ring)
     .&& height (view t ring) .== literal h
 
-  pure (ring, join ps ++ power, join gs ++ ground)
+  pure (ring, vs ++ power, gs ++ ground)
 
 
 freeRing = do
