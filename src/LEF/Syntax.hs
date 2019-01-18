@@ -98,6 +98,9 @@ data Macro = Macro MacroName [MacroOption] Ident
 
 type MacroName = Ident
 
+data Power = Power | Ground
+  deriving (Eq, Show)
+
 data MacroOption
   = MacroClass Ident (Maybe Ident)
   | MacroForeign Ident Double Double
@@ -111,7 +114,7 @@ data MacroOption
 
 data MacroPinOption
   = MacroPinName Ident
-  | MacroPinUse Ident
+  | MacroPinUse Power
   | MacroPinDirection PortDirection (Maybe Ident)
   | MacroPinShape Ident
   | MacroPinPort [MacroPinPortInfo]

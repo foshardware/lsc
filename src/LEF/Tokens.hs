@@ -63,6 +63,8 @@ data Token
     | Tok_Inout
     | Tok_Horizontal
     | Tok_Vertical
+    | Tok_Power
+    | Tok_Ground
 
     -- Identifiers
     | Tok_Ident Text

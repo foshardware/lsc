@@ -191,6 +191,9 @@ macro = Macro
 macroName :: Parser MacroName
 macroName = macro_ *> ident <?> "macro_name"
 
+power :: Parser Power
+power = Power <$ power_ <|> Ground <$ ground_
+
 macroOption :: Parser MacroOption
 macroOption
   =   MacroClass    <$> (class_    *> ident ) <*> optional ident
@@ -212,7 +215,7 @@ macroObsInfo
 macroPinOption :: Parser MacroPinOption
 macroPinOption
   =   MacroPinName      <$> (pin_ *> ident)
-  <|> MacroPinUse       <$> (use_ *> ident)
+  <|> MacroPinUse       <$> (use_ *> power)
   <|> MacroPinDirection <$> (direction_ *> portDirection) <*> optional ident
   <|> MacroPinShape     <$> (shape_ *> ident)
   <|> MacroPinPort      <$> (port_  *> many macroPinPortInfo) <* end_
@@ -325,3 +328,5 @@ output_ = p Tok_Output
 inout_ = p Tok_Inout
 horizontal_ = p Tok_Horizontal
 vertical_ = p Tok_Vertical
+power_ = p Tok_Power
+ground_ = p Tok_Ground

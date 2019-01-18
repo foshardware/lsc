@@ -107,6 +107,8 @@ OUTPUT           { constTok Tok_Output }
 INOUT            { constTok Tok_Inout }
 HORIZONTAL       { constTok Tok_Horizontal }
 VERTICAL         { constTok Tok_Vertical }
+POWER            { constTok Tok_Power }
+GROUND           { constTok Tok_Ground }
 
 -- Integer literals
 \-    $digit+     @int_suffix? { textTok Tok_Number }
