@@ -41,9 +41,9 @@ pnr netlist = do
 
   rim <- sequence $ netlist ^. supercell . pins <&> freePinPolygon
 
-  (ring, power, ground) <- powerUpAndGround nodes
+  edges <- sequence $ netlist ^. nets <&> arboresence 2 nodes rim
 
-  edges <- sequence $ netlist ^. nets <&> arboresence 4 nodes rim
+  (ring, power, ground) <- powerUpAndGround nodes edges
 
   placement area ring rim
 
@@ -149,10 +149,12 @@ distinctPairs (x : xs) = fmap (x, ) xs ++ distinctPairs xs
 freeGatePolygon gate = do
 
   path <- freeRectangle
+    <&> integrate metal2
+    <&> integrate metal3
 
   dimensions <- lookupDimensions gate <$> ask
   for_ dimensions $ \ (w, h) -> liftSMT $ constrain
-    $   view r path - view l path .== literal w
+      $ view r path - view l path .== literal w
     .&& view t path - view b path .== literal h
 
   pure (gate, path)
@@ -196,7 +198,8 @@ inside i o = do
 disjoint p q = do
   d <- lambda <$> ask
   liftSMT $ constrain
-      $ view l q - view r p .> literal d
+      $ sAnd [ x ./= y | x <- view z p, y <- view z q ]
+    .|| view l q - view r p .> literal d
     .|| view l p - view r q .> literal d
     .|| view b p - view t q .> literal d
     .|| view b q - view t p .> literal d
@@ -269,7 +272,7 @@ pinComponent p s = p
   & t .~ view b p + literal (view t s)
 
 
-powerUpAndGround nodes = do
+powerUpAndGround nodes edges = do
 
   (w, h) <- view standardPin <$> ask
   xs <- divideArea nodes <$> ask
@@ -326,8 +329,8 @@ powerUpAndGround nodes = do
     .&& ring ^. b . to height .== literal h
     .&& ring ^. t . to height .== literal h
 
-  let power  = join vs ++ [ integrate metal2 p | p <- toList ring ++ grid ]
-      ground = join gs ++ [ integrate metal3 p | p <- toList ring ++ grid ]
+  let power  = [ integrate metal2 p | p <- toList ring ++ grid ]
+      ground = [ integrate metal3 p | p <- toList ring ++ grid ]
 
   pure (ring, power, ground)
 

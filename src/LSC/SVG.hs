@@ -101,12 +101,14 @@ follow _ = pure ()
 
 
 stroke :: [Layer] -> Arg
+stroke (Metal3 : Metal2 : _) = "black"
 stroke (Metal1 : _) = "blue"
 stroke (Metal2 : _) = "red"
 stroke (Metal3 : _) = "green"
 stroke _ = "black"
 
 fill :: [Layer] -> Arg
+fill (Metal3 : Metal2 : _) = "transparent"
 fill (Metal1 : _) = "blue"
 fill (Metal2 : _) = "red"
 fill (Metal3 : _) = "green"
