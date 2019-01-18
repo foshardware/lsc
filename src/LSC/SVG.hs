@@ -84,7 +84,7 @@ follow (p : xs) = do
     ! A.d (mkPath pen)
     ! A.stroke (p ^. z . to stroke)
     ! A.fill (p ^. z . to fill)
-    ! A.strokeWidth "4"
+    ! A.strokeWidth "1"
 
   follow xs
 
@@ -110,7 +110,7 @@ fill :: [Layer] -> Arg
 fill (Metal1 : _) = "blue"
 fill (Metal2 : _) = "red"
 fill (Metal3 : _) = "green"
-fill _ = "blue"
+fill _ = "transparent"
 
 
 svgPaths :: NetGraph -> Circuit
