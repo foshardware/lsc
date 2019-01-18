@@ -320,8 +320,9 @@ lambda tech = ceiling $ view scaleFactor tech * view featureSize tech
 
 divideArea :: Foldable f => f a -> Technology -> [Integer]
 
-divideArea xs tech = take n $ iterate (join (+)) (tech ^. rowSize)
-  where n = floor $ sqrt $ fromIntegral $ length xs
+divideArea xs tech = take n $ x : iterate (join (+)) (tech ^. rowSize)
+  where n = ceiling $ sqrt $ fromIntegral $ length xs
+        x = tech ^. standardPin . _1 . to (* 2)
 
 debug :: [String] -> LSC ()
 debug msg = do

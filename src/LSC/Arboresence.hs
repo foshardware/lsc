@@ -36,13 +36,13 @@ pnr netlist = do
 
   area <- freeRectangle
 
-  nodes <- sequence $ freeGatePolygon <$> (netlist ^. gates)
+  nodes <- sequence $ netlist ^. gates <&> freeGatePolygon
 
-  rim <- sequence $ freePinPolygon <$> (netlist ^. supercell . pins)
+  rim <- sequence $ netlist ^. supercell . pins <&> freePinPolygon
 
   (ring, power, ground) <- powerUpAndGround nodes
 
-  edges <- sequence $ arboresence 3 nodes rim <$> (netlist ^. nets)
+  edges <- sequence $ netlist ^. nets <&> arboresence 4 nodes rim
 
   placement area ring rim
 
@@ -157,7 +157,7 @@ freeGatePolygon gate = do
   pure (gate, path)
 
 
-freeWirePolygon net = do
+freeWirePolygon = do
 
   path <- freeRectangle
 
@@ -167,7 +167,7 @@ freeWirePolygon net = do
       $    width path .== literal w
       .|| height path .== literal h
 
-  pure (net, path)
+  pure path
 
 
 freePinPolygon pin = do
@@ -201,6 +201,14 @@ disjoint p q = do
     .|| view b q - view t p .> literal d
 
 
+equivalent p q = do
+  liftSMT $ constrain
+      $ view r p .== view r q
+    .&& view b p .== view b q
+    .&& view r p .== view r q
+    .&& view t p .== view t q
+
+
 connect p q = do
 
   liftSMT $ constrain
@@ -221,7 +229,7 @@ arboresence n nodes rim net = do
   hyperedge <- sequence
     [ do
 
-      wire <- sequence $ replicate n $ integrate metal1 . snd <$> freeWirePolygon net
+      wire <- sequence $ replicate n $ integrate metal1 <$> freeWirePolygon
 
       src `connect` head wire
       snk `connect` last wire
@@ -239,11 +247,7 @@ arboresence n nodes rim net = do
   where
 
     vertices d =
-      [ Rect
-          (view l src + literal (view l p))
-          (view b src + literal (view b p))
-          (view l src + literal (view r p))
-          (view b src + literal (view t p))
+      [ pinComponent src p
       | (j, assignments) <- assocs $ net ^. contacts
       , source <- assignments
       , source ^. dir == d
@@ -257,47 +261,74 @@ arboresence n nodes rim net = do
       ]
 
 
+pinComponent p s = p
+  & l +~ literal (view l s)
+  & b +~ literal (view b s)
+  & r .~ view l p + literal (view r s)
+  & t .~ view b p + literal (view t s)
+
+
 powerUpAndGround nodes = do
 
   (w, h) <- view standardPin <$> ask
-
-  ring <- freeRing
-
   xs <- divideArea nodes <$> ask
 
-  let grid = [ ring ^. l & l .~ literal x & r .~ literal (x + w) | x <- xs ]
+  grid <- sequence
+    [ freeRectangle
+      <&> l .~ literal x
+      <&> r .~ literal (x + w)
+    | x <- xs
+    ]
 
-  let power  = [ integrate metal2 p | p <- toList ring ++ grid ]
-      ground = [ integrate metal3 p | p <- toList ring ++ grid ]
+  ring <- freeRing
+  
+  head grid `equivalent` view l ring
+  last grid `equivalent` view r ring
+
+  sequence_
+    [ liftSMT $ constrain
+        $   head grid ^. t .== path ^. t
+        .&& head grid ^. b .== path ^. b
+    | path <- init $ tail $ grid
+    ]
 
   (vs, gs) <- unzip <$> sequence
     [ do
 
-      path `inside` inner (ring & r .~ right & l .~ left)
+      path `inside` inner ring
 
-      wv <- integrate metal1 <$> freeRectangle
-      wg <- integrate metal1 <$> freeRectangle
+      sequence_ $ disjoint path <$> grid
 
-      vs <- integrate metal2 <$> freeRectangle
-      gs <- integrate metal3 <$> freeRectangle
+      vdd_ <- integrate metal1 <$> freeWirePolygon
+      gnd_ <- integrate metal1 <$> freeWirePolygon
 
-      pure (vs, gs)
+      vs <- integrate metal2 <$> freeWirePolygon
+      gs <- integrate metal3 <$> freeWirePolygon
+
+      pinComponent path v `connect` vdd_
+      pinComponent path g `connect` gnd_
+
+      gnd_ `connect` gs
+      vdd_ `connect` vs
+
+      pure ([vs, vdd_], [gs, gnd_])
 
     | (gate, path) <- toList nodes
     , v <- take 1 $ gate ^. vdd . ports
     , g <- take 1 $ gate ^. gnd . ports
-    | left  <- join $ repeat $ [ring ^. l] ++ grid
-    | right <- join $ repeat $ grid ++ [ring ^. r]
     ]
 
   liftSMT $ constrain
-    $   width (view l ring) .==  width (view r ring)
-    .&& width (view r ring) .== literal w
+    $   ring ^. l . to width .== literal w
+    .&& ring ^. r . to width .== literal w
 
-    .&& height (view b ring) .== height (view t ring)
-    .&& height (view t ring) .== literal h
+    .&& ring ^. b . to height .== literal h
+    .&& ring ^. t . to height .== literal h
 
-  pure (ring, vs ++ power, gs ++ ground)
+  let power  = [ integrate metal2 p | p <- toList ring ++ grid ]
+      ground = [ integrate metal3 p | p <- toList ring ++ grid ]
+
+  pure (ring, power, ground)
 
 
 freeRing = do
