@@ -29,10 +29,10 @@ fromBLIF (BLIF (Model name inputs outputs clocks commands : submodels)) = do
   let nodes = Vector.fromList
         [ gate
             & integer .~ i
-            & vdd .~ set ports (pure def) def
-            & gnd .~ set ports (pure def) def
+            & vdd .~ view vdd comp
+            & gnd .~ view gnd comp
         | i    <- [0.. ]
-        | gate <- join $ toGates technology <$> commands
+        | gate <- join $ toGates <$> commands
         , comp <- maybeToList $ lookup (gate ^. identifier) (technology ^. stdCells)
         ]
 
@@ -67,16 +67,16 @@ fromBLIF (BLIF (Model name inputs outputs clocks commands : submodels)) = do
     edges
 
 
-toGates :: Technology -> Command -> [Gate]
-toGates tech (LibraryGate ident assignments)
+toGates :: Command -> [Gate]
+toGates (LibraryGate ident assignments)
   = pure $ def
     & identifier .~ ident
     & wires .~ fromList assignments
-toGates tech (Subcircuit ident assignments)
+toGates (Subcircuit ident assignments)
   = pure $ def
     & identifier .~ ident
     & wires .~ fromList assignments
-toGates _ _ = mempty
+toGates _ = mempty
 
 
 

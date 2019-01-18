@@ -67,8 +67,8 @@ data Gate = Gate
 
 data AbstractGate = AbstractGate
   { _geometry  :: Path
-  , _vdd       :: Path
-  , _gnd       :: Path
+  , _vdd       :: Pin
+  , _gnd       :: Pin
   , _pins      :: Map Identifier Pin
   } deriving Show
 
@@ -251,7 +251,7 @@ flattenHierarchy netlist
 makeFieldsNoPrefix ''AbstractGate
 
 instance Default AbstractGate where
-  def = AbstractGate mempty mempty mempty mempty
+  def = AbstractGate mempty def def mempty
 
 
 makeFieldsNoPrefix ''Net

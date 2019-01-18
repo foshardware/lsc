@@ -121,7 +121,7 @@ svgPaths netlist = Circuit2D
   ]
 
   [ (net, outerPins net ++ (inducePins =<< assocs (net ^. contacts)), net ^. geometry)
-  | net <- set geometry (netlist ^. supercell . mappend vdd gnd) mempty
+  | net <- set geometry (netlist ^. supercell . mappend (vdd . ports) (gnd . ports)) mempty
   : toList (netlist ^. nets)
   ]
 

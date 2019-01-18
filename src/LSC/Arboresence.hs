@@ -10,6 +10,7 @@ module LSC.Arboresence where
 import Control.Lens hiding ((.>), inside)
 import Control.Monad
 import Control.Monad.Trans
+import Data.Default
 import Data.Foldable
 import Data.Map (Map, assocs)
 import Data.Semigroup
@@ -63,7 +64,7 @@ pnr netlist = do
         gs <- sequence $ setGateGeometry <$> nodes
 
         pure $ netlist
-          & supercell .~ AbstractGate pad ps gr qs
+          & supercell .~ AbstractGate pad (def & ports .~ ps) (def & ports .~ gr) qs
           & gates     .~ gs
           & nets      .~ ns
 
