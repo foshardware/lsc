@@ -146,6 +146,12 @@ distinctPairs [] = []
 distinctPairs (x : xs) = fmap (x, ) xs ++ distinctPairs xs
 
 
+freeGatePolygon gate | gate ^. geometry /= mempty = do
+
+  pure $ gate ^. geometry . to head <&> literal
+    & setLayers [metal2, metal3]
+    & (,) gate
+
 freeGatePolygon gate = do
 
   path <- freeRectangle

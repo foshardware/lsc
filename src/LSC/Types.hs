@@ -219,6 +219,11 @@ integrate :: l -> Component l a -> Component l a
 integrate layer (Rect x1 y1 x2 y2) = Layered x1 y1 x2 y2 (pure layer)
 integrate layer rect = over z (layer :) rect
 
+setLayers :: Foldable f => f l -> Component k a -> Component l a
+setLayers layer (Rect    x1 y1 x2 y2)   = Layered x1 y1 x2 y2 (toList layer)
+setLayers layer (Via     x1 y1 x2 y2 _) = Via     x1 y1 x2 y2 (toList layer)
+setLayers layer (Layered x1 y1 x2 y2 _) = Layered x1 y1 x2 y2 (toList layer)
+
 
 instance Functor (Component l) where
   fmap f (Rect    x1 y1 x2 y2)       = Rect    (f x1) (f y1) (f x2) (f y2)
