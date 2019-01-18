@@ -149,8 +149,8 @@ freeGatePolygon gate = do
 
   path <- freeRectangle
 
-  dims <- lookupDimensions gate <$> ask
-  for_ dims $ \ (w, h) -> liftSMT $ constrain
+  dimensions <- lookupDimensions gate <$> ask
+  for_ dimensions $ \ (w, h) -> liftSMT $ constrain
     $   view r path - view l path .== literal w
     .&& view t path - view b path .== literal h
 

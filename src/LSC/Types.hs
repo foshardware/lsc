@@ -76,7 +76,7 @@ data Cell = Cell
   { _pins       :: Map Identifier Pin
   , _vdd        :: Pin
   , _gnd        :: Pin
-  , _dimensions :: (Integer, Integer)
+  , _dims       :: (Integer, Integer)
   } deriving Show
 
 data Pin = Pin
@@ -313,7 +313,7 @@ instance Default Technology where
 
 
 lookupDimensions :: Gate -> Technology -> Maybe (Integer, Integer)
-lookupDimensions g tech = view dimensions <$> lookup (g ^. identifier) (tech ^. stdCells)
+lookupDimensions g tech = view dims <$> lookup (g ^. identifier) (tech ^. stdCells)
 
 lambda :: Technology -> Integer
 lambda tech = ceiling $ view scaleFactor tech * view featureSize tech

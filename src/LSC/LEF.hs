@@ -19,13 +19,33 @@ fromLEF (LEF options _ _ _ _ macros) = do
 
   tech <- get
   bootstrap $ set stdCells $ Map.fromList
-    [ (name, def & pins .~ c & dimensions .~ d)
+    [ def
+        & pins .~ Map.fromList (macroPins tech macroOptions)
+        & dims .~ dimensions tech macroOptions
+        & vdd  .~ maybe def id (macroVdd tech macroOptions)
+        & gnd  .~ maybe def id (macroGnd tech macroOptions)
+        & (,) name
     | Macro name macroOptions _ <- macros
-    , let c = Map.fromList $ macroPins tech macroOptions
-    , let d = dims tech macroOptions
     ]
 
-macroPins tech (MacroPin ident options _ : rest) = (ident, Pin ident (direction options) (macroPorts tech options)) : macroPins tech rest
+macroVdd :: Technology -> [MacroOption] -> Maybe Pin
+macroVdd tech (MacroPin ident options _ : rest)
+  | MacroPinUse Power `elem` options
+  = Just $ def & identifier .~ ident & dir .~ direction options & ports .~ macroPorts tech options
+macroVdd tech (_ : rest) = macroVdd tech rest
+macroVdd _ _ = Nothing
+
+macroGnd :: Technology -> [MacroOption] -> Maybe Pin
+macroGnd tech (MacroPin ident options _ : rest)
+  | MacroPinUse Ground `elem` options
+  = Just $ def & identifier .~ ident & dir .~ direction options & ports .~ macroPorts tech options
+macroGnd tech (_ : rest) = macroVdd tech rest
+macroGnd _ _ = Nothing
+
+macroPins :: Technology -> [MacroOption] -> [(Identifier, Pin)]
+macroPins tech (MacroPin ident options _ : rest)
+  = (ident, def & identifier .~ ident & dir .~ direction options & ports .~ macroPorts tech options)
+  : macroPins tech rest
 macroPins tech (_ : rest) = macroPins tech rest
 macroPins _ [] = []
 
@@ -49,10 +69,10 @@ portRectangles tech ident (MacroPinPortRect x1 y1 x2 y2 : rest) = Layered
 portRectangles tech ident (_ : rest) = portRectangles tech ident rest
 portRectangles _ _ [] = []
 
-dims tech (MacroSize x y : _) = (ceiling $ x * g, ceiling $ y * g)
+dimensions tech (MacroSize x y : _) = (ceiling $ x * g, ceiling $ y * g)
   where g = scale tech
-dims tech (_ : rest) = dims tech rest
-dims _ [] = (0, 0)
+dimensions tech (_ : rest) = dimensions tech rest
+dimensions _ [] = (0, 0)
 
 scale :: Technology -> Double
 scale = view scaleFactor
