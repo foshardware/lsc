@@ -7,6 +7,7 @@
 
 module LSC.Arboresence where
 
+import Control.Exception
 import Control.Lens hiding ((.>), inside)
 import Control.Monad
 import Control.Monad.Trans
@@ -71,18 +72,14 @@ routeSat netlist = do
       Unsat -> do
 
         unsat <- getUnsatCore
-        liftIO $ sequence_ $ hPutStrLn stderr <$> unsat
-
-        pure netlist
+        throw $ AssertionFailed $ unlines unsat
 
       _ -> do
 
         reason <- getUnknownReason
-        liftIO $ hPutStrLn stderr $ show reason
+        throw $ AssertionFailed $ show reason
 
-        pure netlist
-
-  debug ["stop  routeSat @ module", netlist ^. identifier . to unpack]
+  debug ["stop  routeSat @ module", netlist ^. identifier & unpack]
 
   pure result
 
