@@ -27,9 +27,9 @@ routeSat :: NetGraph -> LSC NetGraph
 routeSat netlist = do
 
   debug
-    [ "start routeSat @ module", netlist ^. identifier . to unpack
-    , "-", netlist ^. gates . to length . to show, "gates"
-    , "-", netlist ^. nets . to length . to show, "nets"
+    [ "start routeSat @ module", netlist ^. identifier & unpack
+    , "-", netlist ^. gates & length & show, "gates"
+    , "-", netlist ^. nets & length & show, "nets"
     ]
 
   liftSMT $ do
@@ -142,8 +142,8 @@ disjointNets edges = do
 
 
 distinctPairs :: [a] -> [(a, a)]
-distinctPairs [] = []
-distinctPairs (x : rows) = fmap (x, ) rows ++ distinctPairs rows
+distinctPairs (x : xs) = fmap (x, ) xs ++ distinctPairs xs
+distinctPairs _ = []
 
 
 freeGatePolygon gate | gate ^. geometry /= mempty = do
