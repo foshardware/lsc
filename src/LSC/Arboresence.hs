@@ -333,14 +333,20 @@ powerUpAndGround nodes edges = do
       gnd_ `connect` gs
       vdd_ `connect` vs
 
-      liftSMT $ constrain $ sOr
+      liftSMT $ constrain $ sOr $
         [ p ^. l .== gs ^. l
         | p <- init grid
+        ] ++
+        [ outer ring ^. t .== gs ^. t
+        , outer ring ^. b .== gs ^. b
         ]
 
-      liftSMT $ constrain $ sOr
+      liftSMT $ constrain $ sOr $
         [ p ^. l .== vs ^. l
         | p <- init grid
+        ] ++
+        [ outer ring ^. t .== vs ^. t
+        , outer ring ^. b .== vs ^. b
         ]
 
       pure ([vs, vdd_], [gs, gnd_])
@@ -348,6 +354,17 @@ powerUpAndGround nodes edges = do
     | (gate, path) <- toList nodes
     , v <- gate ^. vdd . ports & take 1
     , g <- gate ^. gnd . ports & take 1
+    ]
+
+  sequence_
+    [ disjoint v p
+    | (v, p) <- distinctPairs $ join vs ++ join gs
+    ]
+
+  sequence_
+    [ disjoint v p
+    | v <- join vs ++ join gs
+    , (_, p) <- toList nodes
     ]
 
   sequence_

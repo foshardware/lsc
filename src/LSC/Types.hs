@@ -314,7 +314,7 @@ instance Default Pin where
 makeFieldsNoPrefix ''Technology
 
 instance Default Technology where
-  def = Technology 1000 1 mempty (1000, 1000) 20000 True
+  def = Technology 1000 1 mempty (1000, 1000) 30000 True
 
 
 lookupDimensions :: Gate -> Technology -> Maybe (Integer, Integer)
@@ -324,7 +324,6 @@ lambda :: Technology -> Integer
 lambda tech = ceiling $ view scaleFactor tech * view featureSize tech
 
 divideArea :: Foldable f => f a -> Technology -> [Integer]
-
 divideArea xs tech = take n $ x : iterate (join (+)) (tech ^. rowSize)
   where n = ceiling $ sqrt $ fromIntegral $ length xs
         x = tech ^. standardPin . _1 . to (* 2)
