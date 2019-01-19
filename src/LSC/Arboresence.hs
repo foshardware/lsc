@@ -41,7 +41,7 @@ routeSat netlist = do
 
   rim <- sequence $ netlist ^. supercell . pins <&> freePinPolygon
 
-  edges <- sequence $ netlist ^. nets <&> arboresence 2 nodes rim
+  edges <- sequence $ netlist ^. nets <&> arboresence 4 nodes rim
 
   (ring, power, ground) <- powerUpAndGround nodes edges
 

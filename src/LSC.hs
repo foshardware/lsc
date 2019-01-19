@@ -1,6 +1,7 @@
 
 module LSC where
 
+import LSC.Placement
 import LSC.Routing
 import LSC.Types
 
@@ -11,4 +12,6 @@ stage1 n netlist
   . concLSC
   . replicate n
   . routeSat
-  $ netlist
+  -- =<< placeEasy
+  =<< pure
+      netlist
