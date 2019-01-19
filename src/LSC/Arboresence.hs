@@ -41,7 +41,7 @@ routeSat netlist = do
 
   rim <- sequence $ netlist ^. supercell . pins <&> freePinPolygon
 
-  edges <- sequence $ netlist ^. nets <&> arboresence 4 nodes rim
+  edges <- sequence $ netlist ^. nets <&> arboresence 2 nodes rim
 
   (ring, power, ground) <- powerUpAndGround nodes edges
 
@@ -143,7 +143,7 @@ disjointNets edges = do
 
 distinctPairs :: [a] -> [(a, a)]
 distinctPairs [] = []
-distinctPairs (x : xs) = fmap (x, ) xs ++ distinctPairs xs
+distinctPairs (x : rows) = fmap (x, ) rows ++ distinctPairs rows
 
 
 freeGatePolygon gate | gate ^. geometry /= mempty = do
@@ -281,19 +281,16 @@ pinComponent p s = p
 powerUpAndGround nodes edges = do
 
   (w, h) <- view standardPin <$> ask
-  xs <- divideArea nodes <$> ask
+  rows <- divideArea nodes <$> ask
 
   grid <- sequence
     [ freeRectangle
       <&> l .~ literal x
       <&> r .~ literal (x + w)
-    | x <- xs
+      <&> integrate metal2
+      <&> integrate metal3
+    | x <- rows
     ]
-
-  ring <- freeRing
-  
-  head grid `equivalent` view l ring
-  last grid `equivalent` view r ring
 
   sequence_
     [ liftSMT $ constrain
@@ -301,6 +298,21 @@ powerUpAndGround nodes edges = do
         .&& head grid ^. b .== path ^. b
     | path <- init $ tail $ grid
     ]
+
+  ring <- freeRing
+
+  head grid `equivalent` view l ring
+  last grid `equivalent` view r ring
+
+  liftSMT $ constrain
+      $ ring ^. l . to width .== literal w
+    .&& ring ^. r . to width .== literal w
+
+    .&& ring ^. b . to height .== literal h
+    .&& ring ^. t . to height .== literal h
+
+  liftSMT $ constrain
+      $ height (outer ring) .< width (outer ring) + width (outer ring)
 
   (vs, gs) <- unzip <$> sequence
     [ do
@@ -321,22 +333,32 @@ powerUpAndGround nodes edges = do
       gnd_ `connect` gs
       vdd_ `connect` vs
 
+      liftSMT $ constrain $ sOr
+        [ p ^. l .== gs ^. l
+        | p <- init grid
+        ]
+
+      liftSMT $ constrain $ sOr
+        [ p ^. l .== vs ^. l
+        | p <- init grid
+        ]
+
       pure ([vs, vdd_], [gs, gnd_])
 
     | (gate, path) <- toList nodes
-    , v <- take 1 $ gate ^. vdd . ports
-    , g <- take 1 $ gate ^. gnd . ports
+    , v <- gate ^. vdd . ports & take 1
+    , g <- gate ^. gnd . ports & take 1
     ]
 
-  liftSMT $ constrain
-      $ ring ^. l . to width .== literal w
-    .&& ring ^. r . to width .== literal w
+  sequence_
+    [ disjoint v p
+    | v <- join vs ++ join gs
+    , (_, ps) <- toList edges
+    , p <- ps
+    ]
 
-    .&& ring ^. b . to height .== literal h
-    .&& ring ^. t . to height .== literal h
-
-  let power  = [ integrate metal2 p | p <- toList ring ++ grid ]
-      ground = [ integrate metal3 p | p <- toList ring ++ grid ]
+  let power  = join vs ++ [ integrate metal2 p | p <- toList ring ++ grid ]
+      ground = join gs ++ [ integrate metal3 p | p <- toList ring ++ grid ]
 
   pure (ring, power, ground)
 
@@ -370,10 +392,10 @@ freeRectangle = do
   pure area
 
 
-setGateGeometry (gate, xs) = getLayered xs
+setGateGeometry (gate, rows) = getLayered rows
   >>= \ path -> pure $ gate & geometry .~ pure path
 
-setPinGeometry (pin, xs) = getLayered xs
+setPinGeometry (pin, rows) = getLayered rows
   >>= \ path -> pure $ pin & ports .~ pure path
 
 setNetGeometry (net, edge) = sequence (getLayered <$> edge)
