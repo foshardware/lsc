@@ -363,4 +363,4 @@ debug msg = do
   enabled <- view enableDebug <$> technology
   when enabled $ liftIO $ do
     timestamp <- show . round <$> getPOSIXTime
-    errorConcurrent $ unlines [unwords $ timestamp : "-" : msg]
+    errorConcurrent $ unlines [unwords $ timestamp : "->" : msg]
