@@ -101,7 +101,7 @@ program = do
         (parseBLIF net_)
 
       circuit2d <- lift $ runLSC
-        def
+        ( set concurrentThreads j def )
         ( do
           tech
           bootstrap $ set enableDebug $ Debug `elem` fmap fst opts )

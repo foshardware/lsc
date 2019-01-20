@@ -3,8 +3,6 @@ module LSC.Placement where
 
 import Control.Lens
 import Control.Monad.State
-import Data.Text (unpack)
-import Data.Vector (Vector)
 
 import LSC.Types
 

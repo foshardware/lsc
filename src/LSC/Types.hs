@@ -22,11 +22,9 @@ import Data.Vector (Vector)
 
 import Control.Monad.Codensity
 import Control.Monad.Parallel (MonadFork(..), MonadParallel(..))
-import qualified Control.Monad.Parallel as Par
 import Control.Monad.Reader (ReaderT(..), Reader, runReader)
 import qualified Control.Monad.Reader as Reader
 import Control.Monad.State
-import Control.Parallel (par)
 
 import Data.Time.Clock.POSIX
 
@@ -146,13 +144,16 @@ data CompilerOpts = CompilerOpts
   , _concurrentThreads :: Int
   }
 
-type EnvT m = ReaderT CompilerOpts m
+type EnvT m = StateT CompilerOpts m
 
 environment :: LSC CompilerOpts
-environment = lift $ LST Reader.ask
+environment = lift $ LST get
 
-runEnvT :: EnvT m r -> CompilerOpts -> m r
-runEnvT = runReaderT
+setEnv :: MonadState s m => ASetter s s a b -> b -> m ()
+setEnv l v = modify $ set l v
+
+runEnvT :: Monad m => EnvT m r -> CompilerOpts -> m r
+runEnvT = evalStateT
 
 
 type LSC = Codensity LST
@@ -176,7 +177,7 @@ instance MonadIO LST where
 instance MonadFork LST where
   forkExec (LST m) = do
     tech <- LST $ lift Reader.ask
-    opts <- LST Reader.ask
+    opts <- LST get
     fmap liftIO . liftIO
       . withConcurrentOutput
       . forkExec
