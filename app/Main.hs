@@ -103,7 +103,7 @@ program = do
         ( do
           tech
           bootstrap $ set enableDebug $ Debug `elem` fmap fst opts )
-        ( stage1 j netlist )
+        ( stage1 j `compiler` netlist )
 
       when (Compile `elem` fmap fst opts)
        $ do
