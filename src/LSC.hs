@@ -49,9 +49,14 @@ newtype LS a b = LS { compiler :: a -> LSC b }
 instance Category LS where
   id = LS pure
   LS m . LS k = LS $ \ x -> do
-    x' <- k x
-    update
-    m x'
+    s <- thaw <$> technology
+    o <- environment
+    (x', s') <- liftIO $ runLSC o s $ k x
+    overwrite s'
+    p <- update *> environment
+    (y', t') <- liftIO $ runLSC p s $ m x'
+    y' <$ overwrite t'
+
 
 instance Arrow LS where
   arr f = LS $ pure . f
