@@ -100,7 +100,7 @@ program = do
         (pure . gnostic tech . fromBLIF)
         (parseBLIF net_)
 
-      circuit2d <- lift $ runLSC
+      circuit2d <- lift $ evalLSC
         ( set concurrentThreads j def )
         ( do
           tech

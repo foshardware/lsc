@@ -1,5 +1,6 @@
 {-# OPTIONS_GHC -fno-warn-type-defaults #-}
 {-# LANGUAGE GADTs #-}
+{-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TemplateHaskell #-}
@@ -151,14 +152,20 @@ type EnvT m = StateT CompilerOpts m
 environment :: LSC CompilerOpts
 environment = lift $ LST get
 
-setEnv :: ASetter CompilerOpts CompilerOpts a b -> b -> LSC ()
-setEnv l v = lift $ LST $ modify $ set l v
+overwrite :: CompilerOpts -> LSC ()
+overwrite = lift . LST . put
 
-modifyEnv :: ASetter CompilerOpts CompilerOpts a b -> (a -> b) -> LSC ()
-modifyEnv l f = lift $ LST $ modify $ over l f
+setEnv :: Simple Setter CompilerOpts a -> a -> LSC ()
+setEnv f = lift . LST . modify . set f
 
-runEnvT :: Monad m => EnvT m r -> CompilerOpts -> m r
-runEnvT = evalStateT
+modifyEnv :: Simple Setter CompilerOpts a -> (a -> a) -> LSC ()
+modifyEnv f = lift . LST . modify . over f
+
+runEnvT :: Monad m => EnvT m r -> CompilerOpts -> m (r, CompilerOpts)
+runEnvT = runStateT
+
+evalEnvT :: Monad m => EnvT m r -> CompilerOpts -> m r
+evalEnvT = evalStateT
 
 
 type LSC = Codensity LST
@@ -187,7 +194,8 @@ instance MonadFork LST where
       . withConcurrentOutput
       . forkExec
       . runSMT
-      $ runGnosticT (runEnvT m opts) tech
+      . flip runGnosticT tech
+      $ evalEnvT m opts
 
 instance MonadParallel LST where
   bindM2 f ma mb = do
@@ -197,13 +205,16 @@ instance MonadParallel LST where
     f a b
 
 
-runLSC :: CompilerOpts -> Bootstrap () -> LSC a -> IO a
-runLSC opts b
+runLSC :: CompilerOpts -> Bootstrap () -> LSC a -> IO (a, CompilerOpts)
+runLSC opts tech
   = runSMT
-  . flip runGnosticT (freeze b)
+  . flip runGnosticT (freeze tech)
   . flip runEnvT opts
   . unLST
   . lowerCodensity
+
+evalLSC :: CompilerOpts -> Bootstrap () -> LSC a -> IO a
+evalLSC opts tech lsc = fst <$> runLSC opts tech lsc
 
 
 liftSMT :: Symbolic a -> LSC a
@@ -333,6 +344,16 @@ instance Default Pin where
 
 
 makeFieldsNoPrefix ''CompilerOpts
+
+instance Semigroup CompilerOpts where
+  opts <> v = opts
+    & concurrentThreads %~ min (v ^. concurrentThreads)
+    & rowSize           %~ max (v ^. rowSize)
+    & wireBends         %~ max (v ^. wireBends)
+
+instance Monoid CompilerOpts where
+  mempty = def
+  mappend = (<>)
 
 instance Default CompilerOpts where
   def = CompilerOpts 2 1 20000

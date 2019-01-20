@@ -6,10 +6,10 @@ import Control.Arrow
 import Control.Category
 import Control.Exception
 import Control.Monad
-import Control.Monad.Fix
 import Control.Monad.Trans
 import Control.Monad.Codensity
 import Control.Monad.Parallel
+import Data.Semigroup
 import Prelude hiding ((.), id)
 
 import LSC.Placement
@@ -53,7 +53,8 @@ instance Category LS where
   LS m . LS k = LS $ \ x -> lowerCodensity $ do
     s <- thaw <$> technology
     o <- environment
-    liftIO $ runLSC o s $ lift $ m =<< k x
+    (x', s') <- liftIO $ runLSC o s $ lift $ m =<< k x
+    x' <$ overwrite s'
 
 instance Arrow LS where
   arr f = LS $ pure . f
@@ -63,14 +64,16 @@ instance Arrow LS where
   LS k &&& LS m = LS $ \ x -> lowerCodensity $ do
     s <- thaw <$> technology
     o <- environment
-    lift $ bindM2 (\ r1 r2 -> pure (r1, r2))
+    lift $ bindM2
+      (\ (r1, s1) (r2, s2) -> (r1, r2) <$ lowerCodensity (overwrite $ s1 <> s2))
       (lowerCodensity $ liftIO $ runLSC o s $ lift $ k x)
       (lowerCodensity $ liftIO $ runLSC o s $ lift $ m x)
 
   LS k *** LS m = LS $ \ (x, y) -> lowerCodensity $ do
     s <- thaw <$> technology
     o <- environment
-    lift $ bindM2 (\ r1 r2 -> pure (r1, r2))
+    lift $ bindM2
+      (\ (r1, s1) (r2, s2) -> (r1, r2) <$ lowerCodensity (overwrite $ s1 <> s2))
       (lowerCodensity $ liftIO $ runLSC o s $ lift $ k x)
       (lowerCodensity $ liftIO $ runLSC o s $ lift $ m y)
 
@@ -82,10 +85,11 @@ instance ArrowPlus LS where
   LS k <+> LS m = LS $ \ x -> lowerCodensity $ do
     s <- thaw <$> technology
     o <- environment
-    liftIO $
+    (x', s') <- liftIO $ do
       (runLSC o s $ lift $ k x) `catch` \ (SomeException e) -> do
-        runLSC o s $ debug [displayException e]
+        _ <- runLSC o s $ debug [displayException e]
         runLSC o s $ lift $ m x
+    x' <$ overwrite s'
 
 
 instance ArrowChoice LS where
