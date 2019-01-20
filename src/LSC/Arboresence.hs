@@ -40,7 +40,7 @@ routeSat netlist = do
 
   rim <- sequence $ netlist ^. supercell . pins <&> freePinPolygon
 
-  edges <- sequence $ netlist ^. nets <&> arboresence 2 nodes rim
+  edges <- sequence $ netlist ^. nets <&> arboresence nodes rim
 
   (ring, power, ground) <- powerUpAndGround nodes edges
 
@@ -49,8 +49,9 @@ routeSat netlist = do
   disjointGates nodes
   disjointNets edges
 
+  limit <- view halt <$> environment
   result <- liftSMT $ query $ do
-    result <- checkSat
+    result <- timeout limit checkSat
     case result of
 
       Sat -> do
@@ -227,7 +228,9 @@ connect p q = do
     .|| view b p .== view b q .&& view r p .== view r q .&& view t p .== view t q
 
 
-arboresence n nodes rim net = do
+arboresence nodes rim net = do
+
+  n <- succ . view jogs <$> environment
 
   hyperedge <- sequence
     [ do

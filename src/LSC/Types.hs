@@ -111,7 +111,6 @@ data Technology = Technology
   , _stdCells       :: Map Text Cell
   , _standardPin    :: (Integer, Integer)
   , _rowSize        :: Integer
-  , _enableDebug    :: Bool
   } deriving Show
 
 
@@ -142,9 +141,11 @@ gnostic b a = a `runReader` freeze b
 
 
 data CompilerOpts = CompilerOpts
-  { _wireBends         :: Int
-  , _concurrentThreads :: Int
-  , _rowSize           :: Integer
+  { _jogs        :: Int
+  , _cores       :: Int
+  , _rowSize     :: Integer
+  , _halt        :: Int
+  , _enableDebug :: Bool
   }
 
 type EnvT m = StateT CompilerOpts m
@@ -347,22 +348,24 @@ makeFieldsNoPrefix ''CompilerOpts
 
 instance Semigroup CompilerOpts where
   opts <> v = opts
-    & concurrentThreads %~ min (v ^. concurrentThreads)
-    & rowSize           %~ max (v ^. rowSize)
-    & wireBends         %~ max (v ^. wireBends)
+    & cores       %~ min (v ^. cores)
+    & rowSize     %~ max (v ^. rowSize)
+    & jogs        %~ max (v ^. jogs)
+    & halt        %~ max (v ^. halt)
+    & enableDebug %~ (||) (v ^. enableDebug)
 
 instance Monoid CompilerOpts where
   mempty = def
   mappend = (<>)
 
 instance Default CompilerOpts where
-  def = CompilerOpts 2 1 20000
+  def = CompilerOpts 1 1 20000 (16 * 1000000) True
 
 
 makeFieldsNoPrefix ''Technology
 
 instance Default Technology where
-  def = Technology 1000 1 mempty (1000, 1000) 30000 True
+  def = Technology 1000 1 mempty (1000, 1000) 30000
 
 
 lookupDimensions :: Gate -> Technology -> Maybe (Integer, Integer)
@@ -379,9 +382,9 @@ divideArea xs = do
   pure $ take n $ x : iterate (join (+)) size
   where n = ceiling $ sqrt $ fromIntegral $ length xs
 
-debug :: [String] -> LSC ()
+debug :: Foldable f => f String -> LSC ()
 debug msg = do
-  enabled <- view enableDebug <$> technology
+  enabled <- view enableDebug <$> environment
   when enabled $ liftIO $ do
     timestamp <- show . round <$> getPOSIXTime
-    errorConcurrent $ unlines [unwords $ timestamp : "->" : msg]
+    errorConcurrent $ unlines [unwords $ timestamp : "->" : toList msg]

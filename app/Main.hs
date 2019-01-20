@@ -2,7 +2,7 @@
 
 module Main where
 
-import Control.Lens (set)
+import Control.Lens
 
 import Control.Monad
 import Control.Monad.Trans
@@ -101,10 +101,10 @@ program = do
         (parseBLIF net_)
 
       circuit2d <- lift $ evalLSC
-        ( set concurrentThreads j def )
-        ( do
-          tech
-          bootstrap $ set enableDebug $ Debug `elem` fmap fst opts )
+        ( def
+          & cores       .~ j
+          & enableDebug .~ arg Debug )
+        ( tech )
         ( compiler stage1 netlist )
 
       liftIO $ plotStdout circuit2d

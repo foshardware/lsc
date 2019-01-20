@@ -1,10 +1,12 @@
 {-# LANGUAGE TupleSections #-}
+{-# LANGUAGE RankNTypes #-}
 
 module LSC where
 
 import Control.Arrow
 import Control.Category
 import Control.Exception
+import Control.Lens
 import Control.Monad
 import Control.Monad.Trans
 import Control.Monad.Codensity
@@ -20,8 +22,10 @@ import LSC.Types
 stage1 :: Compiler NetGraph
 stage1 = zeroArrow
   <+> route
-  <+> (increaseRowSize  5000 >>> route)
-  <+> (increaseRowSize 10000 >>> route)
+  <+> (increase rowSize 5000 >>> route)
+  <+> (increase rowSize 10000 >>> route)
+  <+> (increase jogs 1 >>> increase rowSize 5000 >>> route)
+  <+> (increase jogs 1 >>> increase rowSize 10000 >>> route)
 
 
 route :: Compiler NetGraph
@@ -31,8 +35,8 @@ place :: Compiler NetGraph
 place = ls placeEasy
 
 
-increaseRowSize :: Int -> Compiler a
-increaseRowSize n = ls_ $ modifyEnv rowSize (+ fromIntegral n)
+increase :: Integral n => Simple Setter CompilerOpts n -> Int -> Compiler a
+increase f n = ls_ $ modifyEnv f (+ fromIntegral n)
 
 
 type Compiler a = LS a a
@@ -43,10 +47,7 @@ ls_ f = ls $ \ x -> x <$ f
 ls :: (a -> LSC a) -> Compiler a
 ls = LS
 
-compiler :: Compiler a -> a -> LSC a
-compiler (LS k) = k
-
-newtype LS a b = LS (a -> LSC b)
+newtype LS a b = LS { compiler :: a -> LSC b }
 
 instance Category LS where
   id = LS pure
