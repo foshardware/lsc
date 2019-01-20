@@ -41,19 +41,19 @@ ls_ :: LSC () -> Compiler a
 ls_ f = ls $ \ x -> x <$ f
 
 ls :: (a -> LSC a) -> Compiler a
-ls f = LS $ lowerCodensity . f
+ls = LS
 
 compiler :: Compiler a -> a -> LSC a
-compiler (LS k) = lift . k
+compiler (LS k) = k
 
-newtype LS a b = LS (a -> LST b)
+newtype LS a b = LS (a -> LSC b)
 
 instance Category LS where
   id = LS pure
-  LS m . LS k = LS $ \ x -> lowerCodensity $ do
+  LS m . LS k = LS $ \ x -> do
     s <- thaw <$> technology
     o <- environment
-    (x', s') <- liftIO $ runLSC o s $ lift $ m =<< k x
+    (x', s') <- liftIO $ runLSC o s $ m =<< k x
     x' <$ overwrite s'
 
 instance Arrow LS where
@@ -61,34 +61,33 @@ instance Arrow LS where
 
   first (LS k) = LS $ \ (x, y) -> (, y) <$> k x
 
-  LS k &&& LS m = LS $ \ x -> lowerCodensity $ do
+  LS k &&& LS m = LS $ \ x -> do
     s <- thaw <$> technology
     o <- environment
     lift $ bindM2
       (\ (r1, s1) (r2, s2) -> (r1, r2) <$ lowerCodensity (overwrite $ s1 <> s2))
-      (lowerCodensity $ liftIO $ runLSC o s $ lift $ k x)
-      (lowerCodensity $ liftIO $ runLSC o s $ lift $ m x)
+      (lowerCodensity $ liftIO $ runLSC o s $ k x)
+      (lowerCodensity $ liftIO $ runLSC o s $ m x)
 
-  LS k *** LS m = LS $ \ (x, y) -> lowerCodensity $ do
+  LS k *** LS m = LS $ \ (x, y) -> do
     s <- thaw <$> technology
     o <- environment
     lift $ bindM2
       (\ (r1, s1) (r2, s2) -> (r1, r2) <$ lowerCodensity (overwrite $ s1 <> s2))
-      (lowerCodensity $ liftIO $ runLSC o s $ lift $ k x)
-      (lowerCodensity $ liftIO $ runLSC o s $ lift $ m y)
+      (lowerCodensity $ liftIO $ runLSC o s $ k x)
+      (lowerCodensity $ liftIO $ runLSC o s $ m y)
 
 
 instance ArrowZero LS where
   zeroArrow = throw $ AssertionFailed "start lsc"
 
 instance ArrowPlus LS where
-  LS k <+> LS m = LS $ \ x -> lowerCodensity $ do
+  LS k <+> LS m = LS $ \ x -> do
     s <- thaw <$> technology
     o <- environment
     (x', s') <- liftIO $ do
-      (runLSC o s $ lift $ k x) `catch` \ (SomeException e) -> do
-        _ <- runLSC o s $ debug [displayException e]
-        runLSC o s $ lift $ m x
+      runLSC o s (k x) `catch` \ (SomeException e) ->
+        runLSC o s $ debug [displayException e] *> m x
     x' <$ overwrite s'
 
 
