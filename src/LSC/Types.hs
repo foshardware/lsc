@@ -141,7 +141,8 @@ gnostic b a = a `runReader` freeze b
 
 
 data CompilerOpts = CompilerOpts
-  { _jogs        :: Int
+  { _timestamp   :: Int
+  , _jogs        :: Int
   , _cores       :: Int
   , _rowSize     :: Integer
   , _halt        :: Int
@@ -347,19 +348,15 @@ instance Default Pin where
 makeFieldsNoPrefix ''CompilerOpts
 
 instance Semigroup CompilerOpts where
-  opts <> v = opts
-    & cores       %~ min (v ^. cores)
-    & rowSize     %~ max (v ^. rowSize)
-    & jogs        %~ max (v ^. jogs)
-    & halt        %~ max (v ^. halt)
-    & enableDebug %~ (||) (v ^. enableDebug)
+  u <> v | u ^. timestamp > v ^. timestamp = u
+  _ <> v = v
 
 instance Monoid CompilerOpts where
   mempty = def
   mappend = (<>)
 
 instance Default CompilerOpts where
-  def = CompilerOpts 1 1 20000 (16 * 1000000) True
+  def = CompilerOpts 0 1 1 20000 (16 * 1000000) True
 
 
 makeFieldsNoPrefix ''Technology

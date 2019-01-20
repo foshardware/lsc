@@ -51,11 +51,7 @@ newtype LS a b = LS { compiler :: a -> LSC b }
 
 instance Category LS where
   id = LS pure
-  LS m . LS k = LS $ \ x -> do
-    s <- thaw <$> technology
-    o <- environment
-    (x', s') <- liftIO $ runLSC o s $ m =<< k x
-    x' <$ overwrite s'
+  LS m . LS k = LS $ \ x -> m =<< k x
 
 instance Arrow LS where
   arr f = LS $ pure . f
@@ -65,18 +61,21 @@ instance Arrow LS where
   LS k &&& LS m = LS $ \ x -> do
     s <- thaw <$> technology
     o <- environment
-    lift $ bindM2
-      (\ (r1, s1) (r2, s2) -> (r1, r2) <$ lowerCodensity (overwrite $ s1 <> s2))
+    lift $ bindM2 combineResults
       (lowerCodensity $ liftIO $ runLSC o s $ k x)
       (lowerCodensity $ liftIO $ runLSC o s $ m x)
 
   LS k *** LS m = LS $ \ (x, y) -> do
     s <- thaw <$> technology
     o <- environment
-    lift $ bindM2
-      (\ (r1, s1) (r2, s2) -> (r1, r2) <$ lowerCodensity (overwrite $ s1 <> s2))
+    lift $ bindM2 combineResults
       (lowerCodensity $ liftIO $ runLSC o s $ k x)
       (lowerCodensity $ liftIO $ runLSC o s $ m y)
+
+combineResults :: (a, CompilerOpts) -> (b, CompilerOpts) -> LST (a, b)
+combineResults (r1, s1) (r2, s2) = do
+  lowerCodensity $ overwrite (s1 <> s2)
+  pure (r1, r2)
 
 
 instance ArrowZero LS where

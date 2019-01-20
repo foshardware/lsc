@@ -12,6 +12,8 @@ import Data.Either (rights)
 import Data.Foldable (for_)
 import Data.Default
 
+import Data.Time.Clock.POSIX
+
 import qualified Data.ByteString.Lazy.Char8 as Bytes
 
 import qualified Data.Text.IO as Text
@@ -49,13 +51,13 @@ exit = guard False
 program :: App ()
 program = do
 
-  (opts, _) <- liftIO $ compilerOpts =<< getArgs
+  (flags, _) <- liftIO $ compilerFlags =<< getArgs
+  env <- liftIO $ compilerOpts flags
 
-  when (null opts) exit
+  let arg x = or [ k == x | (k, _) <- flags ]
+      str x = head [ v | (k, v) <- flags, k == x ]
 
-  let arg x = elem x $ fst <$> opts
-
-  let j = last $ 1 : rights [ parse decimal "-j" v | (k, v) <- opts, k == Cores ]
+  when (null flags) exit
 
   -- print version string
   when (arg Version)
@@ -74,22 +76,22 @@ program = do
   -- generate registers
   when (and $ arg <$> [Register, Lef])
     $ do
-      lef_ <- liftIO $ Text.readFile $ head [v | (k, v) <- opts, k == Lef ]
+      lef_ <- liftIO $ Text.readFile $ str Lef
       liftIO $ hPutStrLn stderr $ show $ parseLEF lef_
       exit
 
   -- json report
   when (and $ arg <$> [Json, Verilog])
     $ do
-      verilog_ <- liftIO $ Text.readFile $ head [v | (k, v) <- opts, k == Verilog ]
+      verilog_ <- liftIO $ Text.readFile $ str Verilog
       liftIO $ Bytes.putStrLn $ encodeVerilog $ parseVerilog verilog_
       exit
 
    -- svg output
   when (and $ arg <$> [Lef, Blif, Compile])
     $ do
-      net_ <- liftIO $ Text.readFile $ head [v | (k, v) <- opts, k == Blif]
-      lef_ <- liftIO $ Text.readFile $ head [v | (k, v) <- opts, k == Lef ]
+      net_ <- liftIO $ Text.readFile $ str Blif
+      lef_ <- liftIO $ Text.readFile $ str Lef
 
       tech <- lift $ either
         (ioError . userError . show)
@@ -100,12 +102,7 @@ program = do
         (pure . gnostic tech . fromBLIF)
         (parseBLIF net_)
 
-      circuit2d <- lift $ evalLSC
-        ( def
-          & cores       .~ j
-          & enableDebug .~ arg Debug )
-        ( tech )
-        ( compiler stage1 netlist )
+      circuit2d <- lift $ evalLSC env tech $ compiler stage1 netlist
 
       liftIO $ plotStdout circuit2d
 
@@ -123,7 +120,7 @@ program = do
 
   when (and $ arg <$> [Json, Blif])
     $ do
-      blif_ <- liftIO $ Text.readFile $ head [v | (k, v) <- opts, k == Blif]
+      blif_ <- liftIO $ Text.readFile $ str Blif
       liftIO $ either
         (ioError . userError . show)
         (Bytes.putStrLn . encodeBLIF)
@@ -173,15 +170,20 @@ args =
     , Option ['r']      ["register"]   (ReqArg (Register, ) "size in bits")  "generate register"
     ]
 
-exlineArgs :: String -> [String]
-exlineArgs [] = []
-exlineArgs string = arg : exlineArgs xs
-  where (arg, _ : xs) = break (== ',') string
 
-compilerOpts :: [String] -> IO ([Flag], [String])
-compilerOpts argv =
+compilerOpts :: [Flag] -> IO CompilerOpts
+compilerOpts xs = do
+  time <- round <$> getPOSIXTime
+  let j = rights [ parse decimal "-j" v | (k, v) <- xs, k == Cores ]
+  pure $ def
+    & cores       .~ last (1 : j)
+    & enableDebug .~ elem Debug (fst <$> xs)
+    & timestamp   .~ time
+
+
+compilerFlags :: [String] -> IO ([Flag], [String])
+compilerFlags argv =
     case getOpt Permute args argv of
         (o, n, []  ) -> pure (o, n)
         (_, _, errs) -> mempty <$ hPutStrLn stderr (concat errs ++ usageInfo header args)
      where header = "Usage: lsc [arg...]"
-

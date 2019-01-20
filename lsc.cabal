@@ -26,6 +26,7 @@ executable lsc
                      , parsec
                      , text
                      , process
+                     , time
                      , data-default
                      , bytestring
   hs-source-dirs:      app
