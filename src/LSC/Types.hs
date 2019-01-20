@@ -124,7 +124,7 @@ bootstrap :: (Technology -> Technology) -> Bootstrap ()
 bootstrap = modify
 
 freeze :: Bootstrap () -> Technology
-freeze bootstrapping = execState bootstrapping def
+freeze = flip execState def
 
 thaw :: Technology -> Bootstrap ()
 thaw = put
@@ -140,9 +140,24 @@ gnostic :: Bootstrap () -> Gnostic r -> r
 gnostic b a = a `runReader` freeze b
 
 
+data CompilerOpts = CompilerOpts
+  { _wireBends         :: Int
+  , _rowSize           :: Int
+  , _concurrentThreads :: Int
+  }
+
+type EnvT m = ReaderT CompilerOpts m
+
+environment :: LSC CompilerOpts
+environment = lift $ LST Reader.ask
+
+runEnvT :: EnvT m r -> CompilerOpts -> m r
+runEnvT = runReaderT
+
+
 type LSC = Codensity LST
 
-newtype LST a = LST { unLST :: GnosticT Symbolic a }
+newtype LST a = LST { unLST :: EnvT (GnosticT Symbolic) a }
 
 instance Functor LST where
   fmap f (LST a) = LST (fmap f a)
@@ -160,11 +175,13 @@ instance MonadIO LST where
 
 instance MonadFork LST where
   forkExec (LST m) = do
+    tech <- LST $ lift Reader.ask
+    opts <- LST Reader.ask
     fmap liftIO . liftIO
       . withConcurrentOutput
       . forkExec
-      . runSMT . runGnosticT m
-      =<< LST Reader.ask
+      . runSMT
+      $ runGnosticT (runEnvT m opts) tech
 
 instance MonadParallel LST where
   bindM2 f ma mb = do
@@ -173,8 +190,8 @@ instance MonadParallel LST where
     b <- wb
     f a b
 
-runLSC :: Bootstrap () -> LSC a -> IO a
-runLSC b a = runSMT $ unLST (lowerCodensity a) `runGnosticT` freeze b
+runLSC :: CompilerOpts -> Bootstrap () -> LSC a -> IO a
+runLSC opts b a = runSMT $ (unLST (lowerCodensity a) `runEnvT` opts) `runGnosticT` freeze b
 
 mapLSC :: Foldable f => f a -> [a]
 mapLSC = foldr ( \ a bs -> a : par a bs ) []
@@ -183,10 +200,10 @@ concLSC :: [LSC a] -> LSC [a]
 concLSC = lift . Par.sequence . fmap lowerCodensity
 
 liftSMT :: Symbolic a -> LSC a
-liftSMT = lift . LST . lift
+liftSMT = lift . LST . lift . lift
 
 ask :: LSC Technology
-ask = lift $ LST Reader.ask
+ask = lift $ LST $ lift Reader.ask
 
 
 type Path = [Component Layer Integer]
@@ -309,6 +326,12 @@ instance Ord Pin where
 
 instance Default Pin where
   def = Pin mempty In def
+
+
+makeFieldsNoPrefix ''CompilerOpts
+
+instance Default CompilerOpts where
+  def = CompilerOpts 2 30000 1
 
 
 makeFieldsNoPrefix ''Technology

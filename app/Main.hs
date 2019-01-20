@@ -10,6 +10,7 @@ import Control.Monad.Trans.Maybe
 
 import Data.Either (rights)
 import Data.Foldable (for_)
+import Data.Default
 
 import qualified Data.ByteString.Lazy.Char8 as Bytes
 
@@ -100,14 +101,13 @@ program = do
         (parseBLIF net_)
 
       circuit2d <- lift $ runLSC
+        def
         ( do
           tech
           bootstrap $ set enableDebug $ Debug `elem` fmap fst opts )
-        ( stage1 j `compiler` netlist )
+        ( compiler stage1 netlist )
 
-      when (Compile `elem` fmap fst opts)
-       $ do
-         liftIO $ plotStdout circuit2d
+      liftIO $ plotStdout circuit2d
 
       exit
 

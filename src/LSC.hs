@@ -16,8 +16,8 @@ import LSC.Routing
 import LSC.Types
 
 
-stage1 :: Int -> Compiler NetGraph
-stage1 _ = id
+stage1 :: Compiler NetGraph
+stage1 = id
   >>> route &&& route
   >>> route *** route
   >>^ fst
@@ -38,7 +38,8 @@ instance Category LS where
   id = LS pure
   LS m . LS k = LS $ \ x -> do
     s <- thaw <$> ask
-    liftIO $ runLSC s . m =<< runLSC s (k x)
+    o <- environment
+    liftIO $ runLSC o s . m =<< runLSC o s (k x)
 
 instance Arrow LS where
   arr f = LS $ pure . f
@@ -47,15 +48,17 @@ instance Arrow LS where
 
   LS k &&& LS m = LS $ \ x -> do
     s <- thaw <$> ask
+    o <- environment
     lift $ bindM2 (\ r1 r2 -> pure (r1, r2))
-      (lowerCodensity $ liftIO $ runLSC s $ k x)
-      (lowerCodensity $ liftIO $ runLSC s $ m x)
+      (lowerCodensity $ liftIO $ runLSC o s $ k x)
+      (lowerCodensity $ liftIO $ runLSC o s $ m x)
 
   LS k *** LS m = LS $ \ (x, y) -> do
     s <- thaw <$> ask
+    o <- environment
     lift $ bindM2 (\ r1 r2 -> pure (r1, r2))
-      (lowerCodensity $ liftIO $ runLSC s $ k x)
-      (lowerCodensity $ liftIO $ runLSC s $ m y)
+      (lowerCodensity $ liftIO $ runLSC o s $ k x)
+      (lowerCodensity $ liftIO $ runLSC o s $ m y)
 
 
 instance ArrowZero LS where
@@ -64,6 +67,7 @@ instance ArrowZero LS where
 instance ArrowPlus LS where
   LS k <+> LS m = LS $ \ x -> do
     s <- thaw <$> ask
+    o <- environment
     liftIO $
-      (runLSC s $ k x) `catch` \ (AssertionFailed _) ->
-      (runLSC s $ m x)
+      (runLSC o s $ k x) `catch` \ (AssertionFailed _) ->
+      (runLSC o s $ m x)

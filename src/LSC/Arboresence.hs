@@ -10,16 +10,14 @@ module LSC.Arboresence where
 import Control.Exception
 import Control.Lens hiding ((.>), inside)
 import Control.Monad
-import Control.Monad.Trans
 import Data.Default
 import Data.Foldable
-import Data.Map (Map, assocs)
+import Data.Map (assocs)
 import Data.Semigroup
 import Data.Vector (indexM)
 import Data.SBV
 import Data.SBV.Control
 import Data.Text (unpack)
-import System.IO
 
 import LSC.Types
 
@@ -118,8 +116,6 @@ placement area ring rim = do
     [ disjoint p q
     | ((_, p), (_, q)) <- distinctPairs $ toList rim
     ]
-
-  pure area
 
 
 disjointGates nodes = do

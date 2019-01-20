@@ -26,6 +26,7 @@ executable lsc
                      , parsec
                      , text
                      , process
+                     , data-default
                      , bytestring
   hs-source-dirs:      app
   ghc-options:         -Wall -O2 -threaded -rtsopts -with-rtsopts=-N
