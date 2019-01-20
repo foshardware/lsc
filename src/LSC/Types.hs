@@ -359,6 +359,17 @@ instance Default CompilerOpts where
   def = CompilerOpts 0 1 1 20000 (16 * 1000000) True
 
 
+update :: LSC ()
+update = pure ()
+
+debug :: Foldable f => f String -> LSC ()
+debug msg = do
+  enabled <- view enableDebug <$> environment
+  when enabled $ liftIO $ do
+    time <- show . round <$> getPOSIXTime
+    errorConcurrent $ unlines [unwords $ time : "->" : toList msg]
+
+
 makeFieldsNoPrefix ''Technology
 
 instance Default Technology where
@@ -371,6 +382,7 @@ lookupDimensions g tech = view dims <$> lookup (g ^. identifier) (tech ^. stdCel
 lambda :: Technology -> Integer
 lambda tech = ceiling $ view scaleFactor tech * view featureSize tech
 
+
 divideArea :: Foldable f => f a -> LSC [Integer]
 divideArea xs = do
   size <- view rowSize <$> environment
@@ -378,10 +390,3 @@ divideArea xs = do
   let x = tech ^. standardPin . _1 & (* 2)
   pure $ take n $ x : iterate (join (+)) size
   where n = ceiling $ sqrt $ fromIntegral $ length xs
-
-debug :: Foldable f => f String -> LSC ()
-debug msg = do
-  enabled <- view enableDebug <$> environment
-  when enabled $ liftIO $ do
-    timestamp <- show . round <$> getPOSIXTime
-    errorConcurrent $ unlines [unwords $ timestamp : "->" : toList msg]

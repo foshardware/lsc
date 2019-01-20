@@ -155,7 +155,7 @@ args =
     , Option ['V', '?'] ["version"]    (NoArg  (Version, mempty))   "show version number"
     , Option ['b']      ["blif"]       (ReqArg (Blif, ) "FILE")     "BLIF file"
     , Option ['l']      ["lef"]        (ReqArg (Lef,  ) "FILE")     "LEF file"
-    , Option ['d']      ["debug"]      (NoArg  (Debug, []))         "print some debug info"
+    , Option ['d']      ["debug"]      (NoArg  (Debug, mempty))     "print some debug info"
     , Option ['c']      ["compile"]
         (OptArg ((Compile,  ) . maybe "svg" id) "svg,magic")        "output format"
 
