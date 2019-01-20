@@ -20,8 +20,8 @@ import LSC.Types
 stage1 :: Compiler NetGraph
 stage1 = zeroArrow
   <+> route
-  <+> increaseRowSize  5000 route
-  <+> increaseRowSize 10000 route
+  <+> (increaseRowSize  5000 >>> route)
+  <+> (increaseRowSize 10000 >>> route)
 
 
 route :: Compiler NetGraph
@@ -31,13 +31,14 @@ place :: Compiler NetGraph
 place = ls placeEasy
 
 
-increaseRowSize :: Int -> Compiler a -> Compiler a
-increaseRowSize n (LS k) = ls $ \ x -> do
-  modifyEnv rowSize (+ fromIntegral n)
-  lift $ k x
+increaseRowSize :: Int -> Compiler a
+increaseRowSize n = ls_ $ modifyEnv rowSize (+ fromIntegral n)
 
 
 type Compiler a = LS a a
+
+ls_ :: LSC () -> Compiler a
+ls_ f = ls $ \ x -> x <$ f
 
 ls :: (a -> LSC a) -> Compiler a
 ls f = LS $ lowerCodensity . f
@@ -52,7 +53,7 @@ instance Category LS where
   LS m . LS k = LS $ \ x -> lowerCodensity $ do
     s <- thaw <$> technology
     o <- environment
-    liftIO $ runLSC o s . lift . m =<< runLSC o s (lift $ k x)
+    liftIO $ runLSC o s $ lift $ m =<< k x
 
 instance Arrow LS where
   arr f = LS $ pure . f
