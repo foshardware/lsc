@@ -18,10 +18,10 @@ import LSC.Types
 
 
 stage1 :: Compiler NetGraph
-stage1 = id
-  >>> route &&& route
-  >>> route *** route
-  >>^ fst
+stage1 = zeroArrow
+  <+> route
+  <+> increaseRowSize  5000 route
+  <+> increaseRowSize 10000 route
 
 
 route :: Compiler NetGraph
@@ -31,13 +31,19 @@ place :: Compiler NetGraph
 place = ls placeEasy
 
 
+increaseRowSize :: Int -> Compiler a -> Compiler a
+increaseRowSize n (LS k) = ls $ \ x -> do
+  modifyEnv rowSize (+ fromIntegral n)
+  lift $ k x
+
+
+type Compiler a = LS a a
+
 ls :: (a -> LSC a) -> Compiler a
 ls f = LS $ lowerCodensity . f
 
 compiler :: Compiler a -> a -> LSC a
 compiler (LS k) = lift . k
-
-type Compiler a = LS a a
 
 newtype LS a b = LS (a -> LST b)
 
@@ -69,15 +75,16 @@ instance Arrow LS where
 
 
 instance ArrowZero LS where
-  zeroArrow = throw $ AssertionFailed mempty
+  zeroArrow = throw $ AssertionFailed "start lsc"
 
 instance ArrowPlus LS where
   LS k <+> LS m = LS $ \ x -> lowerCodensity $ do
     s <- thaw <$> technology
     o <- environment
     liftIO $
-      (runLSC o s $ lift $ k x) `catch` \ (AssertionFailed _) ->
-      (runLSC o s $ lift $ m x)
+      (runLSC o s $ lift $ k x) `catch` \ (SomeException e) -> do
+        runLSC o s $ debug [displayException e]
+        runLSC o s $ lift $ m x
 
 
 instance ArrowChoice LS where

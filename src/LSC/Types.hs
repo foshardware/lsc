@@ -151,8 +151,11 @@ type EnvT m = StateT CompilerOpts m
 environment :: LSC CompilerOpts
 environment = lift $ LST get
 
-setEnv :: MonadState s m => ASetter s s a b -> b -> m ()
-setEnv l v = modify $ set l v
+setEnv :: ASetter CompilerOpts CompilerOpts a b -> b -> LSC ()
+setEnv l v = lift $ LST $ modify $ set l v
+
+modifyEnv :: ASetter CompilerOpts CompilerOpts a b -> (a -> b) -> LSC ()
+modifyEnv l f = lift $ LST $ modify $ over l f
 
 runEnvT :: Monad m => EnvT m r -> CompilerOpts -> m r
 runEnvT = evalStateT
@@ -332,7 +335,7 @@ instance Default Pin where
 makeFieldsNoPrefix ''CompilerOpts
 
 instance Default CompilerOpts where
-  def = CompilerOpts 2 1 30000
+  def = CompilerOpts 2 1 20000
 
 
 makeFieldsNoPrefix ''Technology
