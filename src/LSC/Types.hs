@@ -360,7 +360,11 @@ instance Default CompilerOpts where
 
 
 update :: LSC ()
-update = pure ()
+update = do
+  u <- view timestamp <$> environment
+  v <- round <$> liftIO getPOSIXTime
+  when (v - u > 1) $ do
+    debug ["update environment"]
 
 debug :: Foldable f => f String -> LSC ()
 debug msg = do

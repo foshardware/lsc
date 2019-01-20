@@ -22,10 +22,7 @@ import LSC.Types
 stage1 :: Compiler NetGraph
 stage1 = zeroArrow
   <+> route
-  <+> (increase rowSize 5000 >>> route)
   <+> (increase rowSize 10000 >>> route)
-  <+> (increase jogs 1 >>> increase rowSize 5000 >>> route)
-  <+> (increase jogs 1 >>> increase rowSize 10000 >>> route)
 
 
 route :: Compiler NetGraph
@@ -51,7 +48,10 @@ newtype LS a b = LS { compiler :: a -> LSC b }
 
 instance Category LS where
   id = LS pure
-  LS m . LS k = LS $ \ x -> update >> k x >>= m
+  LS m . LS k = LS $ \ x -> do
+    x' <- k x
+    update
+    m x'
 
 instance Arrow LS where
   arr f = LS $ pure . f
@@ -87,7 +87,7 @@ instance ArrowPlus LS where
     o <- update *> environment
     (x', s') <- liftIO $ do
       runLSC o s (k x) `catch` \ (SomeException e) ->
-        runLSC o s $ debug [displayException e] *> m x
+        runLSC o s $ update *> debug [displayException e] *> m x
     x' <$ overwrite s'
 
 
