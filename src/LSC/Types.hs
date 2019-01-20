@@ -190,14 +190,15 @@ instance MonadParallel LST where
     b <- wb
     f a b
 
+
 runLSC :: CompilerOpts -> Bootstrap () -> LSC a -> IO a
-runLSC opts b a = runSMT $ (unLST (lowerCodensity a) `runEnvT` opts) `runGnosticT` freeze b
+runLSC opts b
+  = runSMT
+  . flip runGnosticT (freeze b)
+  . flip runEnvT opts
+  . unLST
+  . lowerCodensity
 
-mapLSC :: Foldable f => f a -> [a]
-mapLSC = foldr ( \ a bs -> a : par a bs ) []
-
-concLSC :: [LSC a] -> LSC [a]
-concLSC = lift . Par.sequence . fmap lowerCodensity
 
 liftSMT :: Symbolic a -> LSC a
 liftSMT = lift . LST . lift . lift
