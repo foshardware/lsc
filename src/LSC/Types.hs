@@ -22,8 +22,7 @@ import Data.Vector (Vector)
 
 import Control.Monad.Codensity
 import Control.Monad.Parallel (MonadFork(..), MonadParallel(..))
-import Control.Monad.Reader (ReaderT(..), Reader, runReader)
-import qualified Control.Monad.Reader as Reader
+import Control.Monad.Reader
 import Control.Monad.State
 
 import Data.Time.Clock.POSIX
@@ -131,6 +130,9 @@ thaw = put
 type GnosticT m = ReaderT Technology m
 type Gnostic = Reader Technology
 
+technology :: LSC Technology
+technology = lift $ LST $ lift ask
+
 runGnosticT :: GnosticT m r -> Technology -> m r
 runGnosticT = runReaderT
 
@@ -140,8 +142,8 @@ gnostic b a = a `runReader` freeze b
 
 data CompilerOpts = CompilerOpts
   { _wireBends         :: Int
-  , _rowSize           :: Int
   , _concurrentThreads :: Int
+  , _rowSize           :: Integer
   }
 
 type EnvT m = StateT CompilerOpts m
@@ -176,7 +178,7 @@ instance MonadIO LST where
 
 instance MonadFork LST where
   forkExec (LST m) = do
-    tech <- LST $ lift Reader.ask
+    tech <- LST $ lift ask
     opts <- LST get
     fmap liftIO . liftIO
       . withConcurrentOutput
@@ -203,9 +205,6 @@ runLSC opts b
 
 liftSMT :: Symbolic a -> LSC a
 liftSMT = lift . LST . lift . lift
-
-ask :: LSC Technology
-ask = lift $ LST $ lift Reader.ask
 
 
 type Path = [Component Layer Integer]
@@ -333,7 +332,7 @@ instance Default Pin where
 makeFieldsNoPrefix ''CompilerOpts
 
 instance Default CompilerOpts where
-  def = CompilerOpts 2 30000 1
+  def = CompilerOpts 2 1 30000
 
 
 makeFieldsNoPrefix ''Technology
@@ -348,14 +347,17 @@ lookupDimensions g tech = view dims <$> lookup (g ^. identifier) (tech ^. stdCel
 lambda :: Technology -> Integer
 lambda tech = ceiling $ view scaleFactor tech * view featureSize tech
 
-divideArea :: Foldable f => f a -> Technology -> [Integer]
-divideArea xs tech = take n $ x : iterate (join (+)) (tech ^. rowSize)
+divideArea :: Foldable f => f a -> LSC [Integer]
+divideArea xs = do
+  size <- view rowSize <$> environment
+  tech <- technology
+  let x = tech ^. standardPin . _1 & (* 2)
+  pure $ take n $ x : iterate (join (+)) size
   where n = ceiling $ sqrt $ fromIntegral $ length xs
-        x = tech ^. standardPin . _1 . to (* 2)
 
 debug :: [String] -> LSC ()
 debug msg = do
-  enabled <- view enableDebug <$> ask
+  enabled <- view enableDebug <$> technology
   when enabled $ liftIO $ do
     timestamp <- show . round <$> getPOSIXTime
     errorConcurrent $ unlines [unwords $ timestamp : "-" : msg]

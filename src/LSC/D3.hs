@@ -109,7 +109,7 @@ eval tree
   = unzip
   $ take 32
   $ takeWhile ( \ (D3Dag _ _ xs, _) -> not $ null xs)
-  $ iterate (\ (l, ls) -> let s = cut ls l in (s, leaves s)) (tree, leaves tree)
+  $ iterate (\ (x, xs) -> let s = cut xs x in (s, leaves s)) (tree, leaves tree)
 
 cut :: Leaves -> D3Dag -> D3Dag
 cut ls (D3Dag n k xs)

@@ -17,14 +17,14 @@ import qualified Data.Vector as Vector
 import Prelude hiding (lookup)
 
 import BLIF.Syntax
-import LSC.Types hiding (ask)
+import LSC.Types
 
 
 fromBLIF :: BLIF -> Gnostic NetGraph
 fromBLIF (BLIF []) = pure def
 fromBLIF (BLIF (Model name inputs outputs clocks commands : submodels)) = do
 
-  technology <- ask
+  tech <- ask
 
   let nodes = Vector.fromList
         [ gate
@@ -33,14 +33,14 @@ fromBLIF (BLIF (Model name inputs outputs clocks commands : submodels)) = do
             & gnd .~ view gnd comp
         | i    <- [0.. ]
         | gate <- join $ toGates <$> commands
-        , comp <- maybeToList $ lookup (gate ^. identifier) (technology ^. stdCells)
+        , comp <- maybeToList $ lookup (gate ^. identifier) (tech ^. stdCells)
         ]
 
   let edges = fromListWith mappend
         [ (net, Net net mempty (singleton gate [pin]))
         | gate <- toList nodes
         , (contact, net) <- assocs $ gate ^. wires
-        , com <- maybeToList $ lookup (gate ^. identifier) (technology ^. stdCells)
+        , com <- maybeToList $ lookup (gate ^. identifier) (tech ^. stdCells)
         , pin <- maybeToList $ lookup contact (com ^. pins)
         ]
 

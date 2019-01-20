@@ -90,7 +90,7 @@ placement area ring rim = do
 
   outer ring `inside` area
 
-  d <- literal . lambda <$> ask
+  d <- literal . lambda <$> technology
   sequence_
     [ liftSMT $ constrain
           $ path ^. l .== area ^. l
@@ -151,7 +151,7 @@ freeGatePolygon gate = do
     <&> integrate metal2
     <&> integrate metal3
 
-  dimensions <- lookupDimensions gate <$> ask
+  dimensions <- lookupDimensions gate <$> technology
   for_ dimensions $ \ (w, h) -> liftSMT $ constrain
       $ view r path - view l path .== literal w
     .&& view t path - view b path .== literal h
@@ -163,7 +163,7 @@ freeWirePolygon = do
 
   path <- freeRectangle
 
-  (w, h) <- view standardPin <$> ask
+  (w, h) <- view standardPin <$> technology
 
   liftSMT $ constrain
       $  width path .== literal w
@@ -176,7 +176,7 @@ freePinPolygon pin = do
 
   path <- freeRectangle
 
-  (w, h) <- view standardPin <$> ask
+  (w, h) <- view standardPin <$> technology
 
   liftSMT $ constrain
       $  width path .== literal w
@@ -186,7 +186,7 @@ freePinPolygon pin = do
 
 
 inside i o = do
-  d <- lambda <$> ask
+  d <- lambda <$> technology
   liftSMT $ constrain
       $ view l i - view l o .> literal d
     .&& view b i - view b o .> literal d
@@ -195,7 +195,7 @@ inside i o = do
 
 
 disjoint p q = do
-  d <- lambda <$> ask
+  d <- lambda <$> technology
   liftSMT $ constrain
       $ sAnd [ x ./= y | x <- view z p, y <- view z q ]
     .|| view l q - view r p .> literal d
@@ -273,8 +273,8 @@ pinComponent p s = p
 
 powerUpAndGround nodes edges = do
 
-  (w, h) <- view standardPin <$> ask
-  rows <- divideArea nodes <$> ask
+  (w, h) <- view standardPin <$> technology
+  rows <- divideArea nodes
 
   grid <- sequence
     [ freeRectangle

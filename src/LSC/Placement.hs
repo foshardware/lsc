@@ -10,8 +10,8 @@ import LSC.Types
 placeEasy :: NetGraph -> LSC NetGraph
 placeEasy netlist = do
 
-  offset <- (4 *) . fst . view standardPin <$> ask
-  rows  <- fmap (+ offset) . init . divideArea (netlist ^. gates) <$> ask
+  offset <- (4 *) . fst . view standardPin <$> technology
+  rows  <- fmap (+ offset) . init <$> divideArea (netlist ^. gates)
 
   let pivot = div (netlist ^. gates & length & succ) (length rows)
 
@@ -32,9 +32,9 @@ alternate _ = []
 sections :: Gate -> StateT (Integer, [Either Integer Integer]) LSC Gate
 sections gate = do
 
-  offset <- (2 *) . fst . view standardPin <$> lift ask
+  offset <- (2 *) . fst . view standardPin <$> lift technology
 
-  (w, h) <- maybe (0, 0) id . lookupDimensions gate <$> lift ask
+  (w, h) <- maybe (0, 0) id . lookupDimensions gate <$> lift technology
 
   (y, row : rows) <- get
 
