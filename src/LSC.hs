@@ -5,8 +5,11 @@ module LSC where
 import Control.Arrow
 import Control.Category
 import Control.Exception
-import Control.Monad.IO.Class
-import Prelude hiding ((.))
+import Control.Monad
+import Control.Monad.Trans
+import Control.Monad.Codensity
+import Control.Monad.Parallel
+import Prelude hiding ((.), id)
 
 import LSC.Placement
 import LSC.Routing
@@ -14,9 +17,10 @@ import LSC.Types
 
 
 stage1 :: Int -> Compiler NetGraph
-stage1 _
-    = route
-  <+> route
+stage1 _ = id
+  >>> route &&& route
+  >>> route *** route
+  >>^ fst
 
 
 route :: Compiler NetGraph
@@ -26,28 +30,40 @@ place :: Compiler NetGraph
 place = LS placeEasy
 
 
-compiler :: Compiler a -> a -> LSC a
-compiler (LS a) = a
-
 type Compiler a = LS a a
 
-newtype LS a b = LS (a -> LSC b)
+newtype LS a b = LS { compiler :: a -> LSC b }
 
 instance Category LS where
-  LS b . LS a = LS $ \ x -> do
-    t <- thaw <$> ask
-    liftIO $ runLSC t . b =<< runLSC t (a x)
+  id = LS pure
+  LS m . LS k = LS $ \ x -> do
+    s <- thaw <$> ask
+    liftIO $ runLSC s . m =<< runLSC s (k x)
 
 instance Arrow LS where
   arr f = LS $ pure . f
-  first (LS a) = LS $ \ (b, d) -> (, d) <$> a b
+
+  first (LS k) = LS $ \ (x, y) -> (, y) <$> k x
+
+  LS k &&& LS m = LS $ \ x -> do
+    s <- thaw <$> ask
+    lift $ bindM2 (\ r1 r2 -> pure (r1, r2))
+      (lowerCodensity $ liftIO $ runLSC s $ k x)
+      (lowerCodensity $ liftIO $ runLSC s $ m x)
+
+  LS k *** LS m = LS $ \ (x, y) -> do
+    s <- thaw <$> ask
+    lift $ bindM2 (\ r1 r2 -> pure (r1, r2))
+      (lowerCodensity $ liftIO $ runLSC s $ k x)
+      (lowerCodensity $ liftIO $ runLSC s $ m y)
+
 
 instance ArrowZero LS where
   zeroArrow = throw $ AssertionFailed mempty
 
 instance ArrowPlus LS where
-  LS a <+> LS b = LS $ \ x -> do
-    t <- thaw <$> ask
+  LS k <+> LS m = LS $ \ x -> do
+    s <- thaw <$> ask
     liftIO $
-      (runLSC t $ a x) `catch` \ (AssertionFailed _) ->
-      (runLSC t $ b x)
+      (runLSC s $ k x) `catch` \ (AssertionFailed _) ->
+      (runLSC s $ m x)
