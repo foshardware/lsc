@@ -141,33 +141,23 @@ gnostic b a = a `runReader` freeze b
 
 
 data CompilerOpts = CompilerOpts
-  { _timestamp   :: Int
-  , _jogs        :: Int
+  { _jogs        :: Int
   , _cores       :: Int
   , _rowSize     :: Integer
   , _halt        :: Int
   , _enableDebug :: Bool
   }
 
-type EnvT m = StateT CompilerOpts m
+type EnvT m = ReaderT CompilerOpts m
 
 environment :: LSC CompilerOpts
-environment = lift $ LST get
+environment = lift $ LST ask
 
-overwrite :: CompilerOpts -> LSC ()
-overwrite = lift . LST . put
-
-setEnv :: Simple Setter CompilerOpts a -> a -> LSC ()
-setEnv f = lift . LST . modify . set f
-
-modifyEnv :: Simple Setter CompilerOpts a -> (a -> a) -> LSC ()
-modifyEnv f = lift . LST . modify . over f
-
-runEnvT :: Monad m => EnvT m r -> CompilerOpts -> m (r, CompilerOpts)
-runEnvT = runStateT
+runEnvT :: Monad m => EnvT m r -> CompilerOpts -> m r
+runEnvT = evalEnvT
 
 evalEnvT :: Monad m => EnvT m r -> CompilerOpts -> m r
-evalEnvT = evalStateT
+evalEnvT = runReaderT
 
 
 type LSC = Codensity LST
@@ -191,7 +181,7 @@ instance MonadIO LST where
 instance MonadFork LST where
   forkExec (LST m) = do
     tech <- LST $ lift ask
-    opts <- LST get
+    opts <- LST ask
     fmap liftIO . liftIO
       . withConcurrentOutput
       . forkExec
@@ -207,7 +197,7 @@ instance MonadParallel LST where
     f a b
 
 
-runLSC :: CompilerOpts -> Bootstrap () -> LSC a -> IO (a, CompilerOpts)
+runLSC :: CompilerOpts -> Bootstrap () -> LSC a -> IO a
 runLSC opts tech
   = runSMT
   . flip runGnosticT (freeze tech)
@@ -216,7 +206,7 @@ runLSC opts tech
   . lowerCodensity
 
 evalLSC :: CompilerOpts -> Bootstrap () -> LSC a -> IO a
-evalLSC opts tech lsc = fst <$> runLSC opts tech lsc
+evalLSC = runLSC
 
 
 liftSMT :: Symbolic a -> LSC a
@@ -347,24 +337,9 @@ instance Default Pin where
 
 makeFieldsNoPrefix ''CompilerOpts
 
-instance Semigroup CompilerOpts where
-  u <> v | u ^. timestamp > v ^. timestamp = u
-  _ <> v = v
-
-instance Monoid CompilerOpts where
-  mempty = def
-  mappend = (<>)
-
 instance Default CompilerOpts where
-  def = CompilerOpts 0 1 1 20000 (16 * 1000000) True
+  def = CompilerOpts 1 1 20000 (16 * 1000000) True
 
-
-update :: LSC ()
-update = do
-  u <- view timestamp <$> environment
-  v <- round <$> liftIO getPOSIXTime
-  when (v - u > 1) $ do
-    debug ["update environment"]
 
 debug :: Foldable f => f String -> LSC ()
 debug msg = do

@@ -12,8 +12,6 @@ import Data.Either (rights)
 import Data.Foldable (for_)
 import Data.Default
 
-import Data.Time.Clock.POSIX
-
 import qualified Data.ByteString.Lazy.Char8 as Bytes
 
 import qualified Data.Text.IO as Text
@@ -173,12 +171,10 @@ args =
 
 compilerOpts :: [Flag] -> IO CompilerOpts
 compilerOpts xs = do
-  time <- round <$> getPOSIXTime
   let j = rights [ parse decimal "-j" v | (k, v) <- xs, k == Cores ]
   pure $ def
     & cores       .~ last (1 : j)
     & enableDebug .~ elem Debug (fst <$> xs)
-    & timestamp   .~ time
 
 
 compilerFlags :: [String] -> IO ([Flag], [String])

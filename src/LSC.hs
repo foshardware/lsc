@@ -22,7 +22,7 @@ import LSC.Types
 stage1 :: Compiler NetGraph
 stage1 = zeroArrow
   <+> route
-  <+> (increase rowSize 10000 >>> route)
+  <+> (env rowSize (+ 10000) route)
 
 
 route :: Compiler NetGraph
@@ -30,10 +30,6 @@ route = ls routeSat
 
 place :: Compiler NetGraph
 place = ls placeEasy
-
-
-increase :: Integral n => Simple Setter CompilerOpts n -> Int -> Compiler a
-increase f n = ls_ $ modifyEnv f (+ fromIntegral n)
 
 
 type Compiler a = LS a a
@@ -44,6 +40,16 @@ ls_ f = ls $ \ x -> x <$ f
 ls :: (a -> LSC a) -> Compiler a
 ls = LS
 
+env_ :: Simple Setter CompilerOpts o -> o -> Compiler a -> Compiler a
+env_ setter o = env setter $ const o
+
+env :: Simple Setter CompilerOpts o -> (o -> o) -> Compiler a -> Compiler a
+env setter f (LS k) = ls $ \ x -> do
+  o <- environment
+  let p = o & setter %~ f
+  lift $ LST $ lift $ flip runEnvT p $ unLST $ lowerCodensity $ k x
+
+
 newtype LS a b = LS { compiler :: a -> LSC b }
 
 instance Category LS where
@@ -51,12 +57,8 @@ instance Category LS where
   LS m . LS k = LS $ \ x -> do
     s <- thaw <$> technology
     o <- environment
-    (x', s') <- liftIO $ runLSC o s $ k x
-    overwrite s'
-    p <- update *> environment
-    (y', t') <- liftIO $ runLSC p s $ m x'
-    y' <$ overwrite t'
-
+    y <- liftIO $ runLSC o s $ k x
+    liftIO $ runLSC o s $ m y
 
 instance Arrow LS where
   arr f = LS $ pure . f
@@ -65,22 +67,17 @@ instance Arrow LS where
 
   LS k &&& LS m = LS $ \ x -> do
     s <- thaw <$> technology
-    o <- update *> environment
-    lift $ bindM2 combineOpts
+    o <- environment
+    lift $ bindM2 (\ r1 r2 -> pure (r1, r2))
       (lowerCodensity $ liftIO $ runLSC o s $ k x)
       (lowerCodensity $ liftIO $ runLSC o s $ m x)
 
   LS k *** LS m = LS $ \ (x, y) -> do
     s <- thaw <$> technology
-    o <- update *> environment
-    lift $ bindM2 combineOpts
+    o <- environment
+    lift $ bindM2 (\ r1 r2 -> pure (r1, r2))
       (lowerCodensity $ liftIO $ runLSC o s $ k x)
       (lowerCodensity $ liftIO $ runLSC o s $ m y)
-
-combineOpts :: (a, CompilerOpts) -> (b, CompilerOpts) -> LST (a, b)
-combineOpts (r1, s1) (r2, s2) = do
-  lowerCodensity $ overwrite (s1 <> s2)
-  pure (r1, r2)
 
 
 instance ArrowZero LS where
@@ -89,11 +86,10 @@ instance ArrowZero LS where
 instance ArrowPlus LS where
   LS k <+> LS m = LS $ \ x -> do
     s <- thaw <$> technology
-    o <- update *> environment
-    (x', s') <- liftIO $ do
+    o <- environment
+    liftIO $ do
       runLSC o s (k x) `catch` \ (SomeException e) ->
-        runLSC o s $ update *> debug [displayException e] *> m x
-    x' <$ overwrite s'
+        runLSC o s $ debug [displayException e] *> m x
 
 
 instance ArrowChoice LS where
