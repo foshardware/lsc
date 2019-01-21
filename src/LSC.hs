@@ -53,24 +53,22 @@ env setter f (LS k) = ls $ \ x -> do
 newtype LS a b = LS { compiler :: a -> LSC b }
 
 instance Category LS where
+
   id = LS pure
+
   LS m . LS k = LS $ \ x -> do
     s <- thaw <$> technology
     o <- environment
     y <- liftIO $ runLSC o s $ k x
     liftIO $ runLSC o s $ m y
 
+
 instance Arrow LS where
+
   arr f = LS $ pure . f
 
-  first (LS k) = LS $ \ (x, y) -> (, y) <$> k x
-
-  LS k &&& LS m = LS $ \ x -> do
-    s <- thaw <$> technology
-    o <- environment
-    lift $ bindM2 (\ r1 r2 -> pure (r1, r2))
-      (lowerCodensity $ liftIO $ runLSC o s $ k x)
-      (lowerCodensity $ liftIO $ runLSC o s $ m x)
+  first  (LS k) = LS $ \ (x, y) -> (, y) <$> k x
+  second (LS k) = LS $ \ (x, y) -> (x, ) <$> k y
 
   LS k *** LS m = LS $ \ (x, y) -> do
     s <- thaw <$> technology
