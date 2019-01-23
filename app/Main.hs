@@ -63,14 +63,6 @@ program = do
       liftIO $ hPutStrLn stderr $ versionString
       exit
 
-  -- run tests
-  when (arg Test)
-    $ do
-      liftIO $ withCreateProcess (proc "lsc-test" []) { std_out = CreatePipe }
-        $ \ _ hout _ _ -> for_ hout
-        $ \ out -> Pipe.hGetContents out >>= Pipe.hPutStr stdout
-      exit
-
   -- generate registers
   when (and $ arg <$> [Register, Lef])
     $ do
@@ -138,7 +130,6 @@ data FlagKey
   | Compile
   | Debug
   | Cores
-  | Test
   | Register
   | Rtl
   | Verilog
@@ -160,7 +151,6 @@ args =
     , Option ['x']      ["exline"]
         (OptArg ((Exline, ) . maybe "top" id)   "component")        "just exline and exit"
 
-    , Option ['t']      ["test"]       (NoArg  (Test, mempty))      "run tests and exit"
     , Option ['j']      ["cores"]      (ReqArg (Cores,  ) "count")  "use concurrency"
 
     , Option ['J']      ["json"]       (NoArg  (Json, mempty))      "export json"

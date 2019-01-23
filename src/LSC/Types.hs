@@ -8,6 +8,7 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE FunctionalDependencies #-}
 {-# LANGUAGE DuplicateRecordFields #-}
+{-# LANGUAGE DeriveFunctor, DeriveFoldable, DeriveTraversable #-}
 
 
 module LSC.Types where
@@ -230,7 +231,7 @@ data Component l a
   = Rect    { _l :: a, _b :: a, _r :: a, _t :: a }
   | Via     { _l :: a, _b :: a, _r :: a, _t :: a, _z :: [l] }
   | Layered { _l :: a, _b :: a, _r :: a, _t :: a, _z :: [l] }
-  deriving (Eq, Show)
+  deriving (Eq, Functor, Foldable, Traversable, Show)
 
 
 makeFieldsNoPrefix ''Component
@@ -249,13 +250,13 @@ setLayers layer (Via     x1 y1 x2 y2 _) = Via     x1 y1 x2 y2 (toList layer)
 setLayers layer (Layered x1 y1 x2 y2 _) = Layered x1 y1 x2 y2 (toList layer)
 
 
-instance Functor (Component l) where
-  fmap f (Rect    x1 y1 x2 y2)       = Rect    (f x1) (f y1) (f x2) (f y2)
-  fmap f (Via     x1 y1 x2 y2 layer) = Via     (f x1) (f y1) (f x2) (f y2) layer
-  fmap f (Layered x1 y1 x2 y2 layer) = Layered (f x1) (f y1) (f x2) (f y2) layer
+-- instance Functor (Component l) where
+--  fmap f (Rect    x1 y1 x2 y2)       = Rect    (f x1) (f y1) (f x2) (f y2)
+--  fmap f (Via     x1 y1 x2 y2 layer) = Via     (f x1) (f y1) (f x2) (f y2) layer
+--  fmap f (Layered x1 y1 x2 y2 layer) = Layered (f x1) (f y1) (f x2) (f y2) layer
 
-instance Foldable (Component l) where
-  foldMap f p = foldMap f [p ^. l, p ^. b, p ^. r, p ^. t]
+-- instance Foldable (Component l) where
+--  foldMap f p = foldMap f [p ^. l, p ^. b, p ^. r, p ^. t]
 
 instance Default a => Default (Component l a) where
   def = Rect def def def def
