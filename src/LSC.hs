@@ -4,6 +4,7 @@
 module LSC where
 
 import Control.Arrow
+import Control.Arrow.Algebraic
 import Control.Category
 import Control.Exception
 import Control.Lens
@@ -19,38 +20,41 @@ import LSC.Routing
 import LSC.Types
 
 
-stage1 :: Compiler NetGraph
+stage1 :: Compiler NetGraph NetGraph
 stage1 = zeroArrow
   <+> route
-  <+> (env rowSize (+ 10000) route)
+  <+> env rowSize (+ 10000) route
 
 
-route :: Compiler NetGraph
+route :: Compiler NetGraph NetGraph
 route = ls routeSat
 
-place :: Compiler NetGraph
+place :: Compiler NetGraph NetGraph
 place = ls placeEasy
 
 
-type Compiler a = LS a a
+type Compiler a b = LSR LS a b
 
-ls_ :: LSC () -> Compiler a
-ls_ f = ls $ \ x -> x <$ f
+compiler :: Compiler a b -> a -> LSC b
+compiler = unLS . algebraic . unLSR
 
-ls :: (a -> LSC a) -> Compiler a
-ls = LS
+ls_ :: LSC b -> Compiler a b
+ls_ = ls . const
 
-env_ :: Simple Setter CompilerOpts o -> o -> Compiler a -> Compiler a
+ls :: (a -> LSC b) -> Compiler a b
+ls = LSR . Lift . LS
+
+env_ :: Simple Setter CompilerOpts o -> o -> Compiler a b -> Compiler a b
 env_ setter o = env setter $ const o
 
-env :: Simple Setter CompilerOpts o -> (o -> o) -> Compiler a -> Compiler a
-env setter f (LS k) = ls $ \ x -> do
+env :: Simple Setter CompilerOpts o -> (o -> o) -> Compiler a b -> Compiler a b
+env setter f k = ls $ \ x -> do
   o <- environment
   let p = o & setter %~ f
-  lift $ LST $ lift $ flip runEnvT p $ unLST $ lowerCodensity $ k x
+  lift $ LST $ lift $ flip runEnvT p $ unLST $ lowerCodensity $ compiler k x
 
 
-newtype LS a b = LS { compiler :: a -> LSC b }
+newtype LS a b = LS { unLS :: a -> LSC b }
 
 instance Category LS where
 
@@ -98,3 +102,32 @@ instance ArrowChoice LS where
 
 instance ArrowApply LS where
   app = LS $ \ (LS k, x) -> k x
+
+
+newtype LSR ls a b = LSR { unLSR :: Algebraic ls a b }
+
+reduce :: Arrow ls => Algebraic ls a b -> Algebraic ls a b
+reduce = mapReduce
+
+instance Arrow ls => Category (LSR ls) where
+  id = LSR id
+  LSR f . LSR g = LSR $ f . g
+
+instance Arrow ls => Arrow (LSR ls) where
+
+  arr f = LSR (arr f)
+
+  first  (LSR f) = LSR (first f)
+  second (LSR f) = LSR (second f)
+
+  LSR f *** LSR g = LSR (f *** g)
+
+
+instance ArrowPlus ls => ArrowZero (LSR ls) where
+  zeroArrow = LSR zeroArrow
+
+instance ArrowPlus ls => ArrowPlus (LSR ls) where
+  LSR f <+> LSR g = LSR (reduce f <+> reduce g)
+
+instance ArrowChoice ls => ArrowChoice (LSR ls) where
+  LSR f +++ LSR g = LSR (reduce f +++ reduce g)
