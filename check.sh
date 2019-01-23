@@ -1,4 +1,8 @@
 #!/bin/sh
 
-stack build --profile --ghc-options=-fprof-auto && stack test
+
+for i in lsc arrowgant
+do
+  stack test --profile --ghc-options=-fprof-auto $i
+done
 
