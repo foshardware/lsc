@@ -1,0 +1,61 @@
+name:                lsc
+version:             0.1.2.0
+github:              "foshardware/lsc"
+license:             GPL-3
+author:              "Andreas Westerwick"
+maintainer:          "westerwick@pconas.de"
+copyright:           "2019 Andreas Westerwick"
+
+extra-source-files:
+- README.md
+- ChangeLog.md
+
+dependencies:
+- base >= 4.7 && < 5
+- aeson
+- array
+- arrowgant
+- blaze-svg
+- bytestring
+- concurrent-output
+- containers
+- data-default
+- kan-extensions
+- monad-parallel
+- lens
+- mtl
+- parsec
+- process
+- sbv
+- text
+- time
+- transformers
+- vector
+- vector-algorithms
+- verilog
+
+
+library:
+  source-dirs: src
+
+executables:
+  lsc:
+    main:                Main.hs
+    source-dirs:         app
+    ghc-options:
+    - -threaded
+    - -rtsopts
+    - -with-rtsopts=-N
+    dependencies:
+    - lsc
+
+tests:
+  lsc-test:
+    main:                Spec.hs
+    source-dirs:         test
+    ghc-options:
+    - -threaded
+    - -rtsopts
+    - -with-rtsopts=-N
+    dependencies:
+    - lsc

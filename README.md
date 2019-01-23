@@ -12,6 +12,5 @@
 
 ### Tests
 
-`lsc -t   # requires lsc-test in $PATH`  
-`lsc-test`  
+`stack test`  
 

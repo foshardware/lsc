@@ -36,18 +36,20 @@ sections gate = do
 
   (w, h) <- maybe (0, 0) id . lookupDimensions gate <$> lift technology
 
-  (y, row : rows) <- get
+  (y, rs) <- get
 
-  case row of
+  case rs of
 
-    Left x -> do
+    [] -> pure gate
+
+    Left x : rows -> do
 
       put (y - h - offset, rows)
 
       pure $ gate
         & geometry .~ [Layered x (y - h) (x + w) y [Metal3, Metal2]]
 
-    Right x -> do
+    Right x : rows -> do
 
       put (y + h + offset, rows)
 

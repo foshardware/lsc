@@ -4,5 +4,5 @@ dist/
 *.prof
 
 .stack-work/
-
+lsc.cabal
 rocket-chip/
