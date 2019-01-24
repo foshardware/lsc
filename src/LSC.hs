@@ -20,34 +20,34 @@ import LSC.Routing
 import LSC.Types
 
 
-stage1 :: Compiler NetGraph NetGraph
+stage1 :: Compiler NetGraph
 stage1 = zeroArrow
   <+> route
   <+> env rowSize (+ 10000) route
 
 
-route :: Compiler NetGraph NetGraph
+route :: Compiler NetGraph
 route = ls routeSat
 
-place :: Compiler NetGraph NetGraph
+place :: Compiler NetGraph
 place = ls placeEasy
 
 
-type Compiler a b = LSR LS a b
+type Compiler a = LSR LS a a
 
-compiler :: Compiler a b -> a -> LSC b
-compiler = unLS . algebraic . unLSR
+compiler :: Compiler a -> a -> LSC a
+compiler = unLS . reduce
 
-ls_ :: LSC b -> Compiler a b
-ls_ = ls . const
+ls_ :: LSC b -> Compiler a
+ls_ f = ls (<$ f)
 
-ls :: (a -> LSC b) -> Compiler a b
+ls :: (a -> LSC a) -> Compiler a
 ls = LSR . Lift . LS
 
-env_ :: Simple Setter CompilerOpts o -> o -> Compiler a b -> Compiler a b
+env_ :: Simple Setter CompilerOpts o -> o -> Compiler a -> Compiler a
 env_ setter o = env setter $ const o
 
-env :: Simple Setter CompilerOpts o -> (o -> o) -> Compiler a b -> Compiler a b
+env :: Simple Setter CompilerOpts o -> (o -> o) -> Compiler a -> Compiler a
 env setter f k = ls $ \ x -> do
   o <- environment
   let p = o & setter %~ f
@@ -106,12 +106,12 @@ instance ArrowApply LS where
 
 newtype LSR ls a b = LSR { unLSR :: Algebraic ls a b }
 
-reduce :: Arrow ls => Algebraic ls a b -> Algebraic ls a b
-reduce = mapReduce
+reduce :: Arrow ls => LSR ls a b -> ls a b
+reduce = algebraic . unLSR
 
 instance Arrow ls => Category (LSR ls) where
   id = LSR id
-  LSR f . LSR g = LSR $ f . g
+  LSR f . LSR g = LSR (f . g)
 
 instance Arrow ls => Arrow (LSR ls) where
 
@@ -127,7 +127,7 @@ instance ArrowPlus ls => ArrowZero (LSR ls) where
   zeroArrow = LSR zeroArrow
 
 instance ArrowPlus ls => ArrowPlus (LSR ls) where
-  LSR f <+> LSR g = LSR (reduce f <+> reduce g)
+  LSR f <+> LSR g = LSR (mapReduce f <+> mapReduce g)
 
 instance ArrowChoice ls => ArrowChoice (LSR ls) where
-  LSR f +++ LSR g = LSR (reduce f +++ reduce g)
+  LSR f +++ LSR g = LSR (mapReduce f +++ mapReduce g)
