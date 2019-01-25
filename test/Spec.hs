@@ -61,7 +61,7 @@ quadCore = do
   result1 <- readMVar counter
   threadDelay $ time 2
   result2 <- readMVar counter
-  assertBool "two at a time" $ result1 == 4 && result2 == 6
+  assertBool "four at a time" $ result1 == 4 && result2 == 6
 
 
 incrementWithDelay :: Int -> MVar Int -> Compiler ()
