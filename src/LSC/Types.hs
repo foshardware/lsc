@@ -352,7 +352,7 @@ rtsWorkers = do
     then pure Singleton
     else do
       (in_, out) <- newChan
-      sequence_ $ replicate n $ writeChan in_ ()
+      sequence_ $ replicate (n - 1) $ writeChan in_ ()
       pure $ Workers (in_, out)
 
 
