@@ -6,12 +6,12 @@ module LSC where
 import Control.Arrow
 import Control.Arrow.Algebraic
 import Control.Category
+import Control.Concurrent.Async
 import Control.Exception
 import Control.Lens
 import Control.Monad
 import Control.Monad.Trans
 import Control.Monad.Codensity
-import Control.Monad.Parallel
 import Data.Semigroup
 import Prelude hiding ((.), id)
 
@@ -77,9 +77,12 @@ instance Arrow LS where
   LS k *** LS m = LS $ \ (x, y) -> do
     s <- thaw <$> technology
     o <- environment
-    lift $ bindM2 (\ r1 r2 -> pure (r1, r2))
-      (lowerCodensity $ liftIO $ runLSC o s $ k x)
-      (lowerCodensity $ liftIO $ runLSC o s $ m y)
+    case o ^. workers of
+      Singleton -> (,) <$> k x <*> m y
+      Workers _ -> do
+        liftIO $ concurrently
+          (runLSC o s (popWorker *> k x) `finally` runLSC o s pushWorker)
+          (runLSC o s (m y))
 
 
 instance ArrowZero LS where

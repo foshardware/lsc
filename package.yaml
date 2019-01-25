@@ -15,13 +15,13 @@ dependencies:
 - aeson
 - array
 - arrowgant
+- async
 - blaze-svg
 - bytestring
 - concurrent-output
 - containers
 - data-default
 - kan-extensions
-- monad-parallel
 - lens
 - mtl
 - parsec
@@ -30,6 +30,7 @@ dependencies:
 - text
 - time
 - transformers
+- unagi-chan
 - vector
 - vector-algorithms
 - verilog

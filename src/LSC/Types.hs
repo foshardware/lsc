@@ -13,6 +13,9 @@
 
 module LSC.Types where
 
+import Control.Concurrent (getNumCapabilities)
+import Control.Concurrent.Chan.Unagi
+import Control.Exception
 import Control.Lens hiding (element)
 import Data.Default
 import Data.Foldable
@@ -23,7 +26,6 @@ import Data.Text (Text)
 import Data.Vector (Vector)
 
 import Control.Monad.Codensity
-import Control.Monad.Parallel (MonadFork(..), MonadParallel(..))
 import Control.Monad.Reader
 import Control.Monad.State
 
@@ -143,21 +145,28 @@ gnostic b a = a `runReader` freeze b
 
 data CompilerOpts = CompilerOpts
   { _jogs        :: Int
-  , _cores       :: Int
   , _rowSize     :: Integer
   , _halt        :: Int
   , _enableDebug :: Bool
+  , _workers     :: Workers
   }
 
-type EnvT m = ReaderT CompilerOpts m
+data Workers
+  = Singleton
+  | Workers (InChan (), OutChan ())
+
+
+type Environment = CompilerOpts
+
+type EnvT m = ReaderT Environment m
 
 environment :: LSC CompilerOpts
 environment = lift $ LST ask
 
-runEnvT :: Monad m => EnvT m r -> CompilerOpts -> m r
+runEnvT :: Monad m => EnvT m r -> Environment -> m r
 runEnvT = evalEnvT
 
-evalEnvT :: Monad m => EnvT m r -> CompilerOpts -> m r
+evalEnvT :: Monad m => EnvT m r -> Environment -> m r
 evalEnvT = runReaderT
 
 
@@ -179,26 +188,8 @@ instance Monad LST where
 instance MonadIO LST where
   liftIO = LST . liftIO
 
-instance MonadFork LST where
-  forkExec (LST m) = do
-    tech <- LST $ lift ask
-    opts <- LST ask
-    fmap liftIO . liftIO
-      . withConcurrentOutput
-      . forkExec
-      . runSMT
-      . flip runGnosticT tech
-      $ evalEnvT m opts
 
-instance MonadParallel LST where
-  bindM2 f ma mb = do
-    wb <- forkExec mb
-    a <- ma
-    b <- wb
-    f a b
-
-
-runLSC :: CompilerOpts -> Bootstrap () -> LSC a -> IO a
+runLSC :: Environment -> Bootstrap () -> LSC a -> IO a
 runLSC opts tech
   = runSMT
   . flip runGnosticT (freeze tech)
@@ -206,7 +197,7 @@ runLSC opts tech
   . unLST
   . lowerCodensity
 
-evalLSC :: CompilerOpts -> Bootstrap () -> LSC a -> IO a
+evalLSC :: Environment -> Bootstrap () -> LSC a -> IO a
 evalLSC = runLSC
 
 
@@ -249,14 +240,6 @@ setLayers layer (Rect    x1 y1 x2 y2)   = Layered x1 y1 x2 y2 (toList layer)
 setLayers layer (Via     x1 y1 x2 y2 _) = Via     x1 y1 x2 y2 (toList layer)
 setLayers layer (Layered x1 y1 x2 y2 _) = Layered x1 y1 x2 y2 (toList layer)
 
-
--- instance Functor (Component l) where
---  fmap f (Rect    x1 y1 x2 y2)       = Rect    (f x1) (f y1) (f x2) (f y2)
---  fmap f (Via     x1 y1 x2 y2 layer) = Via     (f x1) (f y1) (f x2) (f y2) layer
---  fmap f (Layered x1 y1 x2 y2 layer) = Layered (f x1) (f y1) (f x2) (f y2) layer
-
--- instance Foldable (Component l) where
---  foldMap f p = foldMap f [p ^. l, p ^. b, p ^. r, p ^. t]
 
 instance Default a => Default (Component l a) where
   def = Rect def def def def
@@ -339,7 +322,7 @@ instance Default Pin where
 makeFieldsNoPrefix ''CompilerOpts
 
 instance Default CompilerOpts where
-  def = CompilerOpts 1 1 20000 (16 * 1000000) True
+  def = CompilerOpts 1 20000 (16 * 1000000) True Singleton
 
 
 debug :: Foldable f => f String -> LSC ()
@@ -348,6 +331,29 @@ debug msg = do
   when enabled $ liftIO $ do
     time <- show . round <$> getPOSIXTime
     errorConcurrent $ unlines [unwords $ time : "->" : toList msg]
+
+
+pushWorker :: LSC ()
+pushWorker = do
+  opts <- environment
+  case opts ^. workers of
+    Workers (in_, _) -> liftIO $ writeChan in_ ()
+
+popWorker :: LSC ()
+popWorker = do
+  opts <- environment
+  case opts ^. workers of
+    Workers (_, out) -> liftIO $ readChan out
+
+rtsWorkers :: IO Workers
+rtsWorkers = do
+  n <- getNumCapabilities
+  if n < 2
+    then pure Singleton
+    else do
+      (in_, out) <- newChan
+      sequence_ $ replicate n $ writeChan in_ ()
+      pure $ Workers (in_, out)
 
 
 makeFieldsNoPrefix ''Technology

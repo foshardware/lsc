@@ -129,7 +129,6 @@ data FlagKey
   | Exline
   | Compile
   | Debug
-  | Cores
   | Register
   | Rtl
   | Verilog
@@ -151,8 +150,6 @@ args =
     , Option ['x']      ["exline"]
         (OptArg ((Exline, ) . maybe "top" id)   "component")        "just exline and exit"
 
-    , Option ['j']      ["cores"]      (ReqArg (Cores,  ) "count")  "use concurrency"
-
     , Option ['J']      ["json"]       (NoArg  (Json, mempty))      "export json"
     , Option ['u']      ["verilog"]    (ReqArg (Verilog, ) "FILE")  "verilog file"
     , Option ['r']      ["register"]   (ReqArg (Register, ) "size in bits")  "generate register"
@@ -161,10 +158,10 @@ args =
 
 compilerOpts :: [Flag] -> IO CompilerOpts
 compilerOpts xs = do
-  let j = rights [ parse decimal "-j" v | (k, v) <- xs, k == Cores ]
+  ws <- rtsWorkers
   pure $ def
-    & cores       .~ last (1 : j)
     & enableDebug .~ elem Debug (fst <$> xs)
+    & workers .~ ws
 
 
 compilerFlags :: [String] -> IO ([Flag], [String])
