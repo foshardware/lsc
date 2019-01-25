@@ -60,3 +60,7 @@ tests:
     - -with-rtsopts=-N
     dependencies:
     - lsc
+    - tasty
+    - tasty-hunit
+    - lens
+    - data-default

@@ -345,15 +345,16 @@ popWorker = do
   case opts ^. workers of
     Workers (_, out) -> liftIO $ readChan out
 
+
+createWorkers :: Int -> IO Workers
+createWorkers n | n < 2 = pure Singleton
+createWorkers n = do
+  (in_, out) <- newChan
+  sequence_ $ replicate (n - 1) $ writeChan in_ ()
+  pure $ Workers (in_, out)
+
 rtsWorkers :: IO Workers
-rtsWorkers = do
-  n <- getNumCapabilities
-  if n < 2
-    then pure Singleton
-    else do
-      (in_, out) <- newChan
-      sequence_ $ replicate (n - 1) $ writeChan in_ ()
-      pure $ Workers (in_, out)
+rtsWorkers = createWorkers =<< getNumCapabilities
 
 
 makeFieldsNoPrefix ''Technology
