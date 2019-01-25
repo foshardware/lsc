@@ -8,21 +8,15 @@ import Control.Monad
 import Control.Monad.Trans
 import Control.Monad.Trans.Maybe
 
-import Data.Either (rights)
-import Data.Foldable (for_)
 import Data.Default
 
 import qualified Data.ByteString.Lazy.Char8 as Bytes
 
 import qualified Data.Text.IO as Text
-import qualified Data.Text.Lazy.IO as Pipe
 
 import System.Console.GetOpt
 import System.Environment
 import System.IO
-import System.Process
-
-import Text.Parsec (parse)
 
 import BLIF.Parser
 import LEF.Parser
@@ -33,7 +27,6 @@ import LSC.BLIF
 import LSC.D3
 import LSC.LEF
 import LSC.SVG
-import LSC.Numbers
 import LSC.Types
 
 versionString :: String
@@ -50,7 +43,7 @@ program :: App ()
 program = do
 
   (flags, _) <- liftIO $ compilerFlags =<< getArgs
-  env <- liftIO $ compilerOpts flags
+  opts <- liftIO $ compilerOpts flags
 
   let arg x = or [ k == x | (k, _) <- flags ]
       str x = head [ v | (k, v) <- flags, k == x ]
@@ -92,7 +85,7 @@ program = do
         (pure . gnostic tech . fromBLIF)
         (parseBLIF net_)
 
-      circuit2d <- lift $ evalLSC env tech $ compiler stage1 netlist
+      circuit2d <- lift $ evalLSC opts tech $ compiler stage1 netlist
 
       liftIO $ plotStdout circuit2d
 

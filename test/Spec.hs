@@ -2,7 +2,6 @@
 import Control.Category
 import Control.Arrow
 import Control.Concurrent
-import Control.Concurrent.MVar
 import Control.Lens
 import Control.Monad.IO.Class
 import Data.Bits
@@ -40,7 +39,7 @@ dualCore n = do
       act = fst ^<< inc &&& inc &&& inc &&& inc
       tech = thaw def
       opts = def & workers .~ ws
-  forkIO $ runLSC opts tech $ compiler act mempty
+  _ <- forkIO $ runLSC opts tech $ compiler act mempty
   threadDelay n
   result1 <- readMVar counter
   threadDelay (2*n)
@@ -56,7 +55,7 @@ quadCore n = do
       act = fst . snd ^<< (inc &&& inc) &&& inc &&& (inc &&& inc &&& inc)
       tech = thaw def
       opts = def & workers .~ ws
-  forkIO $ runLSC opts tech $ compiler act mempty
+  _ <- forkIO $ runLSC opts tech $ compiler act mempty
   threadDelay n
   result1 <- readMVar counter
   threadDelay (2*n)

@@ -2,7 +2,6 @@
 module BLIF.Builder where
 
 import Data.List (intersperse)
-import Data.Monoid
 import qualified Data.Text.Lazy.IO as Text
 import Data.Text.Lazy.Builder
 

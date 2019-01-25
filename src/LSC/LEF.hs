@@ -29,14 +29,14 @@ fromLEF (LEF options _ _ _ _ macros) = do
     ]
 
 macroVdd :: Technology -> [MacroOption] -> Maybe Pin
-macroVdd tech (MacroPin ident options _ : rest)
+macroVdd tech (MacroPin ident options _ : _)
   | MacroPinUse Power `elem` options
   = Just $ def & identifier .~ ident & dir .~ direction options & ports .~ macroPorts tech options
 macroVdd tech (_ : rest) = macroVdd tech rest
 macroVdd _ _ = Nothing
 
 macroGnd :: Technology -> [MacroOption] -> Maybe Pin
-macroGnd tech (MacroPin ident options _ : rest)
+macroGnd tech (MacroPin ident options _ : _)
   | MacroPinUse Ground `elem` options
   = Just $ def & identifier .~ ident & dir .~ direction options & ports .~ macroPorts tech options
 macroGnd tech (_ : rest) = macroVdd tech rest

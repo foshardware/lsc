@@ -15,7 +15,6 @@ module LSC.Types where
 
 import Control.Concurrent (getNumCapabilities)
 import Control.Concurrent.Chan.Unagi
-import Control.Exception
 import Control.Lens hiding (element)
 import Data.Default
 import Data.Foldable
@@ -337,12 +336,14 @@ pushWorker :: LSC ()
 pushWorker = do
   opts <- environment
   case opts ^. workers of
+    Singleton -> pure ()
     Workers (in_, _) -> liftIO $ writeChan in_ ()
 
 popWorker :: LSC ()
 popWorker = do
   opts <- environment
   case opts ^. workers of
+    Singleton -> pure ()
     Workers (_, out) -> liftIO $ readChan out
 
 

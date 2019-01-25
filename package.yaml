@@ -1,5 +1,5 @@
 name:                lsc
-version:             0.1.2.1
+version:             0.1.2.3
 github:              "foshardware/lsc"
 license:             GPL-3
 author:              "Andreas Westerwick"
@@ -25,7 +25,6 @@ dependencies:
 - lens
 - mtl
 - parsec
-- process
 - sbv
 - text
 - time
@@ -44,6 +43,7 @@ executables:
     main:                Main.hs
     source-dirs:         app
     ghc-options:
+    - -Wall
     - -threaded
     - -rtsopts
     - -with-rtsopts=-N
@@ -55,6 +55,7 @@ tests:
     main:                Spec.hs
     source-dirs:         test
     ghc-options:
+    - -Wall
     - -threaded
     - -rtsopts
     - -with-rtsopts=-N

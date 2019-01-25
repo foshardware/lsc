@@ -13,7 +13,6 @@ import Control.Monad
 import Data.Default
 import Data.Foldable
 import Data.Map (assocs)
-import Data.Semigroup
 import Data.Vector (indexM)
 import Data.SBV
 import Data.SBV.Control
@@ -257,7 +256,7 @@ arboresence nodes rim net = do
       | (j, assignments) <- assocs $ net ^. contacts
       , source <- assignments
       , source ^. dir == d
-      , (gate, src) <- indexM nodes $ j ^. integer
+      , (_, src) <- indexM nodes $ j ^. integer
       , p <- take 1 $ source ^. ports
       ] ++
       [ path

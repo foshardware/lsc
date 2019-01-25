@@ -3,6 +3,6 @@
 
 for i in lsc arrowgant
 do
-  stack test --profile --ghc-options=-fprof-auto $i
+  stack test --pedantic --profile --ghc-options=-fprof-auto $i
 done
 

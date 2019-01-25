@@ -9,10 +9,8 @@ import Control.Category
 import Control.Concurrent.Async
 import Control.Exception
 import Control.Lens
-import Control.Monad
 import Control.Monad.Trans
 import Control.Monad.Codensity
-import Data.Semigroup
 import Prelude hiding ((.), id)
 
 import LSC.Placement
@@ -68,7 +66,7 @@ instance Category LS where
 
 instance Arrow LS where
 
-  arr f = LS $ pure . f
+  arr f = LS (pure . f)
 
   first  (LS k) = LS $ \ (x, y) -> (, y) <$> k x
   second (LS k) = LS $ \ (x, y) -> (x, ) <$> k y
@@ -93,7 +91,7 @@ instance ArrowPlus LS where
     o <- environment
     liftIO $ do
       runLSC o s (k x) `catch` \ (SomeException e) ->
-        runLSC o s $ debug [displayException e] *> m x
+        runLSC o s (debug [displayException e] *> m x)
 
 
 instance ArrowChoice LS where
@@ -109,7 +107,7 @@ instance ArrowApply LS where
 newtype LSR ls a b = LSR { unLSR :: Algebraic ls a b }
 
 reduce :: Arrow ls => LSR ls a b -> ls a b
-reduce = algebraic . unLSR
+reduce = algebraic . mapReduce . unLSR
 
 instance Arrow ls => Category (LSR ls) where
   id = LSR id
