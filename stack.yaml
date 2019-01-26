@@ -1,10 +1,13 @@
 flags: {}
 packages:
 - .
-- sbv
-- verilog
-- arrowgant
 extra-deps:
+- git: https://github.com/foshardware/sbv
+  commit: 913bbaf5177655ee8f8992538b4722009012dbdf
+- git: https://github.com/foshardware/verilog.git
+  commit: 8415f16e62e7eb3e4d2269e0838ac60ff34e9605
+- git: https://github.com/foshardware/arrowgant
+  commit: 8dda647608f7e0c822b9c495063a06a0e40e784d
 - arrows-0.4.4.2
 - Stream-0.4.7.2
 - lazysmallcheck-0.6

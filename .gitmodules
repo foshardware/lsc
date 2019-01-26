@@ -1,9 +1,0 @@
-[submodule "verilog"]
-	path = verilog
-	url = https://github.com/foshardware/verilog.git
-[submodule "sbv"]
-	path = sbv
-	url = https://github.com/foshardware/sbv
-[submodule "arrowgant"]
-	path = arrowgant
-	url = https://github.com/foshardware/arrowgant.git
