@@ -1,6 +1,7 @@
 
 import Control.Category
 import Control.Arrow
+import Control.Arrow.StreamProcessor
 import Control.Concurrent
 import Control.Lens
 import Control.Monad.IO.Class
@@ -27,6 +28,9 @@ concurrency = testGroup "Concurrency" $
   | n <- take 4 $ drop 2 $ iterate (`shiftR` 1) (shiftL 1 20)
   ] ++
   [ testCase "Quad core" $ quadCore n
+  | n <- take 4 $ drop 2 $ iterate (`shiftR` 1) (shiftL 1 20)
+  ] ++
+  [ testCase "Stream processor" $ stream n
   | n <- take 4 $ drop 2 $ iterate (`shiftR` 1) (shiftL 1 20)
   ]
 
@@ -61,6 +65,22 @@ quadCore n = do
   threadDelay (2*n)
   result2 <- readMVar counter
   assertBool "four at a time" $ result1 == 4 && result2 == 6
+
+
+stream :: Int -> IO ()
+stream n = do
+  counter <- newMVar 0
+  ws <- createWorkers 4
+  let inc = incrementWithDelay (2*n) counter
+      act = streamProcessor inc
+      tech = thaw def
+      opts = def & workers .~ ws
+  _ <- forkIO $ runLSC opts tech $ () <$ compiler act (replicate 8 ())
+  threadDelay n
+  result1 <- readMVar counter
+  threadDelay (2*n)
+  result2 <- readMVar counter
+  assertBool "streaming" $ result1 == 4 && result2 == 8
 
 
 incrementWithDelay :: Int -> MVar Int -> Compiler ()
