@@ -20,6 +20,7 @@ import LSC.Types
 
 stage1 :: Compiler NetGraph
 stage1 = zeroArrow
+  <+> (place >>> route)
   <+> env rowSize (+ 10000) route
 
 
@@ -75,7 +76,8 @@ instance Arrow LS where
     s <- thaw <$> technology
     o <- environment
     case o ^. workers of
-      Singleton -> (,) <$> k x <*> m y
+      Singleton -> do
+        liftIO $ (,) <$> runLSC o s (k x) <*> runLSC o s (m y)
       Workers _ -> do
         liftIO $ concurrently
           (runLSC o s (popWorker *> k x) `finally` runLSC o s pushWorker)
