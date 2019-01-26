@@ -154,8 +154,9 @@ args =
 compilerOpts :: [Flag] -> IO CompilerOpts
 compilerOpts xs = do
   n <- getNumCapabilities
-  j <- pure $ rights [ parse decimal "-j" v | (k, v) <- xs, k == Cores ]
-  ws <- createWorkers $ last (n : j)
+  let j = last $ n : rights [ parse decimal "-j" v | (k, v) <- xs, k == Cores ]
+  setNumCapabilities j
+  ws <- createWorkers j
   pure $ def
     & enableDebug .~ elem Debug (fst <$> xs)
     & workers .~ ws
