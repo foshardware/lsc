@@ -11,7 +11,7 @@ import Text.Parsec.String (GenParser)
 import Text.Parsec.Pos
 import Prelude hiding (null)
 
-import LSC.Numbers (floating3, int, sign)
+import Text.ParserCombinators.Parsec.Number (floating3, int, sign)
 
 import LEF.Lexer
 import LEF.Syntax

@@ -25,6 +25,7 @@ dependencies:
 - lens
 - mtl
 - parsec
+- parsec-numbers
 - sbv
 - text
 - time

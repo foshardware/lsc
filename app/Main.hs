@@ -7,16 +7,16 @@ import Control.Lens
 import Control.Monad
 import Control.Monad.Trans
 import Control.Monad.Trans.Maybe
-
+import Control.Concurrent
 import Data.Default
-
+import Data.Either
 import qualified Data.ByteString.Lazy.Char8 as Bytes
-
 import qualified Data.Text.IO as Text
-
 import System.Console.GetOpt
 import System.Environment
 import System.IO
+import Text.Parsec (parse)
+import Text.ParserCombinators.Parsec.Number (decimal)
 
 import BLIF.Parser
 import LEF.Parser
@@ -30,7 +30,7 @@ import LSC.SVG
 import LSC.Types
 
 versionString :: String
-versionString = "lsc 0.1.0.0"
+versionString = "lsc 0.1.2.3"
 
 type App = MaybeT IO
 main :: IO ()
@@ -121,6 +121,7 @@ data FlagKey
   | Lef
   | Exline
   | Compile
+  | Cores
   | Debug
   | Register
   | Rtl
@@ -143,6 +144,7 @@ args =
     , Option ['x']      ["exline"]
         (OptArg ((Exline, ) . maybe "top" id)   "component")        "just exline and exit"
 
+    , Option ['j']      ["cores"]      (ReqArg (Cores,  ) "count")  "limit number of cores"
     , Option ['J']      ["json"]       (NoArg  (Json, mempty))      "export json"
     , Option ['u']      ["verilog"]    (ReqArg (Verilog, ) "FILE")  "verilog file"
     , Option ['r']      ["register"]   (ReqArg (Register, ) "size in bits")  "generate register"
@@ -151,7 +153,9 @@ args =
 
 compilerOpts :: [Flag] -> IO CompilerOpts
 compilerOpts xs = do
-  ws <- rtsWorkers
+  n <- getNumCapabilities
+  j <- pure $ rights [ parse decimal "-j" v | (k, v) <- xs, k == Cores ]
+  ws <- createWorkers $ last (n : j)
   pure $ def
     & enableDebug .~ elem Debug (fst <$> xs)
     & workers .~ ws
