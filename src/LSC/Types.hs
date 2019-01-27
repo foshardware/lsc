@@ -9,6 +9,7 @@
 {-# LANGUAGE FunctionalDependencies #-}
 {-# LANGUAGE DuplicateRecordFields #-}
 {-# LANGUAGE DeriveFunctor, DeriveFoldable, DeriveTraversable #-}
+{-# LANGUAGE DeriveGeneric #-}
 
 
 module LSC.Types where
@@ -16,6 +17,7 @@ module LSC.Types where
 import Control.Concurrent (getNumCapabilities)
 import Control.Concurrent.Chan.Unagi
 import Control.Lens hiding (element)
+import Data.Aeson
 import Data.Default
 import Data.Foldable
 import Data.Function (on)
@@ -27,6 +29,8 @@ import Data.Vector (Vector)
 import Control.Monad.Codensity
 import Control.Monad.Reader
 import Control.Monad.State
+
+import GHC.Generics
 
 import Data.Time.Clock.POSIX
 
@@ -43,15 +47,23 @@ data NetGraph = NetGraph
   , _subcells    :: Map Identifier NetGraph
   , _gates       :: Vector Gate
   , _nets        :: Map Identifier Net
-  } deriving Show
+  } deriving (Generic, Show)
+
+instance ToJSON NetGraph
+
 
 type Contact = Pin
 
 data Net = Net
   { _identifier :: Identifier
   , _geometry   :: Path
-  , _contacts   :: Map Gate [Contact]
-  } deriving Show
+  , _contacts   :: Map Number [Contact]
+  } deriving (Generic, Show)
+
+instance ToJSON Net
+instance FromJSON Net
+
+type Number = Int
 
 type Identifier = Text
 
@@ -61,42 +73,61 @@ data Gate = Gate
   , _vdd        :: Pin
   , _gnd        :: Pin
   , _wires      :: Map Identifier Identifier
-  , _integer    :: Int
-  } deriving Show
+  , _number     :: Number
+  } deriving (Generic, Show)
 
+instance ToJSON Gate
+instance FromJSON Gate
 
 data AbstractGate = AbstractGate
   { _geometry  :: Path
   , _vdd       :: Pin
   , _gnd       :: Pin
   , _pins      :: Map Identifier Pin
-  } deriving Show
+  } deriving (Generic, Show)
+
+instance ToJSON AbstractGate
+instance FromJSON AbstractGate
 
 data Cell = Cell
   { _pins       :: Map Identifier Pin
   , _vdd        :: Pin
   , _gnd        :: Pin
   , _dims       :: (Integer, Integer)
-  } deriving Show
+  } deriving (Generic, Show)
+
+instance ToJSON Cell
+instance FromJSON Cell
+
 
 data Pin = Pin
   { _identifier :: Identifier
   , _dir        :: Dir
   , _ports      :: [Port]
-  } deriving Show
+  } deriving (Generic, Show)
+
+instance ToJSON Pin
+instance FromJSON Pin
+
 
 type Port = Component Layer Integer
 
 
 data Dir = In | Out | InOut
-  deriving (Eq, Show)
+  deriving (Eq, Generic, Show)
+
+instance ToJSON Dir
+instance FromJSON Dir
 
 data Layer
   = AnyLayer
   | Metal1
   | Metal2
   | Metal3
-  deriving (Eq, Ord, Enum, Read, Show)
+  deriving (Eq, Ord, Enum, Read, Generic, Show)
+
+instance ToJSON Layer
+instance FromJSON Layer
 
 metal1, metal2, metal3 :: SLayer
 metal1   = slayer Metal1
@@ -221,7 +252,10 @@ data Component l a
   = Rect    { _l :: a, _b :: a, _r :: a, _t :: a }
   | Via     { _l :: a, _b :: a, _r :: a, _t :: a, _z :: [l] }
   | Layered { _l :: a, _b :: a, _r :: a, _t :: a, _z :: [l] }
-  deriving (Eq, Functor, Foldable, Traversable, Show)
+  deriving (Eq, Functor, Foldable, Traversable, Generic, Show)
+
+instance (ToJSON l, ToJSON a) => ToJSON (Component l a)
+instance (FromJSON l, FromJSON a) => FromJSON (Component l a)
 
 
 makeFieldsNoPrefix ''Component
@@ -285,10 +319,10 @@ instance Monoid Net where
 makeFieldsNoPrefix ''Gate
 
 instance Eq Gate where
-  (==) = (==) `on` view integer
+  (==) = (==) `on` view number
 
 instance Ord Gate where
-  compare = compare `on` view integer
+  compare = compare `on` view number
 
 instance Default Gate where
   def = Gate mempty mempty def def mempty def

@@ -137,11 +137,11 @@ svgPaths netlist = Circuit2D
       , port <- pin ^. ports
       ]
 
-    inducePins :: (Gate, [Pin]) -> Path
+    inducePins :: (Number, [Pin]) -> Path
     inducePins (i, ps) =
       [ Rect (q ^. l + p ^. l) (q ^. b + p ^. b) (q ^. r + p ^. l) (q ^. t + p ^. b)
       | pin <- ps
-      , p <- take 1 . view geometry =<< indexM (netlist ^. gates) (i ^. integer)
+      , p <- take 1 . view geometry =<< indexM (netlist ^. gates) i
       , q <- take 1 $ pin ^. ports
       ]
 

@@ -28,7 +28,7 @@ fromBLIF (BLIF (Model name inputs outputs clocks commands : submodels)) = do
 
   let nodes = Vector.fromList
         [ gate
-            & integer .~ i
+            & number .~ i
             & vdd .~ view vdd comp
             & gnd .~ view gnd comp
         | i    <- [0.. ]
@@ -37,7 +37,7 @@ fromBLIF (BLIF (Model name inputs outputs clocks commands : submodels)) = do
         ]
 
   let edges = fromListWith mappend
-        [ (net, Net net mempty (singleton gate [pin]))
+        [ (net, Net net mempty (singleton (gate ^. number) [pin]))
         | gate <- toList nodes
         , (contact, net) <- assocs $ gate ^. wires
         , com <- maybeToList $ lookup (gate ^. identifier) (tech ^. stdCells)

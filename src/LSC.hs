@@ -24,7 +24,7 @@ import LSC.Web
 stage1 :: Compiler NetGraph
 stage1 = zeroArrow
   <+> hierarchical (place >>> route)
-  <+> ls routeWeb
+  <+> remote (ls routeWeb)
   <+> env rowSize (+ 10000) route
 
 

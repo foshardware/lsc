@@ -256,7 +256,7 @@ arboresence nodes rim net = do
       | (j, assignments) <- assocs $ net ^. contacts
       , source <- assignments
       , source ^. dir == d
-      , (_, src) <- indexM nodes $ j ^. integer
+      , (_, src) <- indexM nodes j
       , p <- take 1 $ source ^. ports
       ] ++
       [ path
