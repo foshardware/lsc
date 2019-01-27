@@ -121,6 +121,7 @@ data FlagKey
   | Lef
   | Exline
   | Compile
+  | Smt
   | Cores
   | Debug
   | Register
@@ -144,6 +145,7 @@ args =
     , Option ['x']      ["exline"]
         (OptArg ((Exline, ) . maybe "top" id)   "component")        "just exline and exit"
 
+    , Option ['s']      ["smt"]        (ReqArg (Smt, ) "yices,z3")  "specify smt backend"
     , Option ['j']      ["cores"]      (ReqArg (Cores,  ) "count")  "limit number of cores"
     , Option ['J']      ["json"]       (NoArg  (Json, mempty))      "export json"
     , Option ['u']      ["verilog"]    (ReqArg (Verilog, ) "FILE")  "verilog file"
@@ -157,8 +159,10 @@ compilerOpts xs = do
   let j = last $ n : rights [ parse decimal "-j" v | (k, v) <- xs, k == Cores ]
   setNumCapabilities j
   ws <- createWorkers j
+  let smt = last $ smtOption mempty : [ smtOption v | (k, v) <- xs, k == Smt ]
   pure $ def
     & enableDebug .~ elem Debug (fst <$> xs)
+    & smtConfig .~ smt
     & workers .~ ws
 
 

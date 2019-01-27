@@ -18,6 +18,7 @@ import Control.Concurrent (getNumCapabilities)
 import Control.Concurrent.Chan.Unagi
 import Control.Lens hiding (element)
 import Data.Aeson
+import Data.Char
 import Data.Default
 import Data.Foldable
 import Data.Function (on)
@@ -202,6 +203,16 @@ data Workers
   = Singleton
   | Workers (InChan (), OutChan ())
 
+smtOption :: String -> SMTConfig
+smtOption = d . fmap toLower
+  where
+    d "boolector" = boolector
+    d "cvc4" = cvc4
+    d "yices" = yices
+    d "z3" = z3
+    d "mathsat" = mathSAT
+    d "abc" = abc
+    d _ = yices
 
 type Environment = CompilerOpts
 
@@ -234,18 +245,6 @@ instance Monad LST where
 
 instance MonadIO LST where
   liftIO = LST . liftIO
-
-
-runLSC :: Environment -> Bootstrap () -> LSC a -> IO a
-runLSC opts tech
-  = runSMTWith (opts ^. smtConfig)
-  . flip runGnosticT (freeze tech)
-  . flip runEnvT opts
-  . unLST
-  . lowerCodensity
-
-evalLSC :: Environment -> Bootstrap () -> LSC a -> IO a
-evalLSC = runLSC
 
 
 liftSMT :: Symbolic a -> LSC a
@@ -416,6 +415,18 @@ makeFieldsNoPrefix ''CompilerOpts
 
 instance Default CompilerOpts where
   def = CompilerOpts 1 20000 (16 * 1000000) True yices Singleton
+
+
+runLSC :: Environment -> Bootstrap () -> LSC a -> IO a
+runLSC opts tech
+  = runSMTWith (opts ^. smtConfig)
+  . flip runGnosticT (freeze tech)
+  . flip runEnvT opts
+  . unLST
+  . lowerCodensity
+
+evalLSC :: Environment -> Bootstrap () -> LSC a -> IO a
+evalLSC = runLSC
 
 
 debug :: Foldable f => f String -> LSC ()
