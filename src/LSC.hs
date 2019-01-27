@@ -28,7 +28,7 @@ stage1 = zeroArrow
 
 hierarchical :: Compiler NetGraph -> Compiler NetGraph
 hierarchical act = proc net -> do
-  models <- select act -< net ^. subcells
+  models <- select $ hierarchical act -< net ^. subcells
   act -< net & subcells .~ models
 
 
