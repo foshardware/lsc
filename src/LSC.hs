@@ -25,7 +25,8 @@ stage1 :: Compiler NetGraph
 stage1 = zeroArrow
   <+> hierarchical (place >>> route)
   <+> remote (ls routeWeb)
-  <+> env rowSize (+ 10000) route
+  <+> env rowSize (+ 5000) route
+  <+> env jogs succ (env rowSize (+ 5000) route)
 
 
 hierarchical :: Compiler NetGraph -> Compiler NetGraph

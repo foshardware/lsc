@@ -194,6 +194,7 @@ data CompilerOpts = CompilerOpts
   , _rowSize     :: Integer
   , _halt        :: Int
   , _enableDebug :: Bool
+  , _smtConfig   :: SMTConfig
   , _workers     :: Workers
   }
 
@@ -237,7 +238,7 @@ instance MonadIO LST where
 
 runLSC :: Environment -> Bootstrap () -> LSC a -> IO a
 runLSC opts tech
-  = runSMT
+  = runSMTWith (opts ^. smtConfig)
   . flip runGnosticT (freeze tech)
   . flip runEnvT opts
   . unLST
@@ -414,7 +415,7 @@ instance Default Pin where
 makeFieldsNoPrefix ''CompilerOpts
 
 instance Default CompilerOpts where
-  def = CompilerOpts 1 20000 (16 * 1000000) True Singleton
+  def = CompilerOpts 1 20000 (16 * 1000000) True yices Singleton
 
 
 debug :: Foldable f => f String -> LSC ()

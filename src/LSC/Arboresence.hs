@@ -32,6 +32,7 @@ routeSat netlist = do
 
   liftSMT $ do
     setOption $ ProduceUnsatCores True
+    setLogic QF_IDL
 
   area <- freeRectangle
 
@@ -220,12 +221,6 @@ connect p q = do
     .|| view r p .== view r q .&& view b p .== view b q
     .|| view l p .== view l q .&& view b p .== view b q
 
-  liftSMT $ softConstrain
-      $ view l p .== view l q .&& view b p .== view b q .&& view r p .== view r q
-    .|| view l p .== view l q .&& view b p .== view b q .&& view t p .== view t q
-    .|| view l p .== view l q .&& view r p .== view r q .&& view t p .== view t q
-    .|| view b p .== view b q .&& view r p .== view r q .&& view t p .== view t q
-
 
 arboresence nodes rim net = do
 
@@ -307,7 +302,7 @@ powerUpAndGround nodes edges = do
     .&& ring ^. t . to height .== literal h
 
   liftSMT $ constrain
-      $ height (outer ring) .< width (outer ring) + width (outer ring)
+      $ height (outer ring) .< width (outer ring)
 
   (vs, gs) <- unzip <$> sequence
     [ do
