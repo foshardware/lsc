@@ -32,6 +32,9 @@ concurrency = testGroup "Concurrency" $
   ] ++
   [ testCase "Stream processor" $ stream n
   | n <- take 4 $ drop 2 $ iterate (`shiftR` 1) (shiftL 1 20)
+  ] ++
+  [ testCase "Remote procedure" $ remoteProcess n
+  | n <- take 4 $ drop 2 $ iterate (`shiftR` 1) (shiftL 1 20)
   ]
 
 
@@ -48,7 +51,8 @@ dualCore n = do
   result1 <- readMVar counter
   threadDelay (2*n)
   result2 <- readMVar counter
-  assertBool "two at a time" $ result1 == 2 && result2 == 4
+  result1 @?= 2
+  result2 @?= 4
 
 
 quadCore :: Int -> IO ()
@@ -64,7 +68,8 @@ quadCore n = do
   result1 <- readMVar counter
   threadDelay (2*n)
   result2 <- readMVar counter
-  assertBool "four at a time" $ result1 == 4 && result2 == 6
+  result1 @?= 4
+  result2 @?= 6
 
 
 stream :: Int -> IO ()
@@ -80,7 +85,26 @@ stream n = do
   result1 <- readMVar counter
   threadDelay (2*n)
   result2 <- readMVar counter
-  assertBool "streaming" $ result1 == 4 && result2 == 8
+  result1 @?= 4
+  result2 @?= 8
+
+
+remoteProcess :: Int -> IO ()
+remoteProcess n = do
+  counter1 <- newMVar 0
+  counter2 <- newMVar 0
+  ws <- createWorkers 2
+  let inc1 = incrementWithDelay (2*n) counter1
+      inc2 = incrementWithDelay (2*n) counter2
+      act = fst ^<< inc1 &&& inc1 &&& remote inc2 &&& inc1 &&& remote inc2 &&& inc1 &&& inc1 &&& inc1 &&& inc1 &&& inc1 &&& inc1
+      tech = thaw def
+      opts = def & workers .~ ws
+  _ <- forkIO $ runLSC opts tech $ () <$ compiler act mempty
+  threadDelay (5*n)
+  result1 <- readMVar counter1
+  result2 <- readMVar counter2
+  result1 @?= 6
+  result2 @?= 2
 
 
 incrementWithDelay :: Int -> MVar Int -> Compiler ()

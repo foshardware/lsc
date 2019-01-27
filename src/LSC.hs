@@ -44,6 +44,7 @@ type Compiler a = LSR LS a a
 compiler :: Compiler a -> a -> LSC a
 compiler = unLS . reduce
 
+
 ls_ :: LSC b -> Compiler a
 ls_ f = ls (<$ f)
 
@@ -58,6 +59,15 @@ env setter f k = ls $ \ x -> do
   o <- environment
   let p = o & setter %~ f
   lift $ LST $ lift $ flip runEnvT p $ unLST $ lowerCodensity $ compiler k x
+
+
+remote :: Compiler a -> Compiler a
+remote act = ls $ \ x -> do
+  s <- thaw <$> technology
+  o <- environment
+  pushWorker
+  liftIO $ runLSC o s (compiler act x)
+    `finally` runLSC o s (popWorker)
 
 
 newtype LS a b = LS { unLS :: a -> LSC b }
