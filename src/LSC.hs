@@ -18,11 +18,13 @@ import Prelude hiding ((.), id)
 import LSC.Placement
 import LSC.Routing
 import LSC.Types
+import LSC.Web
 
 
 stage1 :: Compiler NetGraph
 stage1 = zeroArrow
   <+> hierarchical (place >>> route)
+  <+> ls routeWeb
   <+> env rowSize (+ 10000) route
 
 
@@ -65,9 +67,8 @@ remote :: Compiler a -> Compiler a
 remote act = ls $ \ x -> do
   s <- thaw <$> technology
   o <- environment
-  pushWorker
-  liftIO $ runLSC o s (compiler act x)
-    `finally` runLSC o s (popWorker)
+  liftIO $ runLSC o s (pushWorker *> compiler act x)
+    `finally` runLSC o s popWorker
 
 
 newtype LS a b = LS { unLS :: a -> LSC b }

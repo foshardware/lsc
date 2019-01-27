@@ -43,7 +43,7 @@ dualCore n = do
   counter <- newMVar 0
   ws <- createWorkers 2
   let inc = incrementWithDelay (2*n) counter
-      act = fst ^<< inc &&& inc &&& inc &&& inc
+      act = fst ^<< inc &&& inc &&& inc &&& inc &&& inc &&& inc
       tech = thaw def
       opts = def & workers .~ ws
   _ <- forkIO $ runLSC opts tech $ compiler act mempty
