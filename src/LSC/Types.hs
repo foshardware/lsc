@@ -50,6 +50,7 @@ data NetGraph = NetGraph
   } deriving (Generic, Show)
 
 instance ToJSON NetGraph
+instance FromJSON NetGraph
 
 
 type Contact = Pin
@@ -62,6 +63,7 @@ data Net = Net
 
 instance ToJSON Net
 instance FromJSON Net
+
 
 type Number = Int
 
@@ -79,6 +81,7 @@ data Gate = Gate
 instance ToJSON Gate
 instance FromJSON Gate
 
+
 data AbstractGate = AbstractGate
   { _geometry  :: Path
   , _vdd       :: Pin
@@ -88,6 +91,7 @@ data AbstractGate = AbstractGate
 
 instance ToJSON AbstractGate
 instance FromJSON AbstractGate
+
 
 data Cell = Cell
   { _pins       :: Map Identifier Pin
@@ -119,6 +123,7 @@ data Dir = In | Out | InOut
 instance ToJSON Dir
 instance FromJSON Dir
 
+
 data Layer
   = AnyLayer
   | Metal1
@@ -128,6 +133,7 @@ data Layer
 
 instance ToJSON Layer
 instance FromJSON Layer
+
 
 metal1, metal2, metal3 :: SLayer
 metal1   = slayer Metal1
@@ -144,8 +150,10 @@ data Technology = Technology
   , _stdCells       :: Map Text Cell
   , _standardPin    :: (Integer, Integer)
   , _rowSize        :: Integer
-  } deriving Show
+  } deriving (Generic, Show)
 
+instance ToJSON Technology
+instance FromJSON Technology
 
 type BootstrapT m = StateT Technology m
 type Bootstrap = State Technology
