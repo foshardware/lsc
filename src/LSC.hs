@@ -1,3 +1,4 @@
+{-# LANGUAGE Arrows #-}
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE RankNTypes #-}
 
@@ -5,6 +6,7 @@ module LSC where
 
 import Control.Arrow
 import Control.Arrow.Algebraic
+import Control.Arrow.Select
 import Control.Category
 import Control.Concurrent.Async
 import Control.Exception
@@ -20,8 +22,14 @@ import LSC.Types
 
 stage1 :: Compiler NetGraph
 stage1 = zeroArrow
-  <+> (place >>> route)
+  <+> hierarchical (place >>> route)
   <+> env rowSize (+ 10000) route
+
+
+hierarchical :: Compiler NetGraph -> Compiler NetGraph
+hierarchical act = proc net -> do
+  models <- select act -< net ^. subcells
+  act -< net & subcells .~ models
 
 
 route :: Compiler NetGraph

@@ -1,7 +1,7 @@
 
 import Control.Category
 import Control.Arrow
-import Control.Arrow.StreamProcessor
+import Control.Arrow.Select
 import Control.Concurrent
 import Control.Lens
 import Control.Monad.IO.Class
@@ -72,7 +72,7 @@ stream n = do
   counter <- newMVar 0
   ws <- createWorkers 4
   let inc = incrementWithDelay (2*n) counter
-      act = streamProcessor inc
+      act = select inc
       tech = thaw def
       opts = def & workers .~ ws
   _ <- forkIO $ runLSC opts tech $ () <$ compiler act (replicate 8 ())
