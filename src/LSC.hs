@@ -23,10 +23,9 @@ import LSC.Web
 
 stage1 :: Compiler NetGraph
 stage1 = zeroArrow
+  <+> rpc routeWeb
   <+> hierarchical (place >>> route)
-  <+> remote (ls routeWeb)
-  <+> env rowSize (+ 5000) route
-  <+> env jogs succ (env rowSize (+ 5000) route)
+  <+> hierarchical (route & jogs `env` succ & rowSize `env` (+ 5000))
 
 
 hierarchical :: Compiler NetGraph -> Compiler NetGraph
@@ -48,14 +47,18 @@ compiler :: Compiler a -> a -> LSC a
 compiler = unLS . reduce
 
 
+rpc :: (a -> LSC a) -> Compiler a
+rpc = remote . ls
+
 ls_ :: LSC b -> Compiler a
 ls_ f = ls (<$ f)
 
 ls :: (a -> LSC a) -> Compiler a
 ls = LSR . Lift . LS
 
+
 env_ :: Simple Setter CompilerOpts o -> o -> Compiler a -> Compiler a
-env_ setter o = env setter $ const o
+env_ setter = env setter . const
 
 env :: Simple Setter CompilerOpts o -> (o -> o) -> Compiler a -> Compiler a
 env setter f k = ls $ \ x -> do

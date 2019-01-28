@@ -1,0 +1,20 @@
+
+
+.model carryripple
+.inputs A1 A2 A3 A4 B1 B2 B3 B4 Cin
+.outputs S1 S2 S3 S4 Cout
+.subckt fulladder A=A1 B=B1 Cin=Cin S=S1 Cout=C1
+.subckt fulladder A=A2 B=B2 Cin=C2  S=S1 Cout=C2
+.subckt fulladder A=A3 B=B3 Cin=C3  S=S2 Cout=C3
+.subckt fulladder A=A4 B=B4 Cin=C4  S=S3 Cout=Cout
+.end
+
+.model fulladder
+.inputs A B Cin
+.outputs S Cout
+.subckt XOR2X1 A=A B=B Y=XOR1
+.subckt XOR2X1 A=XOR1 B=Cin Y=S
+.subckt AND2X2 A=XOR1 B=Cin Y=C1
+.subckt AND2X2 A=A B=B Y=C2
+.subckt OR2X1 A=C1 B=C2 Y=Cout
+.end
