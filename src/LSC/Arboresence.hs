@@ -14,10 +14,9 @@ import Data.Default
 import Data.Foldable
 import Data.Map (assocs)
 import Data.Vector (indexM)
-import Data.SBV
-import Data.SBV.Control
 import Data.Text (unpack)
 
+import LSC.Symbolic
 import LSC.Types
 
 
@@ -30,7 +29,7 @@ routeSat netlist = do
     , "-", netlist ^. nets & length & show, "nets"
     ]
 
-  liftSMT $ do
+  liftSymbolic $ do
     setOption $ ProduceUnsatCores True
     setLogic QF_IDL
 
@@ -50,7 +49,7 @@ routeSat netlist = do
   disjointNets edges
 
   limit <- view halt <$> environment
-  result <- liftSMT $ query $ do
+  result <- liftSymbolic $ query $ do
     result <- timeout limit checkSat
     case result of
 
@@ -85,7 +84,7 @@ routeSat netlist = do
 
 placement area ring rim = do
 
-  liftSMT $ constrain
+  liftSymbolic $ constrain
       $ area ^. l .== 0
     .&& area ^. b .== 0
 
@@ -93,21 +92,21 @@ placement area ring rim = do
 
   d <- literal . lambda <$> technology
   sequence_
-    [ liftSMT $ constrain
+    [ liftSymbolic $ constrain
           $ path ^. l .== area ^. l
         .&& outer ring ^. l - path ^. l .> d
     | (pin, path) <- toList rim
     , pin ^. dir == In
     ]
   sequence_
-    [ liftSMT $ constrain
+    [ liftSymbolic $ constrain
           $ path ^. r .== area ^. r
         .&& path ^. r - outer ring ^. r .> d
     | (pin, path) <- toList rim
     , pin ^. dir == Out
     ]
   sequence_
-    [ liftSMT $ constrain
+    [ liftSymbolic $ constrain
           $ path ^. b .>= inner ring ^. b
         .&& path ^. t .<= inner ring ^. t
     | (_, path) <- toList rim
@@ -153,7 +152,7 @@ freeGatePolygon gate = do
     <&> integrate metal3
 
   dimensions <- lookupDimensions gate <$> technology
-  for_ dimensions $ \ (w, h) -> liftSMT $ constrain
+  for_ dimensions $ \ (w, h) -> liftSymbolic $ constrain
       $ view r path - view l path .== literal w
     .&& view t path - view b path .== literal h
 
@@ -166,7 +165,7 @@ freeWirePolygon = do
 
   (w, h) <- view standardPin <$> technology
 
-  liftSMT $ constrain
+  liftSymbolic $ constrain
       $  width path .== literal w
     .|| height path .== literal h
 
@@ -179,7 +178,7 @@ freePinPolygon pin = do
 
   (w, h) <- view standardPin <$> technology
 
-  liftSMT $ constrain
+  liftSymbolic $ constrain
       $  width path .== literal w
     .&& height path .== literal h
 
@@ -188,7 +187,7 @@ freePinPolygon pin = do
 
 inside i o = do
   d <- lambda <$> technology
-  liftSMT $ constrain
+  liftSymbolic $ constrain
       $ view l i - view l o .> literal d
     .&& view b i - view b o .> literal d
     .&& view r o - view r i .> literal d
@@ -197,7 +196,7 @@ inside i o = do
 
 disjoint p q = do
   d <- lambda <$> technology
-  liftSMT $ constrain
+  liftSymbolic $ constrain
       $ sAnd [ x ./= y | x <- view z p, y <- view z q ]
     .|| view l q - view r p .> literal d
     .|| view l p - view r q .> literal d
@@ -206,7 +205,7 @@ disjoint p q = do
 
 
 equivalent p q = do
-  liftSMT $ constrain
+  liftSymbolic $ constrain
       $ view r p .== view r q
     .&& view b p .== view b q
     .&& view r p .== view r q
@@ -215,7 +214,7 @@ equivalent p q = do
 
 connect p q = do
 
-  liftSMT $ constrain
+  liftSymbolic $ constrain
       $ view r p .== view r q .&& view t p .== view t q
     .|| view l p .== view l q .&& view t p .== view t q
     .|| view r p .== view r q .&& view b p .== view b q
@@ -283,7 +282,7 @@ powerUpAndGround nodes edges = do
     ]
 
   sequence_
-    [ liftSMT $ constrain
+    [ liftSymbolic $ constrain
           $ head grid ^. t .== path ^. t
         .&& head grid ^. b .== path ^. b
     | path <- init $ tail $ grid
@@ -294,14 +293,14 @@ powerUpAndGround nodes edges = do
   head grid `equivalent` view l ring
   last grid `equivalent` view r ring
 
-  liftSMT $ constrain
+  liftSymbolic $ constrain
       $ ring ^. l . to width .== literal w
     .&& ring ^. r . to width .== literal w
 
     .&& ring ^. b . to height .== literal h
     .&& ring ^. t . to height .== literal h
 
-  liftSMT $ constrain
+  liftSymbolic $ constrain
       $ height (outer ring) .< width (outer ring)
 
   (vs, gs) <- unzip <$> sequence
@@ -323,7 +322,7 @@ powerUpAndGround nodes edges = do
       gnd_ `connect` gs
       vdd_ `connect` vs
 
-      liftSMT $ constrain $ sOr $
+      liftSymbolic $ constrain $ sOr $
         [ p ^. l .== gs ^. l
         | p <- init grid
         ] ++
@@ -331,7 +330,7 @@ powerUpAndGround nodes edges = do
         , outer ring ^. b .== gs ^. b
         ]
 
-      liftSMT $ constrain $ sOr $
+      liftSymbolic $ constrain $ sOr $
         [ p ^. l .== vs ^. l
         | p <- init grid
         ] ++
@@ -377,7 +376,7 @@ freeRing = do
   right  <- freeRectangle
   top    <- freeRectangle
 
-  liftSMT $ constrain
+  liftSymbolic $ constrain
       $ view l  left .== view l bottom .&& view b bottom .== view b  left
     .&& view l  left .== view l    top .&& view t    top .== view t  left
     .&& view r right .== view r bottom .&& view b bottom .== view b right
@@ -388,9 +387,9 @@ freeRing = do
 
 freeRectangle = do
 
-  area <- liftSMT $ Rect <$> free_ <*> free_ <*> free_ <*> free_
+  area <- liftSymbolic $ Rect <$> free_ <*> free_ <*> free_ <*> free_
 
-  liftSMT $ constrain
+  liftSymbolic $ constrain
       $  width area .>= 0
     .&& height area .>= 0
     .&& area ^. l .>= 0

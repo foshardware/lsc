@@ -35,12 +35,10 @@ import Control.Monad.State
 import GHC.Generics
 
 import Data.Time.Clock.POSIX
-
+import System.Console.Concurrent
 import Prelude hiding (lookup)
 
-import Data.SBV
-
-import System.Console.Concurrent
+import LSC.Symbolic
 
 
 data NetGraph = NetGraph
@@ -246,9 +244,8 @@ instance Monad LST where
 instance MonadIO LST where
   liftIO = LST . liftIO
 
-
-liftSMT :: Symbolic a -> LSC a
-liftSMT = lift . LST . lift . lift
+instance MonadSymbolic LST where
+  liftSymbolic = LST . lift . lift
 
 
 type Path = [Component Layer Integer]
