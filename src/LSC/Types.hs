@@ -205,12 +205,12 @@ smtOption :: String -> SMTConfig
 smtOption = d . fmap toLower
   where
     d "boolector" = boolector
-    d "cvc4" = cvc4
-    d "yices" = yices
-    d "z3" = z3
-    d "mathsat" = mathSAT
-    d "abc" = abc
-    d _ = yices
+    d "cvc4"      = cvc4
+    d "yices"     = yices
+    d "z3"        = z3
+    d "mathsat"   = mathSAT
+    d "abc"       = abc
+    d _           = yices
 
 type Environment = CompilerOpts
 
@@ -228,6 +228,10 @@ evalEnvT = runReaderT
 
 type LSC = Codensity LST
 
+liftSymbolic :: Symbolic a -> LSC a
+liftSymbolic = lift . LST . lift . lift
+
+
 newtype LST a = LST { unLST :: EnvT (GnosticT Symbolic) a }
 
 instance Functor LST where
@@ -243,9 +247,6 @@ instance Monad LST where
 
 instance MonadIO LST where
   liftIO = LST . liftIO
-
-instance MonadSymbolic LST where
-  liftSymbolic = LST . lift . lift
 
 
 type Path = [Component Layer Integer]
