@@ -21,53 +21,49 @@ import LSC.Types
 import LSC.Web
 
 
-stage1 :: Compiler NetGraph
+stage1 :: Compiler' NetGraph
 stage1 = zeroArrow
   <+> rpc routeWeb
-  <+> hierarchical (place >>> route)
-  <+> hierarchical (route & jogs `env` succ & rowSize `env` (+ 5000))
+  <+> hierarchical subcells (place >>> route)
+  <+> hierarchical subcells (route & jogs `env` succ & rowSize `env` (+ 5000))
 
 
-hierarchical :: Compiler NetGraph -> Compiler NetGraph
-hierarchical act = proc net -> do
-  models <- select $ hierarchical act -< net ^. subcells
-  act -< net & subcells .~ models
-
-
-route :: Compiler NetGraph
+route :: Compiler' NetGraph
 route = ls routeSat
 
-place :: Compiler NetGraph
+place :: Compiler' NetGraph
 place = ls placeEasy
 
 
-type Compiler a = LSR LS a a
+type Compiler' a = Compiler a a
 
-compiler :: Compiler a -> a -> LSC a
+type Compiler = LSR LS
+
+compiler :: Compiler a b -> a -> LSC b
 compiler = unLS . reduce
 
 
-rpc :: (a -> LSC a) -> Compiler a
+rpc :: (a -> LSC b) -> Compiler a b
 rpc = remote . ls
 
-ls_ :: LSC b -> Compiler a
+ls_ :: LSC b -> Compiler b b
 ls_ f = ls (<$ f)
 
-ls :: (a -> LSC a) -> Compiler a
+ls :: (a -> LSC b) -> Compiler a b
 ls = LSR . Lift . LS
 
 
-env_ :: Simple Setter CompilerOpts o -> o -> Compiler a -> Compiler a
+env_ :: Simple Setter CompilerOpts o -> o -> Compiler a b -> Compiler a b
 env_ setter = env setter . const
 
-env :: Simple Setter CompilerOpts o -> (o -> o) -> Compiler a -> Compiler a
+env :: Simple Setter CompilerOpts o -> (o -> o) -> Compiler a b -> Compiler a b
 env setter f k = ls $ \ x -> do
   o <- environment
   let p = o & setter %~ f
   lift $ LST $ lift $ flip runEnvT p $ unLST $ lowerCodensity $ compiler k x
 
 
-remote :: Compiler a -> Compiler a
+remote :: Compiler a b -> Compiler a b
 remote act = ls $ \ x -> do
   s <- thaw <$> technology
   o <- environment
