@@ -1,14 +1,20 @@
 {-# OPTIONS_GHC -fno-warn-missing-signatures #-}
 {-# LANGUAGE OverloadedStrings #-}
 
-module LSC.LEF where
+module LSC.LEF
+  ( module Language.LEF.Parser
+  , module Language.LEF.Syntax
+  , fromLEF
+  ) where
 
 import Control.Lens
 import Control.Monad.State (get)
 import Data.Default
 import Data.Map as Map
 
-import LEF.Syntax
+import Language.LEF.Parser (parseLEF)
+import Language.LEF.Syntax
+
 import LSC.Types
 
 

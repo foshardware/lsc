@@ -19,13 +19,12 @@ import Text.Parsec (parse)
 import Text.ParserCombinators.Parsec.Number (decimal)
 
 import LSC.BLIF    (parseBLIF)
-import LEF.Parser  (parseLEF)
+import LSC.LEF     (parseLEF, fromLEF)
 import LSC.Verilog (parseVerilog)
 
 import LSC
 import LSC.BLIF
 import LSC.D3
-import LSC.LEF
 import LSC.SVG
 import LSC.Types
 import LSC.Version
