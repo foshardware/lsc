@@ -14,10 +14,10 @@ data Model = Model ModelName InputList OutputList ClockList [Command]
 modelName :: Model -> ModelName
 modelName (Model name _ _ _ _) = name
 
-subcircuits :: Model -> [Ident]
-subcircuits (Model n i o c (Subcircuit name _ : cs)) = name : subcircuits (Model n i o c cs)
-subcircuits (Model n i o c (_ : cs)) = subcircuits (Model n i o c cs)
-subcircuits (Model _ _ _ _ _) = []
+subckts :: Model -> [Ident]
+subckts (Model n i o c (Subcircuit name _ : cs)) = name : subckts (Model n i o c cs)
+subckts (Model n i o c (_ : cs)) = subckts (Model n i o c cs)
+subckts (Model _ _ _ _ _) = []
 
 type ModelName = Ident
 

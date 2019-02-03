@@ -51,14 +51,14 @@ instance ToJSON (DAG BLIF) where
     (_, stages) = eval tree
 
     dependencies = Map.fromList
-      [ (unpack $ BLIF.modelName m, fmap unpack $ filter (not . primitive) $ subcircuits m)
+      [ (unpack $ BLIF.modelName m, fmap unpack $ filter (not . primitive) $ subckts m)
       | m <- models blif
       ]
 
     dependents = Map.fromListWith (++)
       [ (unpack child, [unpack $ BLIF.modelName m])
       | m <- models blif
-      , child <- subcircuits m
+      , child <- subckts m
       , not $ primitive child
       ]
 
@@ -100,7 +100,7 @@ instance ToJSON (DAG NetGraph) where
           , not $ primitive $ g ^. identifier
           ]
         )
-      | m <- flattenHierarchy netlist
+      | m <- flatten subcells netlist
       ]
 
 

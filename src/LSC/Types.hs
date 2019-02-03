@@ -41,6 +41,13 @@ import Prelude hiding (lookup)
 import LSC.Symbolic
 
 
+
+data RTL = RTL
+  { _identifier  :: Identifier
+  , _subcircuits :: Map Identifier RTL
+  } deriving (Generic, Show)
+
+
 data NetGraph = NetGraph
   { _identifier  :: Identifier
   , _supercell   :: AbstractGate
@@ -299,6 +306,10 @@ inner p = Rect (p ^. l . r) (p ^. b . t) (p ^. r . l) (p ^. t . b)
 outer p = Rect (p ^. l . l) (p ^. b . b) (p ^. r . r) (p ^. t . t)
 
 
+
+makeFieldsNoPrefix ''RTL
+
+
 makeFieldsNoPrefix ''NetGraph
 
 instance Default NetGraph where
@@ -313,10 +324,10 @@ instance Hashable NetGraph where
     , a ^. nets & assocs
     )
 
-flattenHierarchy :: NetGraph -> [NetGraph]
-flattenHierarchy netlist
+flatten :: Foldable f => Getter a (f a) -> a -> [a]
+flatten descend netlist
   = netlist
-  : join [ flattenHierarchy model | model <- toList $ netlist ^. subcells ]
+  : join [ flatten descend model | model <- toList $ netlist ^. descend ]
 
 
 makeFieldsNoPrefix ''AbstractGate

@@ -15,6 +15,7 @@ import Control.Monad.Trans
 import Control.Monad.Codensity
 import Prelude hiding ((.), id)
 
+import LSC.Synthesis
 import LSC.Placement
 import LSC.Routing
 import LSC.Types
@@ -35,8 +36,18 @@ place :: Compiler' NetGraph
 place = ls placeEasy
 
 
+synthesize :: Compiler' RTL
+synthesize = ls synthesizeLogic
+
+physical :: Compiler RTL NetGraph
+physical = ls synthesizeGeometry
+
+
 netGraph :: DAG Identifier NetGraph
 netGraph = DAG (view identifier) subcells
+
+circuit :: DAG Identifier RTL
+circuit = DAG (view identifier) subcircuits
 
 
 type Compiler' a = Compiler a a
