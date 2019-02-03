@@ -43,13 +43,38 @@ import LSC.Symbolic
 
 data RTL = RTL
   { _identifier  :: Identifier
+  , _description :: AbstractGate
   , _subcircuits :: Map Identifier RTL
   } deriving (Generic, Show)
 
 
+data AbstractGate = AbstractGate [LogicPort] [Expr]
+  deriving (Generic, Show)
+
+instance Semigroup AbstractGate where
+  AbstractGate ps es <> AbstractGate qs fs = AbstractGate (ps <> qs) (es <> fs)
+
+instance Monoid AbstractGate where
+  mempty = AbstractGate mempty mempty
+  mappend = (<>)
+
+
+data LogicPort = LogicPort
+  { _identifier :: Identifier
+  , _dir        :: Dir
+  } deriving (Generic, Show)
+
+
+data Expr
+  = Assign Identifier Expr
+  | Ref Identifier
+  | And [Expr]
+  deriving (Generic, Show)
+
+
 data NetGraph = NetGraph
   { _identifier  :: Identifier
-  , _supercell   :: AbstractGate
+  , _supercell   :: AbstractCell
   , _subcells    :: Map Identifier NetGraph
   , _gates       :: Vector Gate
   , _nets        :: Map Identifier Net
@@ -88,15 +113,15 @@ instance ToJSON Gate
 instance FromJSON Gate
 
 
-data AbstractGate = AbstractGate
+data AbstractCell = AbstractCell
   { _geometry  :: Path
   , _vdd       :: Pin
   , _gnd       :: Pin
   , _pins      :: Map Identifier Pin
   } deriving (Generic, Show)
 
-instance ToJSON AbstractGate
-instance FromJSON AbstractGate
+instance ToJSON AbstractCell
+instance FromJSON AbstractCell
 
 
 data Cell = Cell
@@ -308,6 +333,13 @@ outer p = Rect (p ^. l . l) (p ^. b . b) (p ^. r . r) (p ^. t . t)
 
 makeFieldsNoPrefix ''RTL
 
+instance Default RTL where
+  def = RTL mempty mempty mempty
+
+
+makeFieldsNoPrefix ''LogicPort
+
+
 
 makeFieldsNoPrefix ''NetGraph
 
@@ -329,12 +361,12 @@ flatten descend netlist
   : join [ flatten descend model | model <- toList $ netlist ^. descend ]
 
 
-makeFieldsNoPrefix ''AbstractGate
+makeFieldsNoPrefix ''AbstractCell
 
-instance Default AbstractGate where
-  def = AbstractGate mempty def def mempty
+instance Default AbstractCell where
+  def = AbstractCell mempty def def mempty
 
-instance Hashable AbstractGate where
+instance Hashable AbstractCell where
   hashWithSalt s a = hashWithSalt s
     ( a ^. geometry
     , a ^. vdd

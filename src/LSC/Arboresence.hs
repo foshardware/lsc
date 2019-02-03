@@ -63,7 +63,7 @@ routeSat netlist = do
         gs <- sequence $ setGateGeometry <$> nodes
 
         pure $ netlist
-          & supercell .~ AbstractGate pad (def & ports .~ ps) (def & ports .~ gr) qs
+          & supercell .~ AbstractCell pad (def & ports .~ ps) (def & ports .~ gr) qs
           & gates     .~ gs
           & nets      .~ ns
 
