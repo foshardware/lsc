@@ -1,6 +1,11 @@
 {-# LANGUAGE ParallelListComp #-}
 
-module LSC.BLIF where
+module LSC.BLIF
+  ( module Language.BLIF.Syntax
+  , module Language.BLIF.Parser
+  , fromBLIF
+  , toSubcircuit
+  ) where
 
 import Control.Monad.Reader
 
@@ -16,7 +21,9 @@ import Data.Maybe
 import qualified Data.Vector as Vector
 import Prelude hiding (lookup)
 
-import BLIF.Syntax
+import Language.BLIF.Parser (parseBLIF)
+import Language.BLIF.Syntax
+
 import LSC.Types
 
 

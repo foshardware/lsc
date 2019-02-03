@@ -18,7 +18,7 @@ import System.IO
 import Text.Parsec (parse)
 import Text.ParserCombinators.Parsec.Number (decimal)
 
-import BLIF.Parser (parseBLIF)
+import LSC.BLIF    (parseBLIF)
 import LEF.Parser  (parseLEF)
 import LSC.Verilog (parseVerilog)
 

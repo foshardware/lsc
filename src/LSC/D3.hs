@@ -12,7 +12,7 @@ import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.ByteString.Lazy (ByteString)
 
-import BLIF.Syntax      as BLIF
+import LSC.BLIF         as BLIF
 import LSC.Verilog      as Verilog
 import LSC.Types        as LSC
 

@@ -17,6 +17,7 @@ dependencies:
 - arrowgant
 - async
 - blaze-svg
+- blif
 - bytestring
 - cabal-file-th
 - concurrent-output
