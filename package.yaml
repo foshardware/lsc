@@ -21,6 +21,7 @@ dependencies:
 - concurrent-output
 - containers
 - data-default
+- firrtl
 - hashable
 - kan-extensions
 - lens

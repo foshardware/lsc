@@ -8,6 +8,8 @@ extra-deps:
   commit: 8415f16e62e7eb3e4d2269e0838ac60ff34e9605
 - git: https://github.com/foshardware/arrowgant
   commit: aa6cbdbb332f0933b2e6f909cee588ce69250a72
+- git: https://github.com/foshardware/firrtl
+  commit: 2fee3844aafbb608bb6182bcd86cdba2333e0f2b
 - arrows-0.4.4.2@sha256:a260222b766da922657e302aa7c0409451913e1e503798a47a213a61ba382460
 - parsec-numbers-0.1.0@sha256:60fa05b1c16050dffd0e28cecb682a021eeec1be6f34dc9d901a38c90182f289
 - unagi-chan-0.4.1.0@sha256:97e08dd9a73462ca284bfd2f904cd471c94e1207c2dd79a59efcc8fe2c93de41

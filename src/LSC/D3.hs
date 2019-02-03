@@ -13,7 +13,7 @@ import qualified Data.Map as Map
 import Data.ByteString.Lazy (ByteString)
 
 import BLIF.Syntax      as BLIF
-import Verilog.Syntax   as Verilog
+import LSC.Verilog      as Verilog
 import LSC.Types        as LSC
 
 
