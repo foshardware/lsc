@@ -28,6 +28,9 @@ import Data.Hashable
 import Data.Text (Text)
 import Data.Vector (Vector)
 
+import Data.FileEmbed
+import Distribution.PackageDescription.TH
+
 import Control.Monad.Codensity
 import Control.Monad.Reader
 import Control.Monad.State
@@ -40,6 +43,12 @@ import Prelude hiding (lookup)
 
 import LSC.Symbolic
 
+
+versionString :: String
+versionString = $(packageVariable package) ++ ", commit "++ commitString
+
+commitString :: String
+commitString = $(embedStringFile ".git/refs/heads/master")
 
 
 data RTL = RTL

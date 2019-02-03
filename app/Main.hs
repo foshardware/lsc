@@ -29,8 +29,6 @@ import LSC.LEF
 import LSC.SVG
 import LSC.Types
 
-versionString :: String
-versionString = "lsc 0.1.2.3"
 
 type App = MaybeT IO
 main :: IO ()

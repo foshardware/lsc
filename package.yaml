@@ -1,5 +1,5 @@
 name:                lsc
-version:             0.1.2.4
+version:             0.1.2.5
 github:              "foshardware/lsc"
 license:             GPL-3
 author:              "Andreas Westerwick"
@@ -18,9 +18,11 @@ dependencies:
 - async
 - blaze-svg
 - bytestring
+- cabal-file-th
 - concurrent-output
 - containers
 - data-default
+- file-embed
 - firrtl
 - hashable
 - kan-extensions
