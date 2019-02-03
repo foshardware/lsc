@@ -28,6 +28,7 @@ import LSC.D3
 import LSC.LEF
 import LSC.SVG
 import LSC.Types
+import LSC.Version
 
 
 type App = MaybeT IO

@@ -32,8 +32,6 @@ import Control.Monad.Codensity
 import Control.Monad.Reader
 import Control.Monad.State
 
-import Data.FileEmbed
-import Distribution.PackageDescription.TH
 import Data.Time.Clock.POSIX
 import System.Console.Concurrent
 
@@ -41,16 +39,6 @@ import GHC.Generics
 import Prelude hiding (lookup)
 
 import LSC.Symbolic
-
-
-versionString :: String
-versionString = $(packageVariable package) ++ ", commit "++ commitString
-
-commitString :: String
-commitString =
-  if "ref:" == take 4 $(embedStringFile ".git/HEAD")
-    then $(embedStringFile ".git/refs/heads/master")
-    else $(embedStringFile ".git/HEAD")
 
 
 data RTL = RTL
