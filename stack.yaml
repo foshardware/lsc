@@ -3,8 +3,8 @@ packages:
 - .
 extra-deps:
 - git: https://github.com/foshardware/sbv
-  commit: 913bbaf5177655ee8f8992538b4722009012dbdf
-- git: https://github.com/foshardware/verilog.git
+  commit: 6d07d3f22ce918ec3c8a3c6ffb9d45dc3bde38fd
+- git: https://github.com/foshardware/verilog
   commit: 8415f16e62e7eb3e4d2269e0838ac60ff34e9605
 - git: https://github.com/foshardware/arrowgant
   commit: aa6cbdbb332f0933b2e6f909cee588ce69250a72
