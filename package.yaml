@@ -31,6 +31,7 @@ dependencies:
 - parsec
 - parsec-numbers
 - sbv
+- template-haskell
 - text
 - time
 - transformers

@@ -28,17 +28,16 @@ import Data.Hashable
 import Data.Text (Text)
 import Data.Vector (Vector)
 
-import Data.FileEmbed
-import Distribution.PackageDescription.TH
-
 import Control.Monad.Codensity
 import Control.Monad.Reader
 import Control.Monad.State
 
-import GHC.Generics
-
+import Data.FileEmbed
+import Distribution.PackageDescription.TH
 import Data.Time.Clock.POSIX
 import System.Console.Concurrent
+
+import GHC.Generics
 import Prelude hiding (lookup)
 
 import LSC.Symbolic
@@ -49,6 +48,7 @@ versionString = $(packageVariable package) ++ ", commit "++ commitString
 
 commitString :: String
 commitString = $(embedStringFile ".git/refs/heads/master")
+
 
 
 data RTL = RTL
