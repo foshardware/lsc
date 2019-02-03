@@ -6,7 +6,7 @@ module LSC where
 
 import Control.Arrow
 import Control.Arrow.Algebraic
-import Control.Arrow.Select
+import Control.Arrow.Memo
 import Control.Category
 import Control.Concurrent.Async
 import Control.Exception
@@ -24,8 +24,8 @@ import LSC.Web
 stage1 :: Compiler' NetGraph
 stage1 = zeroArrow
   <+> rpc routeWeb
-  <+> hierarchical subcells (place >>> route)
-  <+> hierarchical subcells (route & jogs `env` succ & rowSize `env` (+ 5000))
+  <+> dag netGraph (place >>> route)
+  <+> dag netGraph (route & jogs `env` succ & rowSize `env` (+ 5000))
 
 
 route :: Compiler' NetGraph
@@ -33,6 +33,10 @@ route = ls routeSat
 
 place :: Compiler' NetGraph
 place = ls placeEasy
+
+
+netGraph :: DAG Identifier NetGraph
+netGraph = DAG (view identifier) subcells
 
 
 type Compiler' a = Compiler a a
