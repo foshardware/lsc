@@ -27,28 +27,20 @@ import Language.BLIF.Syntax
 import LSC.Types
 
 
-fromBLIF :: BLIF -> Gnostic NetGraph
-fromBLIF (BLIF []) = pure def
+fromBLIF :: BLIF -> NetGraph
+fromBLIF (BLIF []) = def
 fromBLIF (BLIF (Model name inputs outputs clocks commands : submodels)) = do
 
-  tech <- ask
-
   let nodes = Vector.fromList
-        [ gate
-            & number .~ i
-            & vdd .~ view vdd comp
-            & gnd .~ view gnd comp
+        [ gate & number .~ i
         | i    <- [0.. ]
         | gate <- join $ toGates <$> commands
-        , comp <- maybeToList $ lookup (gate ^. identifier) (tech ^. stdCells)
         ]
 
   let edges = fromListWith mappend
-        [ (net, Net net mempty (singleton (gate ^. number) [pin]))
+        [ (net, Net net mempty (singleton (gate ^. number) mempty))
         | gate <- toList nodes
         , (contact, net) <- assocs $ gate ^. wires
-        , com <- maybeToList $ lookup (gate ^. identifier) (tech ^. stdCells)
-        , pin <- maybeToList $ lookup contact (com ^. pins)
         ]
 
   subGraphs <- fromList <$> sequence

@@ -205,9 +205,10 @@ freeze = flip execState def
 thaw :: Technology -> Bootstrap ()
 thaw = put
 
-
 type GnosticT m = ReaderT Technology m
-type Gnostic = Reader Technology
+type Gnostic = GnosticT Agnostic
+
+type Agnostic = Identity
 
 technology :: LSC Technology
 technology = lift $ LST $ lift ask
