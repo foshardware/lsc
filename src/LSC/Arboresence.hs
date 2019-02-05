@@ -7,14 +7,18 @@
 
 module LSC.Arboresence where
 
+import Control.Applicative
+import Control.Arrow
 import Control.Exception
 import Control.Lens hiding ((.>), inside)
 import Control.Monad
 import Data.Default
 import Data.Foldable
-import Data.Map (assocs)
+import Data.Map (assocs, lookup, member)
+import Data.Maybe
 import Data.Vector (indexM)
 import Data.Text (unpack)
+import Prelude hiding (lookup)
 
 import LSC.Synthesis
 import LSC.Symbolic
@@ -22,9 +26,11 @@ import LSC.Types
 
 
 routeSat :: NetGraph -> LSC NetGraph
-routeSat top = do
+routeSat t_ = do
 
-  netlist <- contactGeometry top
+  netlist <- contactGeometry t_
+
+  let abstract = netlist ^. gates <&> view identifier & any (`member` view subcells netlist)
 
   debug
     [ "start routeSat @ module", netlist ^. identifier & unpack
@@ -38,13 +44,15 @@ routeSat top = do
 
   area <- freeRectangle
 
-  nodes <- sequence $ netlist ^. gates <&> freeGatePolygon
+  nodes <- sequence $ netlist ^. gates <&> gatePolygon netlist
 
-  rim <- sequence $ netlist ^. supercell . pins <&> freePinPolygon
+  rim <- sequence $ netlist ^. supercell . pins <&> pinPolygon
 
   edges <- sequence $ netlist ^. nets <&> arboresence nodes rim
 
-  (ring, power, ground) <- powerUpAndGround nodes edges
+  (ring, power, ground) <- if abstract
+    then powerRingOnly nodes edges
+    else powerUpAndGround nodes edges
 
   placement area ring rim
 
@@ -85,6 +93,7 @@ routeSat top = do
   pure result
 
 
+placement :: SComponent -> SRing -> Pins -> LSC ()
 placement area ring rim = do
 
   liftSymbolic $ constrain
@@ -142,19 +151,27 @@ distinctPairs (x : xs) = fmap (x, ) xs ++ distinctPairs xs
 distinctPairs _ = []
 
 
-freeGatePolygon gate | gate ^. geometry /= mempty = do
+gatePolygon :: NetGraph -> Gate -> LSC (Gate, SComponent)
+gatePolygon _ gate
+  | gate ^. geometry /= mempty
+  = gate ^. geometry . to head <&> literal
+      & integrate [metal2, metal3]
+      & (,) gate
+      & pure
 
-  pure $ gate ^. geometry . to head <&> literal
-    & setLayers [metal2, metal3]
-    & (,) gate
+gatePolygon netlist gate = do
 
-freeGatePolygon gate = do
+  path <- freeRectangle <&> integrate [metal2, metal3]
 
-  path <- freeRectangle
-    <&> integrate metal2
-    <&> integrate metal3
+  standardDimensions <- lookupDimensions gate <$> technology
 
-  dimensions <- lookupDimensions gate <$> technology
+  abstractDimensions <- pure $ join $ lookup (gate ^. identifier) (netlist ^. subcells)
+    <&> view (supercell . geometry)
+    <&> fmap (width &&& height)
+    <&> listToMaybe
+
+  let dimensions = abstractDimensions <|> standardDimensions
+
   for_ dimensions $ \ (w, h) -> liftSymbolic $ constrain
       $ view r path - view l path .== literal w
     .&& view t path - view b path .== literal h
@@ -162,6 +179,7 @@ freeGatePolygon gate = do
   pure (gate, path)
 
 
+freeWirePolygon :: LSC SComponent
 freeWirePolygon = do
 
   path <- freeRectangle
@@ -175,7 +193,8 @@ freeWirePolygon = do
   pure path
 
 
-freePinPolygon pin = do
+pinPolygon :: Pin -> LSC (Pin, SComponent)
+pinPolygon pin = do
 
   path <- freeRectangle
 
@@ -188,6 +207,7 @@ freePinPolygon pin = do
   pure (pin, path)
 
 
+inside :: SComponent -> SComponent -> LSC ()
 inside i o = do
   d <- lambda <$> technology
   liftSymbolic $ constrain
@@ -197,6 +217,7 @@ inside i o = do
     .&& view t o - view t i .> literal d
 
 
+disjoint :: SComponent -> SComponent -> LSC ()
 disjoint p q = do
   d <- lambda <$> technology
   liftSymbolic $ constrain
@@ -207,6 +228,7 @@ disjoint p q = do
     .|| view b q - view t p .> literal d
 
 
+equivalent :: SComponent -> SComponent -> LSC ()
 equivalent p q = do
   liftSymbolic $ constrain
       $ view r p .== view r q
@@ -215,8 +237,8 @@ equivalent p q = do
     .&& view t p .== view t q
 
 
+connect :: SComponent -> SComponent -> LSC ()
 connect p q = do
-
   liftSymbolic $ constrain
       $ view r p .== view r q .&& view t p .== view t q
     .|| view l p .== view l q .&& view t p .== view t q
@@ -224,6 +246,7 @@ connect p q = do
     .|| view l p .== view l q .&& view b p .== view b q
 
 
+arboresence :: Nodes -> Pins -> Net -> LSC (Net, SPath)
 arboresence nodes rim net = do
 
   n <- succ . view jogs <$> environment
@@ -231,7 +254,7 @@ arboresence nodes rim net = do
   hyperedge <- sequence
     [ do
 
-      wire <- sequence $ replicate n $ integrate metal1 <$> freeWirePolygon
+      wire <- sequence $ replicate n $ integrate [metal1] <$> freeWirePolygon
 
       src `connect` head wire
       snk `connect` last wire
@@ -270,6 +293,7 @@ pinComponent p s = p
   & t .~ view b p + literal (view t s)
 
 
+powerUpAndGround :: Nodes -> Edges -> LSC (SRing, SPath, SPath)
 powerUpAndGround nodes edges = do
 
   (w, h) <- view standardPin <$> technology
@@ -279,8 +303,7 @@ powerUpAndGround nodes edges = do
     [ freeRectangle
       <&> l .~ literal x
       <&> r .~ literal (x + w)
-      <&> integrate metal2
-      <&> integrate metal3
+      <&> integrate [metal2, metal3]
     | x <- rows
     ]
 
@@ -313,11 +336,11 @@ powerUpAndGround nodes edges = do
 
       sequence_ $ disjoint path <$> grid
 
-      vdd_ <- integrate metal1 <$> freeWirePolygon
-      gnd_ <- integrate metal1 <$> freeWirePolygon
+      vdd_ <- integrate [metal1] <$> freeWirePolygon
+      gnd_ <- integrate [metal1] <$> freeWirePolygon
 
-      vs <- integrate metal2 <$> freeWirePolygon
-      gs <- integrate metal3 <$> freeWirePolygon
+      vs <- integrate [metal2] <$> freeWirePolygon
+      gs <- integrate [metal3] <$> freeWirePolygon
 
       pinComponent path v `connect` vdd_
       pinComponent path g `connect` gnd_
@@ -366,28 +389,105 @@ powerUpAndGround nodes edges = do
     , p <- ps
     ]
 
-  let power  = join vs ++ [ integrate metal2 p | p <- toList ring ++ grid ]
-      ground = join gs ++ [ integrate metal3 p | p <- toList ring ++ grid ]
+  let power  = join vs ++ [ integrate [metal2] p | p <- toList ring ++ grid ]
+      ground = join gs ++ [ integrate [metal3] p | p <- toList ring ++ grid ]
 
   pure (ring, power, ground)
 
 
-freeRing = do
+powerRingOnly :: Nodes -> Edges -> LSC (SRing, SPath, SPath)
+powerRingOnly nodes edges = do
 
-  left   <- freeRectangle
-  bottom <- freeRectangle
-  right  <- freeRectangle
-  top    <- freeRectangle
+  let i = head $ fmap (width . snd) (toList nodes) ++ [0]
+
+  (w, h) <- view standardPin <$> technology
+
+  ring <- freeRing
 
   liftSymbolic $ constrain
-      $ view l  left .== view l bottom .&& view b bottom .== view b  left
-    .&& view l  left .== view l    top .&& view t    top .== view t  left
-    .&& view r right .== view r bottom .&& view b bottom .== view b right
-    .&& view r right .== view r    top .&& view t    top .== view t right
+      $ ring ^. l . to width .== literal w
+    .&& ring ^. r . to width .== literal w
 
-  pure $ Rect left bottom right top
+    .&& ring ^. b . to height .== literal h
+    .&& ring ^. t . to height .== literal h
+
+  liftSymbolic $ constrain
+      $ height (outer ring) .< width (outer ring)
+    .&& height (outer ring) .< i + i + i
+
+  (vs, gs) <- unzip <$> sequence
+    [ do
+
+      path `inside` inner ring
+
+      vdd_ <- integrate [metal1] <$> freeWirePolygon
+      gnd_ <- integrate [metal1] <$> freeWirePolygon
+
+      vs <- integrate [metal2] <$> freeWirePolygon
+      gs <- integrate [metal3] <$> freeWirePolygon
+
+      pinComponent path v `connect` vdd_
+      pinComponent path g `connect` gnd_
+
+      gnd_ `connect` gs
+      vdd_ `connect` vs
+
+      liftSymbolic $ constrain $ sOr
+        [ outer ring ^. t .== gs ^. t
+        , outer ring ^. b .== gs ^. b
+        ]
+
+      pure ([vs, vdd_], [gs, gnd_])
+
+    | (gate, path) <- toList nodes
+    , v <- gate ^. vdd . ports & take 1
+    , g <- gate ^. gnd . ports & take 1
+    ]
+
+  sequence_
+    [ disjoint v p
+    | (v, p) <- distinctPairs $ join vs ++ join gs
+    ]
+
+  sequence_
+    [ disjoint v p
+    | v <- join vs ++ join gs
+    , (_, p) <- toList nodes
+    ]
+
+  sequence_
+    [ disjoint v p
+    | v <- join vs ++ join gs
+    , (_, ps) <- toList edges
+    , p <- ps
+    ]
+
+  let power  = join vs ++ [ integrate [metal2] p | p <- toList ring ]
+      ground = join gs ++ [ integrate [metal3] p | p <- toList ring ]
+
+  pure (ring, power, ground)
 
 
+
+freeRing :: LSC SRing
+freeRing = do
+
+  p <- Rect
+    <$> freeRectangle
+    <*> freeRectangle
+    <*> freeRectangle
+    <*> freeRectangle
+
+  liftSymbolic $ constrain
+      $ p ^. l . l .== p ^. b . l .&& p ^. b . b .== p ^. l . b
+    .&& p ^. l . l .== p ^. t . l .&& p ^. t . t .== p ^. l . t
+    .&& p ^. r . r .== p ^. b . r .&& p ^. b . b .== p ^. r . b
+    .&& p ^. r . r .== p ^. t . r .&& p ^. t . t .== p ^. r . t
+
+  pure p
+
+
+freeRectangle :: LSC SComponent
 freeRectangle = do
 
   area <- liftSymbolic $ Rect <$> free_ <*> free_ <*> free_ <*> free_

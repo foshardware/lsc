@@ -72,6 +72,7 @@ data Expr
   deriving (Generic, Show)
 
 
+
 data NetGraph = NetGraph
   { _identifier  :: Identifier
   , _supercell   :: AbstractCell
@@ -294,6 +295,13 @@ type SPath = [SComponent]
 type SRing = Ring SInteger SInteger
 
 
+type Nodes = Vector (Gate, SComponent)
+
+type Edges = Map Identifier (Net, SPath)
+
+type Pins = Map Identifier (Pin, SComponent)
+
+
 data Component l a
   = Rect    { _l :: a, _b :: a, _r :: a, _t :: a }
   | Via     { _l :: a, _b :: a, _r :: a, _t :: a, _z :: [l] }
@@ -312,14 +320,10 @@ width, height :: Num a => Component l a -> a
 width  p = p ^. r - p ^. l
 height p = p ^. t - p ^. b
 
-integrate :: l -> Component l a -> Component l a
-integrate layer (Rect x1 y1 x2 y2) = Layered x1 y1 x2 y2 (pure layer)
-integrate layer rect = over z (layer :) rect
-
-setLayers :: Foldable f => f l -> Component k a -> Component l a
-setLayers layer (Rect    x1 y1 x2 y2)   = Layered x1 y1 x2 y2 (toList layer)
-setLayers layer (Via     x1 y1 x2 y2 _) = Via     x1 y1 x2 y2 (toList layer)
-setLayers layer (Layered x1 y1 x2 y2 _) = Layered x1 y1 x2 y2 (toList layer)
+integrate :: [l] -> Component k a -> Component l a
+integrate layer (Rect    x1 y1 x2 y2)   = Layered x1 y1 x2 y2 layer
+integrate layer (Via     x1 y1 x2 y2 _) = Via     x1 y1 x2 y2 layer
+integrate layer (Layered x1 y1 x2 y2 _) = Layered x1 y1 x2 y2 layer
 
 
 instance Default a => Default (Component l a) where

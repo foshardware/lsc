@@ -4,9 +4,9 @@
 .inputs A1 A2 A3 A4 B1 B2 B3 B4 Cin
 .outputs S1 S2 S3 S4 Cout
 .subckt fulladder A=A1 B=B1 Cin=Cin S=S1 Cout=C1
-.subckt fulladder A=A2 B=B2 Cin=C1  S=S1 Cout=C2
-.subckt fulladder A=A3 B=B3 Cin=C2  S=S2 Cout=C3
-.subckt fulladder A=A4 B=B4 Cin=C3  S=S3 Cout=Cout
+.subckt fulladder A=A2 B=B2 Cin=C1  S=S2 Cout=C2
+.subckt fulladder A=A3 B=B3 Cin=C2  S=S3 Cout=C3
+.subckt fulladder A=A4 B=B4 Cin=C3  S=S4 Cout=Cout
 .end
 
 .model fulladder

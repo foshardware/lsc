@@ -3,7 +3,9 @@
 
 module LSC.Synthesis where
 
+import Control.Applicative
 import Control.Lens
+import Control.Monad
 import Data.Foldable
 import Data.Map (lookup, assocs, singleton, fromListWith)
 import Data.Maybe
@@ -36,8 +38,11 @@ contactGeometry netlist = do
       [ (net, Net net mempty (singleton (gate ^. number) [pin]))
       | gate <- toList $ netlist ^. gates
       , (contact, net) <- assocs $ gate ^. wires
-      , com <- maybeToList $ lookup (gate ^. identifier) (tech ^. stdCells)
-      , pin <- maybeToList $ lookup contact (com ^. pins)
+      , let key = gate ^. identifier
+      , let scope = lookup contact
+      , pin <- maybeToList $ join
+            $ view (pins . to scope) <$> lookup key (tech ^. stdCells)
+          <|> view (supercell . pins . to scope) <$> lookup key (netlist ^. subcells)
       ]
 
 
