@@ -1,4 +1,5 @@
 {-# LANGUAGE ParallelListComp #-}
+{-# LANGUAGE TupleSections #-}
 
 module LSC.BLIF
   ( module Language.BLIF.Syntax
@@ -7,17 +8,14 @@ module LSC.BLIF
   , toSubcircuit
   ) where
 
-import Control.Monad.Reader
-
 import Control.Lens
 import Data.Default
 import Data.Foldable
 import Data.Map
-  ( assocs, lookup
+  ( assocs
   , singleton
   , fromList, fromListWith
   )
-import Data.Maybe
 import qualified Data.Vector as Vector
 import Prelude hiding (lookup)
 
@@ -29,57 +27,50 @@ import LSC.Types
 
 fromBLIF :: BLIF -> NetGraph
 fromBLIF (BLIF []) = def
-fromBLIF (BLIF (Model name inputs outputs clocks commands : submodels)) = do
+fromBLIF (BLIF (top : down)) = fromModel top
+  & subcells .~ fromList [ (x ^. identifier, x) | x <- fmap fromModel down ]
+  & treeStructure
 
-  let nodes = Vector.fromList
-        [ gate & number .~ i
-        | i    <- [0.. ]
-        | gate <- join $ toGates <$> commands
-        ]
 
-  let edges = fromListWith mappend
-        [ (net, Net net mempty (singleton (gate ^. number) mempty))
-        | gate <- toList nodes
-        , (contact, net) <- assocs $ gate ^. wires
-        ]
-
-  subGraphs <- fromList <$> sequence
-        [ (,) i <$> fromBLIF (BLIF [submodel])
-        | submodel@(Model i _ _ _ _) <- submodels
-        ]
-
-  let ps =
-        [ (i, Pin i In def)
-        | i <- inputs ++ clocks
-        ] ++
-        [ (i, Pin i Out def)
-        | i <- outputs
-        ]
-
-  let superCell = def & pins .~ fromList ps
-
-  pure $ NetGraph
+fromModel :: Model -> NetGraph
+fromModel (Model name inputs outputs clocks commands)
+  = NetGraph
     name
     superCell
-    subGraphs
+    mempty
     nodes
     edges
 
+  where  
 
-toGates :: Command -> [Gate]
-toGates (LibraryGate ident assignments)
-  = pure $ def
-    & identifier .~ ident
-    & wires .~ fromList assignments
-toGates (Subcircuit ident assignments)
-  = pure $ def
-    & identifier .~ ident
-    & wires .~ fromList assignments
-toGates _ = mempty
+    nodes = Vector.fromList
+        [ fromNetlist c & number .~ i
+        | i <- [0.. ]
+        | c <- commands
+        ]
 
+    edges = fromListWith mappend
+        [ (net, Net net mempty (singleton (gate ^. number) [pin]))
+        | gate <- toList nodes
+        , (contact, net) <- gate ^. wires & assocs
+        , let pin = def & identifier .~ contact
+        ]
+
+    superCell = def
+      & pins <>~ fromList [(i, Pin i  In def) | i <- inputs ++ clocks] 
+      & pins <>~ fromList [(i, Pin i Out def) | i <- outputs]
+
+
+fromNetlist :: Command -> Gate
+fromNetlist (LibraryGate ident assignments) = def
+      & identifier .~ ident
+      & wires .~ fromList assignments
+fromNetlist (Subcircuit ident assignments) = def
+      & identifier .~ ident
+      & wires .~ fromList assignments
+fromNetlist _ = def
 
 
 toSubcircuit :: Gate -> Command
-toSubcircuit gate = Subcircuit (gate ^. identifier) (assocs $ gate ^. wires)
-
+toSubcircuit gate = Subcircuit (gate ^. identifier) (gate ^. wires & assocs)
 

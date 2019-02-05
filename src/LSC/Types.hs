@@ -22,7 +22,7 @@ import Data.Char
 import Data.Default
 import Data.Foldable
 import Data.Function (on)
-import Data.Map (Map, unionWith, lookup, assocs)
+import Data.Map (Map, fromList, insert, unionWith, lookup, assocs)
 import Data.Semigroup
 import Data.Hashable
 import Data.Text (Text)
@@ -355,6 +355,15 @@ instance Hashable NetGraph where
     , a ^. gates & toList
     , a ^. nets & assocs
     )
+
+
+treeStructure :: NetGraph -> NetGraph
+treeStructure netlist = netlist & subcells .~ foldr collect mempty (netlist ^. gates)
+  where
+    scope = fromList [ (x ^. identifier, x) | x <- flatten subcells netlist ]
+    collect g a = maybe a (descend a) $ lookup (g ^. identifier) scope
+    descend a n = insert (n ^. identifier) (treeStructure n) a
+
 
 flatten :: Foldable f => Getter a (f a) -> a -> [a]
 flatten descend netlist
