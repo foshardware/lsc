@@ -2,6 +2,7 @@ dist/
 
 *.svg
 *.prof
+*.sh
 
 .stack-work/
 lsc.cabal

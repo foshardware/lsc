@@ -59,6 +59,7 @@ routeSat top = do
 
   disjointGates nodes
   disjointNets edges
+  disjointPins nodes edges
 
   limit <- view halt <$> environment
   result <- liftSymbolic $ query $ do
@@ -137,6 +138,12 @@ placement area ring rim = do
     ]
 
 
+
+disjointPins :: Nodes -> Edges -> LSC ()
+disjointPins _ _ = pure ()
+
+
+disjointGates :: Nodes -> LSC ()
 disjointGates nodes = do
   sequence_
     [ disjoint p q
@@ -144,6 +151,7 @@ disjointGates nodes = do
     ]
 
 
+disjointNets :: Edges -> LSC ()
 disjointNets edges = do
   sequence_
     [ disjoint p q
@@ -160,8 +168,9 @@ distinctPairs _ = []
 
 gatePolygon :: NetGraph -> Gate -> LSC (Gate, SComponent)
 gatePolygon _ gate
-  | gate ^. geometry /= mempty
-  = gate ^. geometry . to head <&> literal
+  | gate ^. geometry & not . null
+  = gate ^. geometry <&> fmap literal
+      & head
       & integrate [metal2, metal3]
       & (,) gate
       & pure
@@ -309,6 +318,7 @@ pinComponent p s = p
   & b +~ literal (view b s)
   & r .~ view l p + literal (view r s)
   & t .~ view b p + literal (view t s)
+  & integrate [metal1]
 
 
 powerUpAndGround :: Nodes -> Edges -> LSC (SRing, SPath, SPath)
@@ -357,36 +367,45 @@ powerUpAndGround nodes edges = do
       vdd_ <- integrate [metal1] <$> freeWirePolygon
       gnd_ <- integrate [metal1] <$> freeWirePolygon
 
-      vs <- integrate [metal2] <$> freeWirePolygon
-      gs <- integrate [metal3] <$> freeWirePolygon
+      v <- integrate [metal2] <$> freeWirePolygon
+      g <- integrate [metal3] <$> freeWirePolygon
 
-      v `anyConnect` vdd_
-      g `anyConnect` gnd_
+      vs `anyConnect` vdd_
+      gs `anyConnect` gnd_
 
-      gnd_ `connect` gs
-      vdd_ `connect` vs
+      gnd_ `connect` g
+      vdd_ `connect` v
+
+
+      cell <- lookup (gate ^. identifier) . view stdCells <$> technology
+
+      let signals = foldr accum [] $ maybe mempty (view pins) cell
+          accum x a = x ^. ports <&> pinComponent path & mappend a
+
+      sequence_ [ disjoint sig gnd_ *> disjoint sig vdd_ | sig <- signals ]
+
 
       liftSymbolic $ constrain $ sOr $
-        [ p ^. l .== gs ^. l
+        [ p ^. l .== g ^. l
         | p <- init grid
         ] ++
-        [ outer ring ^. t .== gs ^. t
-        , outer ring ^. b .== gs ^. b
+        [ outer ring ^. t .== g ^. t
+        , outer ring ^. b .== g ^. b
         ]
 
       liftSymbolic $ constrain $ sOr $
-        [ p ^. l .== vs ^. l
+        [ p ^. l .== v ^. l
         | p <- init grid
         ] ++
-        [ outer ring ^. t .== vs ^. t
-        , outer ring ^. b .== vs ^. b
+        [ outer ring ^. t .== v ^. t
+        , outer ring ^. b .== v ^. b
         ]
 
-      pure ([vs, vdd_], [gs, gnd_])
+      pure ([v, vdd_], [g, gnd_])
 
     | (gate, path) <- toList nodes
-    , let v = gate ^. vdd . ports <&> pinComponent path
-    , let g = gate ^. gnd . ports <&> pinComponent path
+    , let vs = gate ^. vdd . ports <&> pinComponent path
+    , let gs = gate ^. gnd . ports <&> pinComponent path
     ]
 
   sequence_
@@ -441,25 +460,25 @@ powerRingOnly nodes edges = do
       vdd_ <- integrate [metal1] <$> freeWirePolygon
       gnd_ <- integrate [metal1] <$> freeWirePolygon
 
-      vs <- integrate [metal2] <$> freeWirePolygon
-      gs <- integrate [metal3] <$> freeWirePolygon
+      v <- integrate [metal2] <$> freeWirePolygon
+      g <- integrate [metal3] <$> freeWirePolygon
 
-      v `anyConnect` vdd_
-      g `anyConnect` gnd_
+      vs `anyConnect` vdd_
+      gs `anyConnect` gnd_
 
-      gnd_ `connect` gs
-      vdd_ `connect` vs
+      gnd_ `connect` g
+      vdd_ `connect` v
 
       liftSymbolic $ constrain $ sOr
-        [ outer ring ^. t .== gs ^. t
-        , outer ring ^. b .== gs ^. b
+        [ outer ring ^. t .== g ^. t
+        , outer ring ^. b .== g ^. b
         ]
 
-      pure ([vs, vdd_], [gs, gnd_])
+      pure ([v, vdd_], [g, gnd_])
 
     | (gate, path) <- toList nodes
-    , let v = gate ^. vdd . ports <&> pinComponent path
-    , let g = gate ^. gnd . ports <&> pinComponent path
+    , let vs = gate ^. vdd . ports <&> pinComponent path
+    , let gs = gate ^. gnd . ports <&> pinComponent path
     ]
 
   sequence_

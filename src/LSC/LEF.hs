@@ -50,6 +50,8 @@ macroGnd _ _ = Nothing
 
 macroPins :: Technology -> [MacroOption] -> [(Identifier, Pin)]
 macroPins tech (MacroPin ident options _ : rest)
+  | not $ MacroPinUse Power `elem` options
+  , not $ MacroPinUse Ground `elem` options
   = (ident, def & identifier .~ ident & dir .~ direction options & ports .~ macroPorts tech options)
   : macroPins tech rest
 macroPins tech (_ : rest) = macroPins tech rest
