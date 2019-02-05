@@ -20,6 +20,7 @@ import LSC.Synthesis
 import LSC.Placement
 import LSC.Routing
 import LSC.Types
+import LSC.Version
 import LSC.Web
 
 
@@ -120,7 +121,7 @@ instance Arrow LS where
 
 
 instance ArrowZero LS where
-  zeroArrow = throw $ AssertionFailed "start lsc"
+  zeroArrow = throw $ AssertionFailed $ unwords ["start", versionString]
 
 instance ArrowPlus LS where
   LS k <+> LS m = LS $ \ x -> do

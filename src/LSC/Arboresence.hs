@@ -15,7 +15,7 @@ import Control.Lens hiding ((.>), inside)
 import Control.Monad
 import Data.Default
 import Data.Foldable
-import Data.Map (assocs, lookup, member, singleton)
+import Data.Map (assocs, lookup, member, insert)
 import Data.Maybe
 import Data.Vector (indexM)
 import Data.Text (unpack)
@@ -27,9 +27,9 @@ import LSC.Types
 
 
 routeSat :: NetGraph -> LSC NetGraph
-routeSat t_ = do
+routeSat top = do
 
-  netlist <- contactGeometry t_
+  netlist <- contactGeometry top
 
   let abstract = netlist ^. gates <&> view identifier & any (`member` view subcells netlist)
 
@@ -78,8 +78,8 @@ routeSat t_ = do
         pure $ netlist
           & gates     .~ gs
           & nets      .~ ns
-          & nets     <>~ singleton "vdd" (Net "vdd" ps mempty)
-          & nets     <>~ singleton "gnd" (Net "gnd" gr mempty)
+          & nets      %~ insert "vdd" (Net "vdd" ps mempty)
+          & nets      %~ insert "gnd" (Net "gnd" gr mempty)
           & supercell .~ AbstractCell pad
             (def & ports .~ fmap (integrate [Metal2]) ri)
             (def & ports .~ fmap (integrate [Metal3]) ri)
@@ -253,6 +253,17 @@ connect p q = do
     .|| view l p .== view l q .&& view b p .== view b q
 
 
+anyConnect :: Foldable f => f SComponent -> SComponent -> LSC ()
+anyConnect qs p = do
+  liftSymbolic $ constrain $ sOr
+    [   p ^. r .== q ^. r .&& p ^. t .== q ^. t
+    .|| p ^. l .== q ^. l .&& p ^. t .== q ^. t
+    .|| p ^. r .== q ^. r .&& p ^. b .== q ^. b
+    .|| p ^. l .== q ^. l .&& p ^. b .== q ^. b
+    | q <- toList qs
+    ]
+
+
 arboresence :: Nodes -> Pins -> Net -> LSC (Net, SPath)
 arboresence nodes rim net = do
 
@@ -263,8 +274,8 @@ arboresence nodes rim net = do
 
       wire <- sequence $ replicate n $ integrate [metal1] <$> freeWirePolygon
 
-      src `connect` head wire
-      snk `connect` last wire
+      src `anyConnect` head wire
+      snk `anyConnect` last wire
 
       sequence_ [ connect i j | i <- wire | j <- drop 1 wire ]
 
@@ -279,14 +290,13 @@ arboresence nodes rim net = do
   where
 
     vertices d =
-      [ pinComponent src p
+      [ source ^. ports <&> pinComponent src
       | (j, assignments) <- assocs $ net ^. contacts
       , source <- assignments
       , source ^. dir == Just d
       , (_, src) <- indexM nodes j
-      , p <- take 1 $ source ^. ports
       ] ++
-      [ path
+      [ pure path
       | (pin, path) <- toList rim
       , pin ^. dir /= Just d
       , view identifier pin == view identifier net
@@ -350,8 +360,8 @@ powerUpAndGround nodes edges = do
       vs <- integrate [metal2] <$> freeWirePolygon
       gs <- integrate [metal3] <$> freeWirePolygon
 
-      pinComponent path v `connect` vdd_
-      pinComponent path g `connect` gnd_
+      v `anyConnect` vdd_
+      g `anyConnect` gnd_
 
       gnd_ `connect` gs
       vdd_ `connect` vs
@@ -375,8 +385,8 @@ powerUpAndGround nodes edges = do
       pure ([vs, vdd_], [gs, gnd_])
 
     | (gate, path) <- toList nodes
-    , v <- gate ^. vdd . ports & take 1
-    , g <- gate ^. gnd . ports & take 1
+    , let v = gate ^. vdd . ports <&> pinComponent path
+    , let g = gate ^. gnd . ports <&> pinComponent path
     ]
 
   sequence_
@@ -434,8 +444,8 @@ powerRingOnly nodes edges = do
       vs <- integrate [metal2] <$> freeWirePolygon
       gs <- integrate [metal3] <$> freeWirePolygon
 
-      pinComponent path v `connect` vdd_
-      pinComponent path g `connect` gnd_
+      v `anyConnect` vdd_
+      g `anyConnect` gnd_
 
       gnd_ `connect` gs
       vdd_ `connect` vs
@@ -448,8 +458,8 @@ powerRingOnly nodes edges = do
       pure ([vs, vdd_], [gs, gnd_])
 
     | (gate, path) <- toList nodes
-    , v <- gate ^. vdd . ports & take 1
-    , g <- gate ^. gnd . ports & take 1
+    , let v = gate ^. vdd . ports <&> pinComponent path
+    , let g = gate ^. gnd . ports <&> pinComponent path
     ]
 
   sequence_
