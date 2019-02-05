@@ -74,13 +74,13 @@ program = do
       net_ <- liftIO $ Text.readFile $ str Blif
       lef_ <- liftIO $ Text.readFile $ str Lef
 
-      tech <- lift $ either
+      tech <- liftIO $ either
         (ioError . userError . show)
         (pure . fromLEF)
         (parseLEF lef_)
       netlist <- liftIO $ either
         (ioError . userError . show)
-        (pure . gnostic tech . fromBLIF)
+        (pure . fromBLIF)
         (parseBLIF net_)
 
       circuit2d <- lift $ evalLSC opts tech $ compiler stage1 netlist

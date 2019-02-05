@@ -16,12 +16,15 @@ import Data.Map (assocs)
 import Data.Vector (indexM)
 import Data.Text (unpack)
 
+import LSC.Synthesis
 import LSC.Symbolic
 import LSC.Types
 
 
 routeSat :: NetGraph -> LSC NetGraph
-routeSat netlist = do
+routeSat top = do
+
+  netlist <- contactGeometry top
 
   debug
     [ "start routeSat @ module", netlist ^. identifier & unpack
@@ -96,14 +99,14 @@ placement area ring rim = do
           $ path ^. l .== area ^. l
         .&& outer ring ^. l - path ^. l .> d
     | (pin, path) <- toList rim
-    , pin ^. dir == In
+    , pin ^. dir == Just In
     ]
   sequence_
     [ liftSymbolic $ constrain
           $ path ^. r .== area ^. r
         .&& path ^. r - outer ring ^. r .> d
     | (pin, path) <- toList rim
-    , pin ^. dir == Out
+    , pin ^. dir == Just Out
     ]
   sequence_
     [ liftSymbolic $ constrain
@@ -249,13 +252,13 @@ arboresence nodes rim net = do
       [ pinComponent src p
       | (j, assignments) <- assocs $ net ^. contacts
       , source <- assignments
-      , source ^. dir == d
+      , source ^. dir == Just d
       , (_, src) <- indexM nodes j
       , p <- take 1 $ source ^. ports
       ] ++
       [ path
       | (pin, path) <- toList rim
-      , pin ^. dir /= d
+      , pin ^. dir /= Just d
       , view identifier pin == view identifier net
       ]
 

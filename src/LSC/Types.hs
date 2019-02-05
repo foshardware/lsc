@@ -22,7 +22,7 @@ import Data.Char
 import Data.Default
 import Data.Foldable
 import Data.Function (on)
-import Data.Map (Map, unionWith, lookup, assocs)
+import Data.Map (Map, fromList, insert, unionWith, lookup, assocs)
 import Data.Semigroup
 import Data.Hashable
 import Data.Text (Text)
@@ -137,7 +137,7 @@ instance FromJSON Cell
 
 data Pin = Pin
   { _identifier :: Identifier
-  , _dir        :: Dir
+  , _dir        :: Maybe Dir
   , _ports      :: [Port]
   } deriving (Generic, Show)
 
@@ -205,9 +205,10 @@ freeze = flip execState def
 thaw :: Technology -> Bootstrap ()
 thaw = put
 
-
 type GnosticT m = ReaderT Technology m
-type Gnostic = Reader Technology
+type Gnostic = GnosticT Agnostic
+
+type Agnostic = Identity
 
 technology :: LSC Technology
 technology = lift $ LST $ lift ask
@@ -355,6 +356,15 @@ instance Hashable NetGraph where
     , a ^. nets & assocs
     )
 
+
+treeStructure :: NetGraph -> NetGraph
+treeStructure netlist = netlist & subcells .~ foldr collect mempty (netlist ^. gates)
+  where
+    scope = fromList [ (x ^. identifier, x) | x <- flatten subcells netlist ]
+    collect g a = maybe a (descend a) $ lookup (g ^. identifier) scope
+    descend a n = insert (n ^. identifier) (treeStructure n) a
+
+
 flatten :: Foldable f => Getter a (f a) -> a -> [a]
 flatten descend netlist
   = netlist
@@ -448,7 +458,7 @@ instance Ord Pin where
   compare = compare `on` view identifier
 
 instance Default Pin where
-  def = Pin mempty In def
+  def = Pin mempty Nothing def
 
 
 makeFieldsNoPrefix ''CompilerOpts
