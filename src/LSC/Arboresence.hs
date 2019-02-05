@@ -4,6 +4,7 @@
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE ParallelListComp #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE OverloadedStrings #-}
 
 module LSC.Arboresence where
 
@@ -14,7 +15,7 @@ import Control.Lens hiding ((.>), inside)
 import Control.Monad
 import Data.Default
 import Data.Foldable
-import Data.Map (assocs, lookup, member)
+import Data.Map (assocs, lookup, member, singleton)
 import Data.Maybe
 import Data.Vector (indexM)
 import Data.Text (unpack)
@@ -67,6 +68,7 @@ routeSat t_ = do
       Sat -> do
 
         pad <- pure <$> getLayered area
+        ri <- sequence $ getLayered <$> toList ring
         ps <- sequence $ getLayered <$> power
         gr <- sequence $ getLayered <$> ground
         qs <- sequence $  setPinGeometry <$> rim
@@ -74,9 +76,14 @@ routeSat t_ = do
         gs <- sequence $ setGateGeometry <$> nodes
 
         pure $ netlist
-          & supercell .~ AbstractCell pad (def & ports .~ ps) (def & ports .~ gr) qs
           & gates     .~ gs
           & nets      .~ ns
+          & nets     <>~ singleton "vdd" (Net "vdd" ps mempty)
+          & nets     <>~ singleton "gnd" (Net "gnd" gr mempty)
+          & supercell .~ AbstractCell pad
+            (def & ports .~ fmap (integrate [Metal2]) ri)
+            (def & ports .~ fmap (integrate [Metal3]) ri)
+            qs
 
       Unsat -> do
 
@@ -286,6 +293,7 @@ arboresence nodes rim net = do
       ]
 
 
+pinComponent :: SComponent -> Component l Integer -> SComponent
 pinComponent p s = p
   & l +~ literal (view l s)
   & b +~ literal (view b s)
