@@ -137,7 +137,7 @@ instance FromJSON Cell
 
 data Pin = Pin
   { _identifier :: Identifier
-  , _dir        :: Dir
+  , _dir        :: Maybe Dir
   , _ports      :: [Port]
   } deriving (Generic, Show)
 
@@ -458,7 +458,7 @@ instance Ord Pin where
   compare = compare `on` view identifier
 
 instance Default Pin where
-  def = Pin mempty In def
+  def = Pin mempty Nothing def
 
 
 makeFieldsNoPrefix ''CompilerOpts

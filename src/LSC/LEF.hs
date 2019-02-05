@@ -87,8 +87,8 @@ databaseUnits (Units (DatabaseList x) : _) = x
 databaseUnits (_ : rest) = databaseUnits rest
 databaseUnits [] = 1
 
-direction (MacroPinDirection Input _ : _) = In
-direction (MacroPinDirection Output _ : _) = Out
-direction (MacroPinDirection InputOutput _ : _) = InOut
+direction (MacroPinDirection Input _ : _) = Just In
+direction (MacroPinDirection Output _ : _) = Just Out
+direction (MacroPinDirection InputOutput _ : _) = Just InOut
 direction (_ : rest) = direction rest
-direction [] = InOut
+direction [] = Nothing

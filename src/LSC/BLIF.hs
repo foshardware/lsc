@@ -57,8 +57,8 @@ fromModel (Model name inputs outputs clocks commands)
         ]
 
     superCell = def
-      & pins <>~ fromList [(i, Pin i  In def) | i <- inputs ++ clocks] 
-      & pins <>~ fromList [(i, Pin i Out def) | i <- outputs]
+      & pins <>~ fromList [(i, Pin i (Just  In) def) | i <- inputs ++ clocks] 
+      & pins <>~ fromList [(i, Pin i (Just Out) def) | i <- outputs]
 
 
 fromNetlist :: Command -> Gate
