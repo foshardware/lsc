@@ -14,6 +14,7 @@ import Control.Lens
 import Control.Monad.Trans
 import Control.Monad.Codensity
 import Prelude hiding ((.), id)
+import System.Console.Concurrent
 
 import LSC.Synthesis
 import LSC.Placement
@@ -113,9 +114,9 @@ instance Arrow LS where
       Singleton -> do
         liftIO $ (,) <$> runLSC o s (k x) <*> runLSC o s (m y)
       Workers _ -> do
-        liftIO $ concurrently
+        liftIO $ withConcurrentOutput $ concurrently
           (runLSC o s (popWorker *> k x) `finally` runLSC o s pushWorker)
-          (runLSC o s (m y) `finally` runLSC o s pushWorker)
+          (withConcurrentOutput $ runLSC o s (m y) `finally` runLSC o s pushWorker)
 
 
 instance ArrowZero LS where
