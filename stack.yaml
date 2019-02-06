@@ -7,7 +7,7 @@ extra-deps:
 - git: https://github.com/foshardware/verilog
   commit: 8415f16e62e7eb3e4d2269e0838ac60ff34e9605
 - git: https://github.com/foshardware/arrowgant
-  commit: aa6cbdbb332f0933b2e6f909cee588ce69250a72
+  commit: 4398c6ac095a4e76e0f355f87285935b9708931b
 - git: https://github.com/foshardware/firrtl
   commit: 2fee3844aafbb608bb6182bcd86cdba2333e0f2b
 - git: https://github.com/foshardware/blif
@@ -16,7 +16,6 @@ extra-deps:
   commit: a4dadcd820a6331c0ec3372e7039da55535163db
 - arrows-0.4.4.2@sha256:a260222b766da922657e302aa7c0409451913e1e503798a47a213a61ba382460
 - parsec-numbers-0.1.0@sha256:60fa05b1c16050dffd0e28cecb682a021eeec1be6f34dc9d901a38c90182f289
-- unagi-chan-0.4.1.0@sha256:97e08dd9a73462ca284bfd2f904cd471c94e1207c2dd79a59efcc8fe2c93de41
 - Stream-0.4.7.2@sha256:ed78165aa34c4e23dc53c9072f8715d414a585037f2145ea0eb2b38300354c53
 - lazysmallcheck-0.6@sha256:dac7a1e4877681f1260309e863e896674dd6efc1159897b7945893e693f2a6bc
 - cabal-file-th-0.2.6@sha256:d278ab950813e8bb1ab242a4e43bc50851761421a1e1bc33dae8949926adf548

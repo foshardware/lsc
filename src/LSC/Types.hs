@@ -14,9 +14,8 @@
 
 module LSC.Types where
 
-import Control.Concurrent (getNumCapabilities)
-import Control.Concurrent.Chan.Unagi
 import Control.Lens hiding (element)
+import Control.Concurrent.MSem (MSem)
 import Data.Aeson
 import Data.Char
 import Data.Default
@@ -232,7 +231,7 @@ data CompilerOpts = CompilerOpts
 
 data Workers
   = Singleton
-  | Workers (InChan (), OutChan ())
+  | Workers (MSem Int)
 
 smtOption :: String -> SMTConfig
 smtOption = d . fmap toLower
@@ -489,32 +488,7 @@ debug msg = do
   when enabled $ liftIO $ do
     time <- show . round <$> getPOSIXTime
     errorConcurrent $ unlines [unwords $ time : "->" : toList msg]
-
-
-pushWorker :: LSC ()
-pushWorker = do
-  opts <- environment
-  case opts ^. workers of
-    Singleton -> pure ()
-    Workers (in_, _) -> liftIO $ writeChan in_ ()
-
-popWorker :: LSC ()
-popWorker = do
-  opts <- environment
-  case opts ^. workers of
-    Singleton -> pure ()
-    Workers (_, out) -> liftIO $ readChan out
-
-
-createWorkers :: Int -> IO Workers
-createWorkers n | n < 2 = pure Singleton
-createWorkers n = do
-  (in_, out) <- newChan
-  sequence_ $ replicate (n - 1) $ writeChan in_ ()
-  pure $ Workers (in_, out)
-
-rtsWorkers :: IO Workers
-rtsWorkers = createWorkers =<< getNumCapabilities
+    flushConcurrentOutput
 
 
 makeFieldsNoPrefix ''Technology

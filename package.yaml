@@ -32,12 +32,12 @@ dependencies:
 - mtl
 - parsec
 - parsec-numbers
+- SafeSemaphore
 - sbv
 - template-haskell
 - text
 - time
 - transformers
-- unagi-chan
 - vector
 - vector-algorithms
 - verilog

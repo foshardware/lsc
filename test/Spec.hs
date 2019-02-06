@@ -107,7 +107,7 @@ remoteProcess n = do
   result2 @?= 2
 
 
-incrementWithDelay :: Int -> MVar Int -> Compiler ()
+incrementWithDelay :: Int -> MVar Int -> Compiler' ()
 incrementWithDelay n counter = ls_ . liftIO $ do
   modifyMVar_ counter $ pure . succ
   threadDelay n
