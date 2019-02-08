@@ -28,23 +28,23 @@ import LSC.Web
 
 stage1 :: Compiler' NetGraph
 stage1 = zeroArrow
-  <+> ls routeWeb
+  <+> remote routeWeb
   <+> dag netGraph (place >>> route)
   <+> dag netGraph (route & jogs `env` succ & rowSize `env` (+ 5000))
 
 
 route :: Compiler' NetGraph
-route = local $ ls routeSat
+route = local routeSat
 
 place :: Compiler' NetGraph
-place = local $ ls placeEasy
+place = local placeEasy
 
 
 synthesize :: Compiler' RTL
-synthesize = ls synthesizeLogic
+synthesize = local synthesizeLogic
 
 physical :: Compiler RTL NetGraph
-physical = ls synthesizeGeometry
+physical = local synthesizeGeometry
 
 
 netGraph :: DAG Identifier NetGraph
@@ -62,30 +62,32 @@ compiler :: Compiler a b -> a -> LSC b
 compiler = unLS . reduce
 
 
-ls_ :: LSC b -> Compiler b b
-ls_ f = ls (<$ f)
+remote_ :: LSC b -> Compiler' b
+remote_ f = remote (<$ f)
 
-ls :: (a -> LSC b) -> Compiler a b
-ls = LSR . Lift . LS
+remote :: (a -> LSC b) -> Compiler a b
+remote = LSR . Lift . LS
+
+local_ :: LSC b -> Compiler' b
+local_ f = local (<$ f)
+
+local :: (a -> LSC b) -> Compiler a b
+local k = remote $ \ x -> do
+  s <- thaw <$> technology
+  o <- environment
+  case o ^. workers of
+    Singleton -> k x
+    Workers i -> liftIO $ MSem.with i $ runLSC o s (k x)
 
 
 env_ :: Simple Setter CompilerOpts o -> o -> Compiler a b -> Compiler a b
 env_ setter = env setter . const
 
 env :: Simple Setter CompilerOpts o -> (o -> o) -> Compiler a b -> Compiler a b
-env setter f k = ls $ \ x -> do
+env setter f k = remote $ \ x -> do
   o <- environment
   let p = o & setter %~ f
   lift $ LST $ lift $ flip runEnvT p $ unLST $ lowerCodensity $ compiler k x
-
-
-local :: Compiler a b -> Compiler a b
-local act = ls $ \ x -> do
-  s <- thaw <$> technology
-  o <- environment
-  case o ^. workers of
-    Singleton -> compiler act x
-    Workers i -> liftIO $ MSem.with i $ runLSC o s $ compiler act x
 
 
 newtype LS a b = LS { unLS :: a -> LSC b }

@@ -45,7 +45,7 @@ dualCore :: Int -> IO ()
 dualCore n = do
   counter <- newMVar 0
   ws <- createWorkers 2
-  let inc = local $ incrementWithDelay (2*n) counter
+  let inc = local_ $ incrementWithDelay (2*n) counter
       act = fst ^<< inc &&& inc &&& inc &&& inc &&& inc &&& inc
       tech = thaw def
       opts = def & workers .~ ws
@@ -62,7 +62,7 @@ quadCore :: Int -> IO ()
 quadCore n = do
   counter <- newMVar 0
   ws <- createWorkers 4
-  let inc = local $ incrementWithDelay (2*n) counter
+  let inc = local_ $ incrementWithDelay (2*n) counter
       act = fst . snd ^<< (inc &&& inc) &&& inc &&& (inc &&& inc &&& inc)
       tech = thaw def
       opts = def & workers .~ ws
@@ -79,7 +79,7 @@ stream :: Int -> IO ()
 stream n = do
   counter <- newMVar 0
   ws <- createWorkers 4
-  let inc = local $ incrementWithDelay (2*n) counter
+  let inc = local_ $ incrementWithDelay (2*n) counter
       act = select inc
       tech = thaw def
       opts = def & workers .~ ws
@@ -97,8 +97,8 @@ remoteProcess n = do
   counter1 <- newMVar 0
   counter2 <- newMVar 0
   ws <- createWorkers 2
-  let inc1 = local $ incrementWithDelay (2*n) counter1
-      inc2 = incrementWithDelay (2*n) counter2
+  let inc1 = local_ $ incrementWithDelay (2*n) counter1
+      inc2 = remote_ $ incrementWithDelay (2*n) counter2
       act = fst ^<< inc1 &&& inc1 &&& inc2 &&& inc1 &&& inc2 &&& inc1 &&& inc1 &&& inc1 &&& inc1 &&& inc1 &&& inc1
       tech = thaw def
       opts = def & workers .~ ws
@@ -114,7 +114,7 @@ raceCondition :: Int -> IO ()
 raceCondition n = do
   counter <- newMVar 0
   ws <- createWorkers 4
-  let inc k = local $ incrementWithDelay (2*k*n) counter
+  let inc k = local_ $ incrementWithDelay (2*k*n) counter
       act = inc 1 \\\ inc 3 \\\ inc 3 \\\ inc 4 \\\ inc 5 \\\ inc 6
       tech = thaw def
       opts = def & workers .~ ws
@@ -126,8 +126,8 @@ raceCondition n = do
   result1 @?= result2
 
 
-incrementWithDelay :: Int -> MVar Int -> Compiler' ()
-incrementWithDelay n counter = ls_ . liftIO $ do
+incrementWithDelay :: Int -> MVar Int -> LSC ()
+incrementWithDelay n counter = liftIO $ do
   threadDelay n
   modifyMVar_ counter $ pure . succ
 
