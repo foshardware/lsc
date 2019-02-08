@@ -7,7 +7,7 @@ extra-deps:
 - git: https://github.com/foshardware/verilog
   commit: 8415f16e62e7eb3e4d2269e0838ac60ff34e9605
 - git: https://github.com/foshardware/arrowgant
-  commit: 4398c6ac095a4e76e0f355f87285935b9708931b
+  commit: 21dcc0aa6d0b4ffbda7a1433d92dd518547244fa
 - git: https://github.com/foshardware/firrtl
   commit: 2fee3844aafbb608bb6182bcd86cdba2333e0f2b
 - git: https://github.com/foshardware/blif

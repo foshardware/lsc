@@ -13,7 +13,7 @@ import Control.Concurrent (getNumCapabilities)
 import Control.Concurrent.Async
 import qualified Control.Concurrent.MSem as MSem
 import Control.Exception
-import Control.Lens hiding (Traversing)
+import Control.Lens
 import Control.Monad.Trans
 import Control.Monad.Codensity
 import Prelude hiding ((.), id)
@@ -28,16 +28,16 @@ import LSC.Web
 
 stage1 :: Compiler' NetGraph
 stage1 = zeroArrow
-  <+> rpc routeWeb
+  <+> ls routeWeb
   <+> dag netGraph (place >>> route)
   <+> dag netGraph (route & jogs `env` succ & rowSize `env` (+ 5000))
 
 
 route :: Compiler' NetGraph
-route = ls routeSat
+route = local $ ls routeSat
 
 place :: Compiler' NetGraph
-place = ls placeEasy
+place = local $ ls placeEasy
 
 
 synthesize :: Compiler' RTL
@@ -62,9 +62,6 @@ compiler :: Compiler a b -> a -> LSC b
 compiler = unLS . reduce
 
 
-rpc :: (a -> LSC b) -> Compiler a b
-rpc = remote . ls
-
 ls_ :: LSC b -> Compiler b b
 ls_ f = ls (<$ f)
 
@@ -82,15 +79,13 @@ env setter f k = ls $ \ x -> do
   lift $ LST $ lift $ flip runEnvT p $ unLST $ lowerCodensity $ compiler k x
 
 
-remote :: Compiler a b -> Compiler a b
-remote act = ls $ \ x -> do
+local :: Compiler a b -> Compiler a b
+local act = ls $ \ x -> do
   s <- thaw <$> technology
   o <- environment
   case o ^. workers of
     Singleton -> compiler act x
-    Workers i -> do
-      liftIO $ MSem.signal i *> runLSC o s (compiler act x)
-        `finally` MSem.wait i
+    Workers i -> liftIO $ MSem.with i $ runLSC o s $ compiler act x
 
 
 newtype LS a b = LS { unLS :: a -> LSC b }
@@ -117,12 +112,8 @@ instance Arrow LS where
     s <- thaw <$> technology
     o <- environment
     case o ^. workers of
-      Singleton -> do
-        liftIO $ (,) <$> runLSC o s (k x) <*> runLSC o s (m y)
-      Workers i -> do
-        liftIO $ concurrently
-          (MSem.with i $ runLSC o s (k x))
-          (runLSC o s (m y) `finally` MSem.signal i)
+      Singleton -> liftIO $ (,) <$> runLSC o s (k x) <*> runLSC o s (m y)
+      Workers i -> liftIO $ concurrently (runLSC o s (k x)) (runLSC o s (m y))
 
 
 instance ArrowSelect LS where
@@ -131,15 +122,33 @@ instance ArrowSelect LS where
     o <- environment
     case o ^. workers of
       Singleton -> mapM k xs
+      Workers i -> liftIO $ forConcurrently xs $ runLSC o s . k
+
+instance ArrowRace LS where
+  LS k /// LS m = LS $ \ (x, y) -> do
+    s <- thaw <$> technology
+    o <- environment
+    case o ^. workers of
+      Singleton -> Left <$> k x
       Workers i -> liftIO $ do
-        MSem.signal i
-        mapConcurrently (MSem.with i . runLSC o s . k) xs
-          `finally` MSem.wait i
+        withAsync (runLSC o s (k x)) $ \ wx ->
+          withAsync (runLSC o s (m y)) $ \ wy ->
+            waitEitherCatch wx wy >>= \ xy -> case xy of
+
+              Left (Right f) -> pure (Left f)
+              Left (Left (SomeException e)) -> do
+                runLSC o s $ debug [displayException e]
+                either throw Right <$> waitCatch wy
+
+              Right (Right f) -> pure (Right f)
+              Right (Left (SomeException e)) -> do
+                runLSC o s $ debug [displayException e]
+                either throw Left <$> waitCatch wx
 
 
 createWorkers :: Int -> IO Workers
 createWorkers n | n < 2 = pure Singleton
-createWorkers n = Workers <$> MSem.new (pred n)
+createWorkers n = Workers <$> MSem.new n
 
 rtsWorkers :: IO Workers
 rtsWorkers = createWorkers =<< getNumCapabilities
@@ -188,6 +197,9 @@ instance Arrow ls => Arrow (LSR ls) where
 
 instance ArrowSelect ls => ArrowSelect (LSR ls) where
   select (LSR f) = LSR (select f)
+
+instance ArrowRace ls => ArrowRace (LSR ls) where
+  LSR f /// LSR g = LSR (f /// g)
 
 
 instance ArrowPlus ls => ArrowZero (LSR ls) where
