@@ -330,7 +330,7 @@ powerUpAndGround nodes edges = do
   grid <- sequence
     [ do
       p <- liftSymbolic free_
-      liftSymbolic $ constrain $ inRange p (x - 4000, x + 4000)
+      liftSymbolic $ constrain $ inRange p (x, x + 8000)
       freeRectangle
         <&> l .~ p
         <&> r .~ (p + literal w)
