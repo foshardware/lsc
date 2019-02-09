@@ -10,7 +10,6 @@ module LSC.Arboresence where
 
 import Control.Applicative
 import Control.Arrow
-import Control.Exception
 import Control.Lens hiding ((.>), inside)
 import Control.Monad
 import Data.Default
@@ -34,7 +33,7 @@ routeSat top = do
   let abstract = netlist ^. gates <&> view identifier & any (`member` view subcells netlist)
 
   debug
-    [ "start routeSat @ module", netlist ^. identifier & unpack
+    [ "start   routeSat @ module", netlist ^. identifier & unpack
     , "-", netlist ^. gates & length & show, "gates"
     , "-", netlist ^. nets & length & show, "nets"
     ]
@@ -89,14 +88,24 @@ routeSat top = do
       Unsat -> do
 
         unsat <- getUnsatCore
-        throw $ AssertionFailed $ unlines unsat
+        throwLSC $ Fail $ unwords
+          [ "unsat   routeSat @ module"
+          , netlist ^. identifier & unpack
+          , ['-' | not $ null unsat]
+          , unlines unsat
+          ]
 
       _ -> do
 
         reason <- getUnknownReason
-        throw $ AssertionFailed $ show reason
+        throwLSC $ Fail $ unwords
+          [ "unknown routeSat @ module"
+          , netlist ^. identifier & unpack
+          , ['-' | not $ null $ show reason]
+          , show reason
+          ]
 
-  debug ["stop  routeSat @ module", netlist ^. identifier & unpack]
+  debug ["stop    routeSat @ module", netlist ^. identifier & unpack]
 
   pure result
 

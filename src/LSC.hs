@@ -30,7 +30,7 @@ stage1 :: Compiler' NetGraph
 stage1 = zeroArrow
   <+> remote routeWeb
   <+> dag netGraph (place >>> route)
-  <+> dag netGraph (route & env_ rowSize 21000)
+  <+> dag netGraph (env_ rowSize 21000 route \\\ route)
 
 
 route :: Compiler' NetGraph
@@ -137,15 +137,15 @@ instance ArrowRace LS where
           withAsync (runLSC o s (m y)) $ \ wy ->
             waitEitherCatch wx wy >>= \ xy -> case xy of
 
-              Left (Right f) -> pure (Left f)
+              Left (Right f) -> Left f <$ cancelWith wy (Fail "race lost")
               Left (Left (SomeException e)) -> do
                 runLSC o s $ debug [displayException e]
-                either throw Right <$> waitCatch wy
+                Right <$> wait wy
 
-              Right (Right f) -> pure (Right f)
+              Right (Right f) -> Right f <$ cancelWith wx (Fail "race lost")
               Right (Left (SomeException e)) -> do
                 runLSC o s $ debug [displayException e]
-                either throw Left <$> waitCatch wx
+                Left <$> wait wx
 
 
 createWorkers :: Int -> IO Workers
@@ -157,7 +157,7 @@ rtsWorkers = createWorkers =<< getNumCapabilities
 
 
 instance ArrowZero LS where
-  zeroArrow = throw $ AssertionFailed $ unwords ["start", versionString]
+  zeroArrow = LS $ fail $ unwords ["start", versionString]
 
 instance ArrowPlus LS where
   LS k <+> LS m = LS $ \ x -> do

@@ -16,6 +16,8 @@ module LSC.Types where
 
 import Control.Lens hiding (element)
 import Control.Concurrent.MSem (MSem)
+import Control.Exception
+import Control.Monad.Fail
 import Data.Aeson
 import Data.Char
 import Data.Default
@@ -38,6 +40,7 @@ import GHC.Generics
 import Prelude hiding (lookup)
 
 import LSC.Symbolic
+
 
 
 data RTL = RTL
@@ -297,6 +300,19 @@ instance Monad LST where
 
 instance MonadIO LST where
   liftIO = LST . liftIO
+
+instance MonadFail LST where
+  fail = throwLSC . Fail
+
+throwLSC :: MonadIO m => Fail -> m a
+throwLSC = liftIO . throwIO
+
+newtype Fail = Fail { unFail :: String }
+
+instance Exception Fail
+
+instance Show Fail where
+  show = unFail
 
 
 type Path = [Component Layer Integer]
