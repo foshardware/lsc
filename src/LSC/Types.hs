@@ -21,7 +21,7 @@ import Data.Char
 import Data.Default
 import Data.Foldable
 import Data.Function (on)
-import Data.Map (Map, fromList, insert, unionWith, lookup, assocs)
+import Data.Map (Map, fromList, insert, unionWith, lookup)
 import Data.Semigroup
 import Data.Hashable
 import Data.Text (Text)
@@ -83,6 +83,9 @@ data NetGraph = NetGraph
 instance ToJSON NetGraph
 instance FromJSON NetGraph
 
+instance Hashable NetGraph where
+  hashWithSalt s = hashWithSalt s . encode
+
 
 type Contact = Pin
 
@@ -94,6 +97,9 @@ data Net = Net
 
 instance ToJSON Net
 instance FromJSON Net
+
+instance Hashable Net where
+  hashWithSalt s = hashWithSalt s . encode
 
 
 type Number = Int
@@ -112,6 +118,9 @@ data Gate = Gate
 instance ToJSON Gate
 instance FromJSON Gate
 
+instance Hashable Gate where
+  hashWithSalt s = hashWithSalt s . encode
+
 
 data AbstractCell = AbstractCell
   { _geometry  :: Path
@@ -123,6 +132,9 @@ data AbstractCell = AbstractCell
 instance ToJSON AbstractCell
 instance FromJSON AbstractCell
 
+instance Hashable AbstractCell where
+  hashWithSalt s = hashWithSalt s . encode
+
 
 data Cell = Cell
   { _pins       :: Map Identifier Pin
@@ -133,6 +145,9 @@ data Cell = Cell
 
 instance ToJSON Cell
 instance FromJSON Cell
+
+instance Hashable Cell where
+  hashWithSalt s = hashWithSalt s . encode
 
 
 data Pin = Pin
@@ -191,6 +206,9 @@ data Technology = Technology
 
 instance ToJSON Technology
 instance FromJSON Technology
+
+instance Hashable Technology where
+  hashWithSalt s = hashWithSalt s . encode
 
 
 type BootstrapT m = StateT Technology m
@@ -350,15 +368,6 @@ makeFieldsNoPrefix ''NetGraph
 instance Default NetGraph where
   def = NetGraph mempty def mempty mempty mempty
 
-instance Hashable NetGraph where
-  hashWithSalt s a = hashWithSalt s
-    ( a ^. identifier
-    , a ^. supercell
-    , a ^. subcells & assocs
-    , a ^. gates & toList
-    , a ^. nets & assocs
-    )
-
 
 treeStructure :: NetGraph -> NetGraph
 treeStructure netlist = netlist & subcells .~ foldr collect mempty (netlist ^. gates)
@@ -379,23 +388,8 @@ makeFieldsNoPrefix ''AbstractCell
 instance Default AbstractCell where
   def = AbstractCell mempty def def mempty
 
-instance Hashable AbstractCell where
-  hashWithSalt s a = hashWithSalt s
-    ( a ^. geometry
-    , a ^. vdd
-    , a ^. gnd
-    , a ^. pins & assocs
-    )
-
 
 makeFieldsNoPrefix ''Net
-
-instance Hashable Net where
-  hashWithSalt s a = hashWithSalt s
-    ( a ^. identifier
-    , a ^. geometry
-    , a ^. contacts & assocs
-    )
 
 instance Eq Net where
   (==) = (==) `on` view identifier
@@ -422,15 +416,6 @@ instance Ord Gate where
 instance Default Gate where
   def = Gate mempty mempty def def mempty def
 
-instance Hashable Gate where
-  hashWithSalt s a = hashWithSalt s
-    ( a ^. identifier
-    , a ^. geometry
-    , (a ^. vdd, a ^. gnd)
-    , a ^. wires & assocs
-    , a ^. number
-    )
-
 
 type Arboresence a = (Net, a, a)
 
@@ -442,14 +427,6 @@ makeFieldsNoPrefix ''Cell
 
 instance Default Cell where
   def = Cell mempty def def def
-
-instance Hashable Cell where
-  hashWithSalt s a = hashWithSalt s
-    ( a ^. pins & assocs
-    , a ^. vdd
-    , a ^. gnd
-    , a ^. dims
-    )
 
 
 makeFieldsNoPrefix ''Pin
@@ -467,7 +444,7 @@ instance Default Pin where
 makeFieldsNoPrefix ''CompilerOpts
 
 instance Default CompilerOpts where
-  def = CompilerOpts 1 20000 (16 * 1000000) True yices Singleton
+  def = CompilerOpts 2 20000 (16 * 1000000) True yices Singleton
 
 
 runLSC :: Environment -> Bootstrap () -> LSC a -> IO a
@@ -495,15 +472,6 @@ makeFieldsNoPrefix ''Technology
 
 instance Default Technology where
   def = Technology 1000 1 mempty (1000, 1000) 30000
-
-instance Hashable Technology where
-  hashWithSalt s a = hashWithSalt s
-    ( a ^. scaleFactor
-    , a ^. featureSize
-    , a ^. stdCells & assocs
-    , a ^. standardPin
-    , a ^. rowSize
-    )
 
 
 lookupDimensions :: Gate -> Technology -> Maybe (Integer, Integer)

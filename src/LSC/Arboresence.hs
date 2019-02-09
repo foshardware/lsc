@@ -328,11 +328,14 @@ powerUpAndGround nodes edges = do
   rows <- divideArea nodes
 
   grid <- sequence
-    [ freeRectangle
-      <&> l .~ literal x
-      <&> r .~ literal (x + w)
-      <&> integrate [metal2, metal3]
-    | x <- rows
+    [ do
+      p <- liftSymbolic free_
+      liftSymbolic $ constrain $ inRange p (x - 4000, x + 4000)
+      freeRectangle
+        <&> l .~ p
+        <&> r .~ (p + literal w)
+        <&> integrate [metal2, metal3]
+    | x <- literal <$> rows
     ]
 
   sequence_
