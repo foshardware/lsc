@@ -115,7 +115,7 @@ instance Arrow LS where
     o <- environment
     case o ^. workers of
       Singleton -> liftIO $ (,) <$> runLSC o s (k x) <*> runLSC o s (m y)
-      Workers i -> liftIO $ concurrently (runLSC o s (k x)) (runLSC o s (m y))
+      Workers _ -> liftIO $ concurrently (runLSC o s (k x)) (runLSC o s (m y))
 
 
 instance ArrowSelect LS where
@@ -124,7 +124,7 @@ instance ArrowSelect LS where
     o <- environment
     case o ^. workers of
       Singleton -> mapM k xs
-      Workers i -> liftIO $ forConcurrently xs $ runLSC o s . k
+      Workers _ -> liftIO $ forConcurrently xs $ runLSC o s . k
 
 instance ArrowRace LS where
   LS k /// LS m = LS $ \ (x, y) -> do
@@ -132,7 +132,7 @@ instance ArrowRace LS where
     o <- environment
     case o ^. workers of
       Singleton -> Left <$> k x
-      Workers i -> liftIO $ do
+      Workers _ -> liftIO $ do
         withAsync (runLSC o s (k x)) $ \ wx ->
           withAsync (runLSC o s (m y)) $ \ wy ->
             waitEitherCatch wx wy >>= \ xy -> case xy of
@@ -198,10 +198,10 @@ instance Arrow ls => Arrow (LSR ls) where
   LSR f *** LSR g = LSR (f *** g)
 
 instance ArrowSelect ls => ArrowSelect (LSR ls) where
-  select (LSR f) = LSR (select f)
+  select (LSR f) = LSR (select (mapReduce f))
 
 instance ArrowRace ls => ArrowRace (LSR ls) where
-  LSR f /// LSR g = LSR (f /// g)
+  LSR f /// LSR g = LSR (mapReduce f /// mapReduce g)
 
 
 instance ArrowPlus ls => ArrowZero (LSR ls) where
