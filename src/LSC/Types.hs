@@ -17,8 +17,6 @@ module LSC.Types where
 import Control.Lens hiding (element)
 import Control.Concurrent.MSem (MSem)
 import Control.Exception
-import Control.Monad.Fail
-import Data.Aeson
 import Data.Char
 import Data.Default
 import Data.Foldable
@@ -29,7 +27,14 @@ import Data.Hashable
 import Data.Text (Text)
 import Data.Vector (Vector)
 
+import Data.Aeson (encode, FromJSON, ToJSON)
+
+import Control.MILP hiding (minimize, maximize)
+import Control.MILP.Types hiding (literal)
+
 import Control.Monad.Codensity
+import Control.Monad.Morph
+import Control.Monad.Fail
 import Control.Monad.Reader
 import Control.Monad.State
 
@@ -282,10 +287,17 @@ evalEnvT = runReaderT
 type LSC = Codensity LST
 
 liftSymbolic :: Symbolic a -> LSC a
-liftSymbolic = lift . LST . lift . lift
+liftSymbolic = lift . LST . lift . lift . lift
+
+liftLP :: LP a -> LSC a
+liftLP = lift . LST . lift . lift . hoist generalize
+
+minimize, maximize :: LSC Result
+minimize = lift $ LST $ lift $ lift minimizeIO
+maximize = lift $ LST $ lift $ lift maximizeIO
 
 
-newtype LST a = LST { unLST :: EnvT (GnosticT Symbolic) a }
+newtype LST a = LST { unLST :: EnvT (GnosticT (LPT Symbolic)) a }
 
 instance Functor LST where
   fmap f (LST a) = LST (fmap f a)
@@ -466,6 +478,7 @@ instance Default CompilerOpts where
 runLSC :: Environment -> Bootstrap () -> LSC a -> IO a
 runLSC opts tech
   = runSMTWith (opts ^. smtConfig)
+  . evalLP start
   . flip runGnosticT (freeze tech)
   . flip runEnvT opts
   . unLST

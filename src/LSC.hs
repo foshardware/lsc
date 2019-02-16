@@ -34,7 +34,7 @@ stage1 = zeroArrow
 
 
 route :: Compiler' NetGraph
-route = local routeSat
+route = local routeInteger
 
 place :: Compiler' NetGraph
 place = local placeEasy

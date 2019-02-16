@@ -30,6 +30,7 @@ dependencies:
 - lef
 - lens
 - milp
+- mmorph
 - mtl
 - parsec
 - parsec-numbers
