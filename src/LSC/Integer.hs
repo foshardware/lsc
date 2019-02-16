@@ -8,11 +8,11 @@ import LSC.Types
 
 routeInteger :: NetGraph -> LSC NetGraph
 routeInteger top = do
-  x <- liftLP $ do
+  x <- liftInteger $ do
     x <- general
     objective x
     x >=^ 1
     pure x
-  result <- minimize
+  result <- minimizeInteger
   debug [show $ result x]
   pure top

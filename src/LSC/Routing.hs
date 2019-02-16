@@ -1,8 +1,8 @@
 
 module LSC.Routing
-  ( module LSC.SMT
-  , module LSC.Integer
+  ( module LSC.Integer
+  , module LSC.Symbolic
   ) where
 
-import LSC.SMT
 import LSC.Integer
+import LSC.Symbolic

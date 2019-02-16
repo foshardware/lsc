@@ -29,7 +29,7 @@ import Data.Vector (Vector)
 
 import Data.Aeson (encode, FromJSON, ToJSON)
 
-import Control.MILP hiding (minimize, maximize)
+import Control.MILP
 import Control.MILP.Types hiding (literal)
 
 import Control.Monad.Codensity
@@ -38,13 +38,13 @@ import Control.Monad.Fail
 import Control.Monad.Reader
 import Control.Monad.State
 
+import Data.SBV
+
 import Data.Time.Clock.POSIX
 import System.Console.Concurrent
 
 import GHC.Generics
 import Prelude hiding (lookup)
-
-import LSC.Symbolic
 
 
 
@@ -219,7 +219,6 @@ instance Hashable Technology where
   hashWithSalt s = hashWithSalt s . encode
 
 
-type BootstrapT m = StateT Technology m
 type Bootstrap = State Technology
 
 bootstrap :: (Technology -> Technology) -> Bootstrap ()
@@ -284,36 +283,36 @@ evalEnvT :: Monad m => EnvT m r -> Environment -> m r
 evalEnvT = runReaderT
 
 
-type LSC = Codensity LST
+type LSC = Codensity (LST IO)
 
 liftSymbolic :: Symbolic a -> LSC a
 liftSymbolic = lift . LST . lift . lift . lift
 
-liftLP :: LP a -> LSC a
-liftLP = lift . LST . lift . lift . hoist generalize
+liftInteger :: LP a -> LSC a
+liftInteger = lift . LST . lift . lift . hoist generalize
 
-minimize, maximize :: LSC Result
-minimize = lift $ LST $ lift $ lift minimizeIO
-maximize = lift $ LST $ lift $ lift maximizeIO
+minimizeInteger, maximizeInteger :: LSC Result
+minimizeInteger = lift $ LST $ lift $ lift minimizeIO
+maximizeInteger = lift $ LST $ lift $ lift maximizeIO
 
 
-newtype LST a = LST { unLST :: EnvT (GnosticT (LPT Symbolic)) a }
+newtype LST m a = LST { unLST :: EnvT (GnosticT (LPT (SymbolicT m))) a }
 
-instance Functor LST where
+instance Functor m => Functor (LST m) where
   fmap f (LST a) = LST (fmap f a)
 
-instance Applicative LST where
+instance Monad m => Applicative (LST m) where
   pure = LST . pure
   LST a <*> LST b = LST (a <*> b)
 
-instance Monad LST where
+instance Monad m => Monad (LST m) where
   return = pure
   m >>= k = LST (unLST m >>= unLST . k)
 
-instance MonadIO LST where
+instance MonadIO m => MonadIO (LST m) where
   liftIO = LST . liftIO
 
-instance MonadFail LST where
+instance MonadIO m => MonadFail (LST m) where
   fail = throwLSC . Fail
 
 throwLSC :: MonadIO m => Fail -> m a
