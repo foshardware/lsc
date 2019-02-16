@@ -6,7 +6,7 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE OverloadedStrings #-}
 
-module LSC.Arboresence where
+module LSC.SMT where
 
 import Control.Applicative
 import Control.Arrow

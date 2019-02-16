@@ -30,7 +30,7 @@ stage1 :: Compiler' NetGraph
 stage1 = zeroArrow
   <+> remote routeWeb
   <+> dag netGraph (place >>> route)
-  <+> dag netGraph (env_ rowSize 21000 route \\\ route)
+  <+> dag netGraph (env_ rowSize 21000 route <+> route)
 
 
 route :: Compiler' NetGraph

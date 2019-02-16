@@ -1,6 +1,6 @@
 
 module LSC.Routing
-  ( module LSC.Arboresence
+  ( module LSC.SMT
   ) where
 
-import LSC.Arboresence
+import LSC.SMT
