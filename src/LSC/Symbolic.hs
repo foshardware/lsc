@@ -113,7 +113,7 @@ routeSat top = do
   pure result
 
 
-placement :: SComponent -> SRing -> Pins -> LSC ()
+placement :: SComponent -> SRing -> SPins -> LSC ()
 placement area ring rim = do
 
   liftSymbolic $ constrain
@@ -151,11 +151,11 @@ placement area ring rim = do
 
 
 
-disjointPins :: Nodes -> Edges -> LSC ()
+disjointPins :: SNodes -> SEdges -> LSC ()
 disjointPins _ _ = pure ()
 
 
-disjointGates :: Nodes -> LSC ()
+disjointGates :: SNodes -> LSC ()
 disjointGates nodes = do
   sequence_
     [ disjoint p q
@@ -163,7 +163,7 @@ disjointGates nodes = do
     ]
 
 
-disjointNets :: Edges -> LSC ()
+disjointNets :: SEdges -> LSC ()
 disjointNets edges = do
   sequence_
     [ disjoint p q
@@ -285,7 +285,7 @@ anyConnect qs p = do
     ]
 
 
-arboresence :: Nodes -> Pins -> Net -> LSC (Net, SPath)
+arboresence :: SNodes -> SPins -> Net -> LSC (Net, SPath)
 arboresence nodes rim net = do
 
   n <- succ . view jogs <$> environment
@@ -333,7 +333,7 @@ pinComponent p s = p
   & integrate [metal1]
 
 
-powerUpAndGround :: Nodes -> Edges -> LSC (SRing, SPath, SPath)
+powerUpAndGround :: SNodes -> SEdges -> LSC (SRing, SPath, SPath)
 powerUpAndGround nodes edges = do
 
   (w, h) <- view standardPin <$> technology
@@ -447,7 +447,7 @@ powerUpAndGround nodes edges = do
   pure (ring, power, ground)
 
 
-powerRingOnly :: Nodes -> Edges -> LSC (SRing, SPath, SPath)
+powerRingOnly :: SNodes -> SEdges -> LSC (SRing, SPath, SPath)
 powerRingOnly nodes edges = do
 
   let i = head $ fmap (width . snd) (toList nodes) ++ [0]

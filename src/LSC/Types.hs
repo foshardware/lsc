@@ -330,20 +330,37 @@ type Path = [Component Layer Integer]
 
 type Ring l a = Component l (Component l a)
 
+
 type SComponent = Component SLayer SInteger
 
 type SLayer = SInteger
 
 type SPath = [SComponent]
 
-type SRing = Ring SInteger SInteger
+type SRing = Ring SLayer SInteger
 
 
-type Nodes = Vector (Gate, SComponent)
+type IComponent = Component ILayer Var
 
-type Edges = Map Identifier (Net, SPath)
+type ILayer = Layer
 
-type Pins = Map Identifier (Pin, SComponent)
+type IPath = [IComponent]
+
+type IRing = Ring ILayer Var
+
+
+type SNodes = Vector (Gate, SComponent)
+
+type SEdges = Map Identifier (Net, SPath)
+
+type SPins = Map Identifier (Pin, SComponent)
+
+
+type INodes = Vector (Gate, IComponent)
+
+type IEdges = Map Identifier (Net, IPath)
+
+type IPins = Map Identifier (Pin, IComponent)
 
 
 data Component l a
@@ -365,9 +382,11 @@ width  p = p ^. r - p ^. l
 height p = p ^. t - p ^. b
 
 integrate :: [l] -> Component k a -> Component l a
+integrate    [] (Layered x1 y1 x2 y2 _) = Rect    x1 y1 x2 y2
+integrate    [] (Rect    x1 y1 x2 y2)   = Rect    x1 y1 x2 y2
+integrate layer (Layered x1 y1 x2 y2 _) = Layered x1 y1 x2 y2 layer
 integrate layer (Rect    x1 y1 x2 y2)   = Layered x1 y1 x2 y2 layer
 integrate layer (Via     x1 y1 x2 y2 _) = Via     x1 y1 x2 y2 layer
-integrate layer (Layered x1 y1 x2 y2 _) = Layered x1 y1 x2 y2 layer
 
 
 instance Default a => Default (Component l a) where
