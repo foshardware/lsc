@@ -14,6 +14,7 @@
 
 module LSC.Types where
 
+import Control.Applicative
 import Control.Lens hiding (element)
 import Control.Concurrent.MSem (MSem)
 import Control.Exception
@@ -262,6 +263,9 @@ evalEnvT = runReaderT
 
 type LSC = Codensity (LST IO)
 
+
+choice :: Alternative m => [m a] -> m a
+choice = foldr (<|>) empty
 
 liftInteger :: LP a -> LSC a
 liftInteger = lift . LST . lift . lift . hoist generalize

@@ -147,7 +147,7 @@ powerUpAndGround nodes edges = do
       sequence_ [ disjoint sig gnd_ *> disjoint sig vdd_ | sig <- signals ]
 
 
-      liftInteger $ foldr (<|>) empty $
+      liftInteger $ choice $
         [ p ^. l =^ g ^. l
         | p <- init grid
         ] ++
@@ -155,7 +155,7 @@ powerUpAndGround nodes edges = do
         , outer ring ^. b =^ g ^. b
         ]
 
-      liftInteger $ foldr (<|>) empty $
+      liftInteger $ choice $
         [ p ^. l =^ v ^. l
         | p <- init grid
         ] ++
@@ -170,6 +170,9 @@ powerUpAndGround nodes edges = do
     , let gs = gate ^. gnd . ports <&> pinComponent path
     ]
 
+  let power  = join vs ++ [ integrate [Metal2] p | p <- toList ring ++ grid ]
+      ground = join gs ++ [ integrate [Metal3] p | p <- toList ring ++ grid ]
+
   sequence_
     [ disjoint v p
     | (v, p) <- distinctPairs $ join vs ++ join gs
@@ -177,13 +180,10 @@ powerUpAndGround nodes edges = do
 
   sequence_
     [ disjoint v p
-    | v <- join vs ++ join gs
+    | v <- power ++ ground
     , (_, ps) <- toList edges
     , p <- ps
     ]
-
-  let power  = join vs ++ [ integrate [Metal2] p | p <- toList ring ++ grid ]
-      ground = join gs ++ [ integrate [Metal3] p | p <- toList ring ++ grid ]
 
   sequence_
     [ disjoint v p
