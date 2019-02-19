@@ -20,7 +20,7 @@ import Prelude hiding ((.), id)
 
 import LSC.Synthesis
 import LSC.Placement
-import LSC.Routing
+import LSC.Integer
 import LSC.Types
 import LSC.Version
 import LSC.Web
@@ -29,12 +29,11 @@ import LSC.Web
 stage1 :: Compiler' NetGraph
 stage1 = zeroArrow
   <+> remote routeWeb
-  <+> dag netGraph (place >>> route)
   <+> dag netGraph (env_ rowSize 21000 route <+> route)
 
 
 route :: Compiler' NetGraph
-route = local routeSat
+route = local routeInteger
 
 place :: Compiler' NetGraph
 place = local placeEasy
