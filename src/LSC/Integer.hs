@@ -178,18 +178,18 @@ powerUpAndGround nodes edges = do
   sequence_
     [ disjoint v p
     | v <- join vs ++ join gs
-    , (_, p) <- toList nodes
-    ]
-
-  sequence_
-    [ disjoint v p
-    | v <- join vs ++ join gs
     , (_, ps) <- toList edges
     , p <- ps
     ]
 
   let power  = join vs ++ [ integrate [Metal2] p | p <- toList ring ++ grid ]
       ground = join gs ++ [ integrate [Metal3] p | p <- toList ring ++ grid ]
+
+  sequence_
+    [ disjoint v p
+    | v <- power ++ ground
+    , (_, p) <- toList nodes
+    ]
 
   pure (ring, power, ground)
 
@@ -435,7 +435,6 @@ freeRectangle = do
     <*> general
 
   liftInteger $ do
-    bound 0 100000 `mapM_` area
     width  area >=^ 0
     height area >=^ 0
 

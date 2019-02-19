@@ -157,10 +157,8 @@ compilerOpts xs = do
   let j = last $ n : rights [ parse decimal "-j" v | (k, v) <- xs, k == Cores ]
   setNumCapabilities j
   ws <- createWorkers j
-  let smt = last $ smtOption mempty : [ smtOption v | (k, v) <- xs, k == Smt ]
   pure $ def
     & enableDebug .~ elem Debug (fst <$> xs)
-    & smtConfig .~ smt
     & workers .~ ws
 
 

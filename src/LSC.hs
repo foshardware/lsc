@@ -20,8 +20,7 @@ import Prelude hiding ((.), id)
 
 import LSC.Synthesis
 import LSC.Placement
-import LSC.Integer (routeInteger)
-import LSC.Symbolic (routeSat)
+import LSC.Integer
 import LSC.Types
 import LSC.Version
 import LSC.Web

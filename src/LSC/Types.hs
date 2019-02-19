@@ -38,8 +38,6 @@ import Control.Monad.Fail
 import Control.Monad.Reader
 import Control.Monad.State
 
-import Data.SBV
-
 import Data.Time.Clock.POSIX
 import System.Console.Concurrent
 
@@ -195,15 +193,6 @@ instance FromJSON Layer
 instance Hashable Layer
 
 
-metal1, metal2, metal3 :: SLayer
-metal1   = slayer Metal1
-metal2   = slayer Metal2
-metal3   = slayer Metal3
-
-slayer :: Layer -> SLayer
-slayer = literal . toEnum . fromEnum
-
-
 data Technology = Technology
   { _scaleFactor    :: Double
   , _featureSize    :: Double
@@ -250,24 +239,12 @@ data CompilerOpts = CompilerOpts
   , _rowSize     :: Integer
   , _halt        :: Int
   , _enableDebug :: Bool
-  , _smtConfig   :: SMTConfig
   , _workers     :: Workers
   }
 
 data Workers
   = Singleton
   | Workers (MSem Int)
-
-smtOption :: String -> SMTConfig
-smtOption = d . fmap toLower
-  where
-    d "boolector" = boolector
-    d "cvc4"      = cvc4
-    d "yices"     = yices
-    d "z3"        = z3
-    d "mathsat"   = mathSAT
-    d "abc"       = abc
-    d _           = yices
 
 type Environment = CompilerOpts
 
@@ -285,8 +262,6 @@ evalEnvT = runReaderT
 
 type LSC = Codensity (LST IO)
 
-liftSymbolic :: Symbolic a -> LSC a
-liftSymbolic = lift . LST . lift . lift . lift
 
 liftInteger :: LP a -> LSC a
 liftInteger = lift . LST . lift . lift . hoist generalize
@@ -297,7 +272,7 @@ minimizeInteger = lift $ LST $ lift $ lift minimizeIO
 maximizeInteger = lift $ LST $ lift $ lift maximizeIO
 
 
-newtype LST m a = LST { unLST :: EnvT (GnosticT (LPT (SymbolicT m))) a }
+newtype LST m a = LST { unLST :: EnvT (GnosticT (LPT m)) a }
 
 instance Functor m => Functor (LST m) where
   fmap f (LST a) = LST (fmap f a)
@@ -332,15 +307,6 @@ type Path = [Component Layer Integer]
 type Ring l a = Component l (Component l a)
 
 
-type SComponent = Component SLayer SInteger
-
-type SLayer = SInteger
-
-type SPath = [SComponent]
-
-type SRing = Ring SLayer SInteger
-
-
 type IComponent = Component ILayer Var
 
 type ILayer = Layer
@@ -348,14 +314,6 @@ type ILayer = Layer
 type IPath = [IComponent]
 
 type IRing = Ring ILayer Var
-
-
-type SNodes = Vector (Gate, SComponent)
-
-type SEdges = Map Identifier (Net, SPath)
-
-type SPins = Map Identifier (Pin, SComponent)
-
 
 type INodes = Vector (Gate, IComponent)
 
@@ -491,13 +449,12 @@ instance Default Pin where
 makeFieldsNoPrefix ''CompilerOpts
 
 instance Default CompilerOpts where
-  def = CompilerOpts 2 20000 (16 * 1000000) True yices Singleton
+  def = CompilerOpts 2 20000 (16 * 1000000) True Singleton
 
 
 runLSC :: Environment -> Bootstrap () -> LSC a -> IO a
 runLSC opts tech
-  = runSMTWith (opts ^. smtConfig)
-  . evalLP start
+  = evalLP start
   . flip runGnosticT (freeze tech)
   . flip runEnvT opts
   . unLST
