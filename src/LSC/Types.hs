@@ -291,7 +291,8 @@ liftSymbolic = lift . LST . lift . lift . lift
 liftInteger :: LP a -> LSC a
 liftInteger = lift . LST . lift . lift . hoist generalize
 
-minimizeInteger, maximizeInteger :: LSC Result
+satisfyInteger, minimizeInteger, maximizeInteger :: LSC Result
+satisfyInteger = lift $ LST $ lift $ lift satLPT
 minimizeInteger = lift $ LST $ lift $ lift minimizeIO
 maximizeInteger = lift $ LST $ lift $ lift maximizeIO
 

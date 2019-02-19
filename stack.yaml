@@ -5,7 +5,7 @@ extra-deps:
 - git: https://github.com/foshardware/sbv
   commit: e9f2db19866578f13aaf3b43b668d655a10c9416
 - git: https://github.com/foshardware/milp
-  commit: ebfc19d19da638707d6e5116022796285301b81e
+  commit: 2c8b204bb28425a4eb0b120268e6245c2f1d4287
 - git: https://github.com/foshardware/verilog
   commit: 8415f16e62e7eb3e4d2269e0838ac60ff34e9605
 - git: https://github.com/foshardware/arrowgant
