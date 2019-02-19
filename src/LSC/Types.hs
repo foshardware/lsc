@@ -14,11 +14,10 @@
 
 module LSC.Types where
 
+import Control.Applicative
 import Control.Lens hiding (element)
 import Control.Concurrent.MSem (MSem)
 import Control.Exception
-import Control.Monad.Fail
-import Data.Aeson
 import Data.Char
 import Data.Default
 import Data.Foldable
@@ -29,7 +28,14 @@ import Data.Hashable
 import Data.Text (Text)
 import Data.Vector (Vector)
 
+import Data.Aeson (encode, FromJSON, ToJSON)
+
+import Control.MILP
+import Control.MILP.Types hiding (literal)
+
 import Control.Monad.Codensity
+import Control.Monad.Morph
+import Control.Monad.Fail
 import Control.Monad.Reader
 import Control.Monad.State
 
@@ -38,8 +44,6 @@ import System.Console.Concurrent
 
 import GHC.Generics
 import Prelude hiding (lookup)
-
-import LSC.Symbolic
 
 
 
@@ -190,15 +194,6 @@ instance FromJSON Layer
 instance Hashable Layer
 
 
-metal1, metal2, metal3 :: SLayer
-metal1   = slayer Metal1
-metal2   = slayer Metal2
-metal3   = slayer Metal3
-
-slayer :: Layer -> SLayer
-slayer = literal . toEnum . fromEnum
-
-
 data Technology = Technology
   { _scaleFactor    :: Double
   , _featureSize    :: Double
@@ -214,7 +209,6 @@ instance Hashable Technology where
   hashWithSalt s = hashWithSalt s . encode
 
 
-type BootstrapT m = StateT Technology m
 type Bootstrap = State Technology
 
 bootstrap :: (Technology -> Technology) -> Bootstrap ()
@@ -246,24 +240,12 @@ data CompilerOpts = CompilerOpts
   , _rowSize     :: Integer
   , _halt        :: Int
   , _enableDebug :: Bool
-  , _smtConfig   :: SMTConfig
   , _workers     :: Workers
   }
 
 data Workers
   = Singleton
   | Workers (MSem Int)
-
-smtOption :: String -> SMTConfig
-smtOption = d . fmap toLower
-  where
-    d "boolector" = boolector
-    d "cvc4"      = cvc4
-    d "yices"     = yices
-    d "z3"        = z3
-    d "mathsat"   = mathSAT
-    d "abc"       = abc
-    d _           = yices
 
 type Environment = CompilerOpts
 
@@ -279,29 +261,38 @@ evalEnvT :: Monad m => EnvT m r -> Environment -> m r
 evalEnvT = runReaderT
 
 
-type LSC = Codensity LST
-
-liftSymbolic :: Symbolic a -> LSC a
-liftSymbolic = lift . LST . lift . lift
+type LSC = Codensity (LST IO)
 
 
-newtype LST a = LST { unLST :: EnvT (GnosticT Symbolic) a }
+choice :: Alternative m => [m a] -> m a
+choice = foldr (<|>) empty
 
-instance Functor LST where
+liftInteger :: LP a -> LSC a
+liftInteger = lift . LST . lift . lift . hoist generalize
+
+satisfyInteger, minimizeInteger, maximizeInteger :: LSC Result
+satisfyInteger = lift $ LST $ lift $ lift satLPT
+minimizeInteger = lift $ LST $ lift $ lift minimizeIO
+maximizeInteger = lift $ LST $ lift $ lift maximizeIO
+
+
+newtype LST m a = LST { unLST :: EnvT (GnosticT (LPT m)) a }
+
+instance Functor m => Functor (LST m) where
   fmap f (LST a) = LST (fmap f a)
 
-instance Applicative LST where
+instance Monad m => Applicative (LST m) where
   pure = LST . pure
   LST a <*> LST b = LST (a <*> b)
 
-instance Monad LST where
+instance Monad m => Monad (LST m) where
   return = pure
   m >>= k = LST (unLST m >>= unLST . k)
 
-instance MonadIO LST where
+instance MonadIO m => MonadIO (LST m) where
   liftIO = LST . liftIO
 
-instance MonadFail LST where
+instance MonadIO m => MonadFail (LST m) where
   fail = throwLSC . Fail
 
 throwLSC :: MonadIO m => Fail -> m a
@@ -319,20 +310,20 @@ type Path = [Component Layer Integer]
 
 type Ring l a = Component l (Component l a)
 
-type SComponent = Component SLayer SInteger
 
-type SLayer = SInteger
+type IComponent = Component ILayer Var
 
-type SPath = [SComponent]
+type ILayer = Layer
 
-type SRing = Ring SInteger SInteger
+type IPath = [IComponent]
 
+type IRing = Ring ILayer Var
 
-type Nodes = Vector (Gate, SComponent)
+type INodes = Vector (Gate, IComponent)
 
-type Edges = Map Identifier (Net, SPath)
+type IEdges = Map Identifier (Net, IPath)
 
-type Pins = Map Identifier (Pin, SComponent)
+type IPins = Map Identifier (Pin, IComponent)
 
 
 data Component l a
@@ -354,9 +345,11 @@ width  p = p ^. r - p ^. l
 height p = p ^. t - p ^. b
 
 integrate :: [l] -> Component k a -> Component l a
+integrate    [] (Layered x1 y1 x2 y2 _) = Rect    x1 y1 x2 y2
+integrate    [] (Rect    x1 y1 x2 y2)   = Rect    x1 y1 x2 y2
+integrate layer (Layered x1 y1 x2 y2 _) = Layered x1 y1 x2 y2 layer
 integrate layer (Rect    x1 y1 x2 y2)   = Layered x1 y1 x2 y2 layer
 integrate layer (Via     x1 y1 x2 y2 _) = Via     x1 y1 x2 y2 layer
-integrate layer (Layered x1 y1 x2 y2 _) = Layered x1 y1 x2 y2 layer
 
 
 instance Default a => Default (Component l a) where
@@ -460,12 +453,12 @@ instance Default Pin where
 makeFieldsNoPrefix ''CompilerOpts
 
 instance Default CompilerOpts where
-  def = CompilerOpts 2 20000 (16 * 1000000) True yices Singleton
+  def = CompilerOpts 2 20000 (16 * 1000000) True Singleton
 
 
 runLSC :: Environment -> Bootstrap () -> LSC a -> IO a
 runLSC opts tech
-  = runSMTWith (opts ^. smtConfig)
+  = evalLP start
   . flip runGnosticT (freeze tech)
   . flip runEnvT opts
   . unLST
