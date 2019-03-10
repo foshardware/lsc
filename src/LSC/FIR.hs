@@ -14,8 +14,8 @@ import LSC.Types
 newtype FIR = FIR Circuit
   deriving (Eq, Show)
 
-parseFIR :: Text -> FIR
-parseFIR = FIR . circuit . lexer []
+parseFIR :: Text -> Either ParseError FIR
+parseFIR = fmap FIR . circuit . lexer []
 
 
 firrtl :: FIR -> RTL

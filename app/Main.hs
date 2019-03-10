@@ -25,6 +25,7 @@ import LSC.Verilog (parseVerilog)
 import LSC
 import LSC.BLIF
 import LSC.D3
+import LSC.FIR
 import LSC.SVG
 import LSC.Types
 import LSC.Version
@@ -54,22 +55,32 @@ program = do
       liftIO $ hPutStrLn stderr $ versionString
       exit
 
+  -- firrtl synthesis
+  when (arg Exline && arg Firrtl)
+    $ do
+      fir_ <- liftIO $ Text.readFile $ str Firrtl
+      liftIO $ either
+        (ioError . userError . show)
+        (putStrLn . show)
+        (parseFIR fir_)
+      exit
+
   -- generate registers
-  when (and $ arg <$> [Register, Lef])
+  when (arg Register && arg Lef)
     $ do
       lef_ <- liftIO $ Text.readFile $ str Lef
       liftIO $ hPutStrLn stderr $ show $ parseLEF lef_
       exit
 
   -- json report
-  when (and $ arg <$> [Json, Verilog])
+  when (arg Json && arg Verilog)
     $ do
       verilog_ <- liftIO $ Text.readFile $ str Verilog
       liftIO $ Bytes.putStrLn $ encodeVerilog $ parseVerilog verilog_
       exit
 
    -- svg output
-  when (and $ arg <$> [Lef, Blif, Compile])
+  when (arg Lef && arg Blif && arg Compile)
     $ do
       net_ <- liftIO $ Text.readFile $ str Blif
       lef_ <- liftIO $ Text.readFile $ str Lef
@@ -89,17 +100,17 @@ program = do
 
       exit
 
-  when (arg Exline && not (arg Blif))
+  when (arg Exline && not (arg Blif) && not (arg Firrtl))
     $ do
-      liftIO $ hPutStrLn stderr "exline: no blif given"
+      liftIO $ hPutStrLn stderr "exline: no rtl given"
       exit
 
   when (arg Exline && not (arg Lef))
     $ do
-      liftIO $ hPutStrLn stderr "exline: no lef given"
+      liftIO $ hPutStrLn stderr "exline: no tech given"
       exit
 
-  when (and $ arg <$> [Json, Blif])
+  when (arg Json && arg Blif)
     $ do
       blif_ <- liftIO $ Text.readFile $ str Blif
       liftIO $ either
@@ -124,6 +135,7 @@ data FlagKey
   | Debug
   | Register
   | Rtl
+  | Firrtl
   | Verilog
   | Json
   deriving (Eq, Show)
@@ -146,6 +158,7 @@ args =
     , Option ['s']      ["smt"]        (ReqArg (Smt, ) "yices,z3")  "specify smt backend"
     , Option ['j']      ["cores"]      (ReqArg (Cores,  ) "count")  "limit number of cores"
     , Option ['J']      ["json"]       (NoArg  (Json, mempty))      "export json"
+    , Option ['f']      ["firrtl"]     (ReqArg (Firrtl, ) "FILE")   "firrtl file"
     , Option ['u']      ["verilog"]    (ReqArg (Verilog, ) "FILE")  "verilog file"
     , Option ['r']      ["register"]   (ReqArg (Register, ) "size in bits")  "generate register"
     ]

@@ -9,7 +9,7 @@ extra-deps:
 - git: https://github.com/foshardware/arrowgant
   commit: 0164d0fdc7fdbf37a1587b42ac05537df2b852c2
 - git: https://github.com/foshardware/firrtl
-  commit: 2fee3844aafbb608bb6182bcd86cdba2333e0f2b
+  commit: f9f4ed5cc1b46ea23a346e4f9c2c591a0d585a8b
 - git: https://github.com/foshardware/blif
   commit: 4cff6aed49678ced5568a156b611755df0cba72d
 - git: https://github.com/foshardware/lef
