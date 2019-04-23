@@ -1,5 +1,5 @@
 
-module LSC.Placement where
+module LSC.Easy where
 
 import Control.Lens
 import Control.Monad.State
