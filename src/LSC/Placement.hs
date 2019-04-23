@@ -3,6 +3,7 @@ module LSC.Placement where
 
 import Control.Lens
 import Control.Monad.State
+import Data.Foldable
 
 import LSC.Types
 
@@ -11,13 +12,15 @@ placeEasy :: NetGraph -> LSC NetGraph
 placeEasy netlist = do
 
   offset <- (4 *) . fst . view standardPin <$> technology
-  rows  <- fmap (+ offset) . init <$> divideArea (netlist ^. gates)
+  rows  <- fmap (+ offset) <$> divideArea (netlist ^. gates)
 
-  let pivot = div (netlist ^. gates & length & succ) (length rows)
+  let pivot = div (netlist ^. gates & length & succ) (length rows) + 3
 
   nodes <- evalStateT
     (sequence $ netlist ^. gates <&> sections)
     (offset, replicate pivot =<< alternate rows)
+
+  debug [ show x | x <- toList nodes, x ^. geometry . to null ]
 
   pure $ netlist
     & gates .~ nodes
@@ -47,12 +50,12 @@ sections gate = do
       put (y - h - offset, rows)
 
       pure $ gate
-        & geometry .~ [Layered x (y - h) (x + w) y [Metal3, Metal2]]
+        & geometry .~ [Layered x (y - h) (x + w) y [Metal2, Metal3]]
 
     Right x : rows -> do
 
       put (y + h + offset, rows)
 
       pure $ gate
-        & geometry .~ [Layered x y (x + w) (y + h) [Metal3, Metal2]]
+        & geometry .~ [Layered x y (x + w) (y + h) [Metal2, Metal3]]
 

@@ -10,6 +10,7 @@
 {-# LANGUAGE DuplicateRecordFields #-}
 {-# LANGUAGE DeriveFunctor, DeriveFoldable, DeriveTraversable #-}
 {-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE TupleSections #-}
 
 
 module LSC.Types where
@@ -495,5 +496,10 @@ divideArea xs = do
   size <- view rowSize <$> environment
   tech <- technology
   let x = tech ^. standardPin . _1 & (* 2)
-  pure $ take n $ x : iterate (join (+)) size
+  pure $ take n $ x : fmap (size*) [1..]
   where n = ceiling $ sqrt $ fromIntegral $ length xs
+
+
+distinctPairs :: [a] -> [(a, a)]
+distinctPairs (x : xs) = fmap (x, ) xs ++ distinctPairs xs
+distinctPairs _ = []

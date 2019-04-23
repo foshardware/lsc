@@ -1,7 +1,6 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TypeFamilies #-}
-{-# LANGUAGE TupleSections #-}
 
 module LSC.Force where
 
@@ -70,11 +69,8 @@ placeForce top = do
 
   let edges = fromList $ join [ distinctPairs $ keys $ net ^. contacts | net <- toList $ top ^. nets ]
   let allPairs = fromList $ distinctPairs [0 .. k-1]
-  let particleMap = fromList . take k $ initParticle . P . uncurry V2 <$>
-        [ maybe undefined (\r -> (r ^. l . to fromIntegral, r ^. b . to fromIntegral)) (g ^. geometry . to listToMaybe)
-        | i <- [0..k-1]
-        , let g = (top ^. gates) ! i
-        ]
+
+  let particleMap = initParticle . P . bottomLeft <$> view gates top
 
   let e = Step (fromList [(edges, hooke 0.5 40), (allPairs, coulomb 120)]) particleMap
   let ev = view particles $ last $ simulate e $ def
@@ -87,9 +83,8 @@ placeForce top = do
     & gates %~ fmap (\ g -> g & geometry .~ fromDims ev (g ^. number) (lookupDimensions g tech))
 
 
-distinctPairs :: [a] -> [(a, a)]
-distinctPairs (x : xs) = fmap (x, ) xs ++ distinctPairs xs
-distinctPairs _ = []
+bottomLeft :: Gate -> V2 Double
+bottomLeft g = maybe (V2 0 0) (\r -> V2 (fromIntegral $ r ^. l) (fromIntegral $ r ^. b)) (listToMaybe $ g ^. geometry)
 
 
 fromDims  _ _ Nothing = []

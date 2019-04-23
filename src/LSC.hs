@@ -30,7 +30,7 @@ import LSC.Web
 stage1 :: Compiler' NetGraph
 stage1 = zeroArrow
   <+> remote routeWeb
-  <+> local placeEasy >>> local placeForce
+  <+> local placeEasy
   <+> dag netGraph (env_ rowSize 21000 route <+> route)
 
 

@@ -16,6 +16,7 @@ import Data.Map
   , singleton
   , fromList, fromListWith
   )
+import Data.Maybe
 import qualified Data.Vector as Vector
 import Prelude hiding (lookup)
 
@@ -44,9 +45,9 @@ fromModel (Model name inputs outputs clocks commands)
   where  
 
     nodes = Vector.fromList
-        [ fromNetlist c & number .~ i
+        [ c & number .~ i
         | i <- [0.. ]
-        | c <- commands
+        | c <- catMaybes $ fromNetlist <$> commands
         ]
 
     edges = fromListWith mappend
@@ -61,14 +62,16 @@ fromModel (Model name inputs outputs clocks commands)
       & pins <>~ fromList [(i, Pin i (Just Out) def) | i <- outputs]
 
 
-fromNetlist :: Command -> Gate
+fromNetlist :: Command -> Maybe Gate
 fromNetlist (LibraryGate ident assignments) = def
       & identifier .~ ident
       & wires .~ fromList assignments
+      & Just
 fromNetlist (Subcircuit ident assignments) = def
       & identifier .~ ident
       & wires .~ fromList assignments
-fromNetlist _ = def
+      & Just
+fromNetlist _ = Nothing
 
 
 toSubcircuit :: Gate -> Command
