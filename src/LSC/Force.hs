@@ -72,11 +72,11 @@ placeForce top = do
 
   let particleMap = initParticle . P . bottomLeft <$> view gates top
 
-  let e = Step (fromList [(edges, hooke 0.5 4), (allPairs, coulomb 20)]) particleMap
+  let e = Step (fromList [(edges, hooke 1 4), (allPairs, coulomb 0.1)]) particleMap
   let ev = view particles $ last $ simulate e $ def
-             & damping     .~ 0.8
+             & damping     .~ 0.001
              & energyLimit .~ Just 0.001
-             & stepLimit   .~ Just 0
+             & stepLimit   .~ Just 1
 
   pure $ top
     & gates %~ fmap (\ g -> g & geometry .~ fromDims ev (g ^. number) (lookupDimensions g tech))
