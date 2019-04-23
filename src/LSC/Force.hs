@@ -6,6 +6,7 @@ module LSC.Force where
 
 import Control.Lens
 import Control.Monad
+import Control.Monad.IO.Class
 import Data.Default.Class
 import Data.Foldable
 import Data.Map (keys)
@@ -18,6 +19,9 @@ import Linear.Vector
 import Linear.V2
 import Prelude hiding (lookup)
 
+import System.IO.Unsafe
+
+import LSC.Animation
 import LSC.Types
 
 
@@ -60,6 +64,43 @@ instance Fractional n => Default (ForceOptions n) where
 
 
 
+glossForce :: NetGraph -> LSC NetGraph
+glossForce top = do
+
+  tech <- technology
+
+  let k = top ^. gates . to length
+
+  let edges = fromList $ join [ distinctPairs $ keys $ net ^. contacts | net <- toList $ top ^. nets ]
+  let allPairs = fromList $ distinctPairs [0 .. k-1]
+
+  let particleMap = initParticle . P . bottomLeft <$> view gates top
+
+  let e = Step (fromList [(edges, hooke 1 4), (allPairs, coulomb 0.1)]) particleMap
+
+  liftIO $ runAnimation e renderStep $ \ _ f ->
+    if ceiling f `mod` 10 == 0
+      then step 0.001
+      else id
+
+  pure top
+
+
+renderStep :: Step V2 Float -> Frame
+renderStep = foldMap (rect . unP . view pos) . view particles
+
+rect :: V2 Float -> Frame
+rect (V2 x y) = poly
+  [ (x / sc - 5, y / sc - 5)
+  , (x / sc - 5, y / sc + 5)
+  , (x / sc + 5, y / sc + 5)
+  , (x / sc + 5, y / sc - 5)
+  ]
+
+sc :: Float
+sc = 100
+
+
 placeForce :: NetGraph -> LSC NetGraph
 placeForce top = do
 
@@ -75,14 +116,14 @@ placeForce top = do
   let e = Step (fromList [(edges, hooke 1 4), (allPairs, coulomb 0.1)]) particleMap
   let ev = view particles $ last $ simulate e $ def
              & damping     .~ 0.001
-             & energyLimit .~ Just 0.001
+             & energyLimit .~ Nothing
              & stepLimit   .~ Just 1
 
   pure $ top
     & gates %~ fmap (\ g -> g & geometry .~ fromDims ev (g ^. number) (lookupDimensions g tech))
 
 
-bottomLeft :: Gate -> V2 Double
+bottomLeft :: Gate -> V2 Float
 bottomLeft g = maybe (V2 0 0) (\r -> V2 (fromIntegral $ r ^. l) (fromIntegral $ r ^. b)) (listToMaybe $ g ^. geometry)
 
 

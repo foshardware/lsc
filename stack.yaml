@@ -1,5 +1,7 @@
 packages:
 - .
+ghc-options:
+  GLUT: -framework,GLUT
 extra-deps:
 - git: https://github.com/foshardware/milp
   commit: 2c8b204bb28425a4eb0b120268e6245c2f1d4287

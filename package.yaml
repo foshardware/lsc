@@ -26,6 +26,7 @@ dependencies:
 - data-default-class
 - file-embed
 - firrtl
+- gloss
 - hashable
 - kan-extensions
 - lef
