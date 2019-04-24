@@ -391,11 +391,6 @@ placement area ring rim = do
     ]
 
 
-distinctPairs :: [a] -> [(a, a)]
-distinctPairs (x : xs) = fmap (x, ) xs ++ distinctPairs xs
-distinctPairs _ = []
-
-
 gatePolygon :: NetGraph -> Gate -> LSC (Gate, IComponent)
 gatePolygon _ gate
   | gate ^. geometry & not . null

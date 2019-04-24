@@ -10,6 +10,7 @@
 {-# LANGUAGE DuplicateRecordFields #-}
 {-# LANGUAGE DeriveFunctor, DeriveFoldable, DeriveTraversable #-}
 {-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE TupleSections #-}
 
 
 module LSC.Types where
@@ -240,6 +241,7 @@ data CompilerOpts = CompilerOpts
   , _rowSize     :: Integer
   , _halt        :: Int
   , _enableDebug :: Bool
+  , _iterations  :: Int
   , _workers     :: Workers
   }
 
@@ -453,7 +455,7 @@ instance Default Pin where
 makeFieldsNoPrefix ''CompilerOpts
 
 instance Default CompilerOpts where
-  def = CompilerOpts 2 20000 (16 * 1000000) True Singleton
+  def = CompilerOpts 2 20000 (16 * 1000000) True 4 Singleton
 
 
 runLSC :: Environment -> Bootstrap () -> LSC a -> IO a
@@ -471,7 +473,7 @@ evalLSC = runLSC
 debug :: Foldable f => f String -> LSC ()
 debug msg = do
   enabled <- view enableDebug <$> environment
-  when enabled $ liftIO $ do
+  when enabled $ unless (null msg) $ liftIO $ do
     time <- show . round <$> getPOSIXTime
     errorConcurrent $ unlines [unwords $ time : "->" : toList msg]
     flushConcurrentOutput
@@ -495,5 +497,10 @@ divideArea xs = do
   size <- view rowSize <$> environment
   tech <- technology
   let x = tech ^. standardPin . _1 & (* 2)
-  pure $ take n $ x : iterate (join (+)) size
+  pure $ take n $ x : fmap (size*) [1..]
   where n = ceiling $ sqrt $ fromIntegral $ length xs
+
+
+distinctPairs :: [a] -> [(a, a)]
+distinctPairs (x : xs) = fmap (x, ) xs ++ distinctPairs xs
+distinctPairs _ = []

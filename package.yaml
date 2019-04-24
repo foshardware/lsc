@@ -23,12 +23,15 @@ dependencies:
 - concurrent-output
 - containers
 - data-default
+- data-default-class
 - file-embed
 - firrtl
+- gloss
 - hashable
 - kan-extensions
 - lef
 - lens
+- linear
 - milp
 - mmorph
 - mtl

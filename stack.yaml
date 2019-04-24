@@ -1,5 +1,7 @@
 packages:
 - .
+ghc-options:
+  GLUT: -framework,GLUT
 extra-deps:
 - git: https://github.com/foshardware/milp
   commit: 2c8b204bb28425a4eb0b120268e6245c2f1d4287
@@ -19,4 +21,4 @@ extra-deps:
 - lazysmallcheck-0.6@sha256:dac7a1e4877681f1260309e863e896674dd6efc1159897b7945893e693f2a6bc
 - cabal-file-th-0.2.6@sha256:d278ab950813e8bb1ab242a4e43bc50851761421a1e1bc33dae8949926adf548
 allow-newer: true
-resolver: lts-13.17
+resolver: lts-12.26

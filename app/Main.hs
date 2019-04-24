@@ -80,7 +80,7 @@ program = do
       exit
 
    -- svg output
-  when (arg Lef && arg Blif && arg Compile)
+  when (arg Lef && arg Blif)
     $ do
       net_ <- liftIO $ Text.readFile $ str Blif
       lef_ <- liftIO $ Text.readFile $ str Lef
@@ -94,11 +94,17 @@ program = do
         (pure . fromBLIF)
         (parseBLIF net_)
 
-      circuit2d <- lift $ evalLSC opts tech $ compiler stage1 netlist
+      when (arg Compile)
+        $ do
+          circuit2d <- lift $ evalLSC opts tech $ compiler stage1 netlist
+          liftIO $ plotStdout circuit2d
+          exit
 
-      liftIO $ plotStdout circuit2d
-
-      exit
+      when (arg Animate)
+        $ do
+          circuit2d <- lift $ evalLSC opts tech $ compiler animatePlacement netlist
+          liftIO $ plotStdout circuit2d
+          exit
 
   when (arg Exline && not (arg Blif) && not (arg Firrtl))
     $ do
@@ -130,6 +136,7 @@ data FlagKey
   | Lef
   | Exline
   | Compile
+  | Animate
   | Smt
   | Cores
   | Debug
@@ -149,6 +156,10 @@ args =
     , Option ['b']      ["blif"]       (ReqArg (Blif, ) "FILE")     "BLIF file"
     , Option ['l']      ["lef"]        (ReqArg (Lef,  ) "FILE")     "LEF file"
     , Option ['d']      ["debug"]      (NoArg  (Debug, mempty))     "print some debug info"
+
+    , Option ['g']      ["animate"]
+        (OptArg  ((Animate, ) . maybe "4" id) "n")                  "animate"
+
     , Option ['c']      ["compile"]
         (OptArg ((Compile,  ) . maybe "svg" id) "svg,magic")        "output format"
 
@@ -160,18 +171,22 @@ args =
     , Option ['J']      ["json"]       (NoArg  (Json, mempty))      "export json"
     , Option ['f']      ["firrtl"]     (ReqArg (Firrtl, ) "FILE")   "firrtl file"
     , Option ['u']      ["verilog"]    (ReqArg (Verilog, ) "FILE")  "verilog file"
-    , Option ['r']      ["register"]   (ReqArg (Register, ) "size in bits")  "generate register"
     ]
 
 
 compilerOpts :: [Flag] -> IO CompilerOpts
 compilerOpts xs = do
+
   n <- getNumCapabilities
   let j = last $ n : rights [ parse decimal "-j" v | (k, v) <- xs, k == Cores ]
   setNumCapabilities j
   ws <- createWorkers j
+
+  let g = last $ 4 : rights [ parse decimal "-g" v | (k, v) <- xs, k == Animate ]
+
   pure $ def
     & enableDebug .~ elem Debug (fst <$> xs)
+    & iterations .~ g
     & workers .~ ws
 
 
