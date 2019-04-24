@@ -1,6 +1,9 @@
 
 module LSC.Animation where
 
+import Control.Lens
+import Data.Foldable
+
 import Graphics.Gloss
 
 
@@ -11,4 +14,11 @@ stdColor = black
 
 runAnimation = simulate stdWindow stdColor 1
 
-poly = color green . lineLoop
+poly :: (Foldable f, Real r) => f (r, r) -> Frame
+poly
+  = color green
+  . lineLoop
+  . fmap (bimap realToFrac realToFrac)
+  . toList
+
+{-# SPECIALIZE poly :: [(Double, Double)] -> Frame #-}

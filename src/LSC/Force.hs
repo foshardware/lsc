@@ -60,7 +60,7 @@ renderStep :: Step V F -> Frame
 renderStep = foldMap rectangle . view particles
 
 rectangle :: Particle V F -> Frame
-rectangle p = poly $ bimap realToFrac realToFrac . bimap (/ scale) (/ scale) <$>
+rectangle p = poly $ bimap (/ scale) (/ scale) <$>
   [ (x - w / 2, y - h / 2)
   , (x - w / 2, y + h / 2)
   , (x + w / 2, y + h / 2)
