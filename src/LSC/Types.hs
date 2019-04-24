@@ -241,6 +241,7 @@ data CompilerOpts = CompilerOpts
   , _rowSize     :: Integer
   , _halt        :: Int
   , _enableDebug :: Bool
+  , _iterations  :: Int
   , _workers     :: Workers
   }
 
@@ -454,7 +455,7 @@ instance Default Pin where
 makeFieldsNoPrefix ''CompilerOpts
 
 instance Default CompilerOpts where
-  def = CompilerOpts 2 20000 (16 * 1000000) True Singleton
+  def = CompilerOpts 2 20000 (16 * 1000000) True 4 Singleton
 
 
 runLSC :: Environment -> Bootstrap () -> LSC a -> IO a

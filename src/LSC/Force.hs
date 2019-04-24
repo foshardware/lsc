@@ -4,6 +4,7 @@
 
 module LSC.Force where
 
+import Control.Exception
 import Control.Lens
 import Control.Monad
 import Control.Monad.ST
@@ -43,28 +44,11 @@ type Edge = (Int, Int)
 
 
 data Step v n = Step
-  { _forces    :: Vector (Vector Edge, Point v n -> Point v n -> v n)
+  { _forces    :: [(Vector Edge, Point v n -> Point v n -> v n)]
   , _particles :: Vector (Particle v n)
   }
 
 makeLenses ''Step
-
-
-data ForceOptions n = ForceOpts
-  { _damping     :: n
-  , _energyLimit :: Maybe n
-  , _stepLimit   :: Maybe Int
-  }
-
-makeLenses ''ForceOptions
-
-instance Fractional n => Default (ForceOptions n) where
-  def = ForceOpts
-    { _damping     = 0.8
-    , _energyLimit = Just 0.001
-    , _stepLimit   = Nothing
-    }
-
 
 
 glossForce :: NetGraph -> LSC NetGraph
@@ -77,17 +61,14 @@ glossForce top = do
   let edges = fromList $ join [ distinctPairs $ keys $ net ^. contacts | net <- toList $ top ^. nets ]
   let allPairs = fromList $ distinctPairs [0 .. k-1]
 
-  let particleMap = initParticle . P . bottomLeft <$> view gates top
+  let particleVector = initParticle . P . bottomLeft <$> view gates top
 
-  let it = 16
+  it <- view iterations <$> environment
 
-  let e = Step (fromList [(edges, hooke 1 4), (allPairs, coulomb 0.1)]) particleMap
-  let ev = fromListN it $ fmap renderStep $ simulate e $ def
-             & damping     .~ 0.001
-             & energyLimit .~ Nothing
-             & stepLimit   .~ Nothing
+  let e = Step [(edges, hooke 1 4), (allPairs, coulomb 0.1)] particleVector
+  let r = fromListN it $ simulate 0.001 e
 
-  liftIO $ runAnimation (0, ev ! 0) snd $ \ _ _ (i, f) -> (succ i, ev ! mod i it)
+  liftIO $ runAnimation (0, r ! 0) (renderStep . snd) $ \ _ _ (i, f) -> (succ i, r ! mod i it)
 
   pure top
 
@@ -117,41 +98,35 @@ placeForce top = do
   let edges = fromList $ join [ distinctPairs $ keys $ net ^. contacts | net <- toList $ top ^. nets ]
   let allPairs = fromList $ distinctPairs [0 .. k-1]
 
-  let particleMap = initParticle . P . bottomLeft <$> view gates top
+  let particleVector = initParticle . P . bottomLeft <$> view gates top
 
-  let e = Step (fromList [(edges, hooke 1 4), (allPairs, coulomb 0.1)]) particleMap
-  let ev = view particles $ last $ simulate e $ def
-             & damping     .~ 0.001
-             & energyLimit .~ Nothing
-             & stepLimit   .~ Just 4
+  it <- view iterations <$> environment
+
+  let e = Step [(edges, hooke 1 4), (allPairs, coulomb 0.1)] particleVector
+  let r = view particles $ last $ take it $ simulate 0.001 e
 
   pure $ top
-    & gates %~ fmap (\ g -> g & geometry .~ fromDims ev (g ^. number) (lookupDimensions g tech))
+    & gates %~ fmap (\ g -> g & geometry .~ layered r (g ^. number) (lookupDimensions g tech))
 
 
 bottomLeft :: Gate -> V2 Float
-bottomLeft g = maybe (V2 0 0) (\r -> V2 (fromIntegral $ r ^. l) (fromIntegral $ r ^. b)) (listToMaybe $ g ^. geometry)
+bottomLeft g = last $ V2 0 0 : [ V2 (r ^. l) (r ^. b) | r <- fmap fromIntegral <$> g ^. geometry ]
 
 
-fromDims  _ _ Nothing = []
-fromDims ev i (Just (x, y)) = [Layered (a - div x 2) (b - div y 2) (a + div x 2) (b + div y 2) [Metal2, Metal3]]
-  where
-    V2 a' b' = unP $ view pos (ev ! i)
-    a = ceiling a'
-    b = ceiling b'
+layered _ _ Nothing = []
+layered r i (Just (x, y))
+  = pure
+  $ Layered
+    (ceiling a - div x 2)
+    (ceiling b - div y 2)
+    (ceiling a + div x 2)
+    (ceiling b + div y 2)
+    [Metal2, Metal3]
+    where V2 a b = unP $ view pos $ r ! i
 
 
-
-
-simulate :: (Metric v, Num n, Ord n) => Step v n -> ForceOptions n -> [Step v n]
-simulate e opts
-  = (e:)
-  $ takeWhile (maybe (const True) (<) (opts ^. energyLimit) . kinetic)
-  $ maybe id take (opts ^. stepLimit)
-  $ drop 1
-  $ iterate (opts ^. damping . to step)
-  $ e
-
+simulate :: (Metric v, Num n, Ord n) => n -> Step v n -> [Step v n]
+simulate damping = iterate $ step damping
 
 
 step :: (Additive v, Num n) => n -> Step v n -> Step v n
@@ -185,10 +160,6 @@ recalc = calcForces . zeroForces
         write m i1 $! p1 & force %~ (^+^ f (p1^.pos) (p2^.pos))
         write m i2 $! p2 & force %~ (^+^ f (p1^.pos) (p2^.pos))
         unsafeFreeze m
-
-
-kinetic :: (Metric v, Num n) => Step v n -> n
-kinetic = ala Sum foldMap . fmap (quadrance . view vel) . view particles
 
 
 dist :: (Metric v, Floating n) => (n -> n) -> Point v n -> Point v n -> v n
