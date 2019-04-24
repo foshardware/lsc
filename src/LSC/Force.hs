@@ -1,6 +1,4 @@
-{-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE TemplateHaskell #-}
-{-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE FlexibleContexts #-}
 
 module LSC.Force where
 
@@ -29,26 +27,11 @@ import LSC.Animation
 import LSC.Types
 
 
-data Particle v n = Particle
-  { _pos   :: Point v n
-  , _vel   :: v n
-  , _force :: v n
-  } deriving (Eq, Show)
+type V = V2
+type F = Float
 
-makeLenses ''Particle
-
-initParticle :: (Additive v, Num n) => Point v n -> Particle v n
-initParticle p = Particle p zero zero
-
-type Edge = (Int, Int)
-
-
-data Step v n = Step
-  { _forces    :: [(Vector Edge, Point v n -> Point v n -> v n)]
-  , _particles :: Vector (Particle v n)
-  }
-
-makeLenses ''Step
+scale :: F
+scale = 100
 
 
 glossForce :: NetGraph -> LSC NetGraph
@@ -61,7 +44,7 @@ glossForce top = do
   let edges = fromList $ join [ distinctPairs $ keys $ net ^. contacts | net <- toList $ top ^. nets ]
   let allPairs = fromList $ distinctPairs [0 .. k-1]
 
-  let particleVector = initParticle . P . bottomLeft <$> view gates top
+  let particleVector = bottomLeft tech <$> view gates top
 
   it <- view iterations <$> environment
 
@@ -73,19 +56,19 @@ glossForce top = do
   pure top
 
 
-renderStep :: Step V2 Float -> Frame
-renderStep = foldMap (rect . unP . view pos) . view particles
+renderStep :: Step V F -> Frame
+renderStep = foldMap rectangle . view particles
 
-rect :: V2 Float -> Frame
-rect (V2 x y) = poly
-  [ (x / sc - 5, y / sc - 5)
-  , (x / sc - 5, y / sc + 5)
-  , (x / sc + 5, y / sc + 5)
-  , (x / sc + 5, y / sc - 5)
+rectangle :: Particle V F -> Frame
+rectangle p = poly $ bimap (/ scale) (/ scale) <$>
+  [ (x - w / 2, y - h / 2)
+  , (x - w / 2, y + h / 2)
+  , (x + w / 2, y + h / 2)
+  , (x + w / 2, y - h / 2)
   ]
-
-sc :: Float
-sc = 100
+  where
+    (w, h) = bimap fromIntegral fromIntegral $ p ^. dims
+    V2 x y = unP $ p ^. pos
 
 
 placeForce :: NetGraph -> LSC NetGraph
@@ -98,7 +81,7 @@ placeForce top = do
   let edges = fromList $ join [ distinctPairs $ keys $ net ^. contacts | net <- toList $ top ^. nets ]
   let allPairs = fromList $ distinctPairs [0 .. k-1]
 
-  let particleVector = initParticle . P . bottomLeft <$> view gates top
+  let particleVector = bottomLeft tech <$> view gates top
 
   it <- view iterations <$> environment
 
@@ -106,17 +89,22 @@ placeForce top = do
   let r = view particles $ last $ take it $ simulate 0.001 e
 
   pure $ top
-    & gates %~ fmap (\ g -> g & geometry .~ layered r (g ^. number) (lookupDimensions g tech))
+    & gates %~ fmap (\ g -> g & geometry .~ maybeToList (layered r (g ^. number) <$> lookupDimensions g tech))
 
 
-bottomLeft :: Gate -> V2 Float
-bottomLeft g = last $ V2 0 0 : [ V2 (r ^. l) (r ^. b) | r <- fmap fromIntegral <$> g ^. geometry ]
+bottomLeft :: Technology -> Gate -> Particle V F
+bottomLeft tech g = Particle
+  p
+  zero
+  zero
+  (maybe (10, 10) id $ lookupDimensions g tech)
+  where p = P $ last $ V2 0 0 : [ V2 (r ^. l) (r ^. b) | r <- fmap fromIntegral <$> g ^. geometry ]
 
 
-layered _ _ Nothing = []
-layered r i (Just (x, y))
-  = pure
-  $ Layered
+
+layered :: Vector (Particle V F) -> Int -> (Integer, Integer) -> Component Layer Integer
+layered r i (x, y)
+  = Layered
     (ceiling a - div x 2)
     (ceiling b - div y 2)
     (ceiling a + div x 2)
@@ -125,22 +113,22 @@ layered r i (Just (x, y))
     where V2 a b = unP $ view pos $ r ! i
 
 
-simulate :: (Metric v, Num n, Ord n) => n -> Step v n -> [Step v n]
+simulate :: F -> Step V F -> [Step V F]
 simulate damping = iterate $ step damping
 
 
-step :: (Additive v, Num n) => n -> Step v n -> Step v n
+step :: F -> Step V F -> Step V F
 step d = (over particles . fmap) (particle d) . recalc
 
 
-particle :: (Additive v, Num n) => n -> Particle v n -> Particle v n
+particle :: F -> Particle V F -> Particle V F
 particle d = stepPos . stepVel
   where
-    stepVel p = vel .~ (d *^ (p^.vel ^+^ p^.force)) $ p
-    stepPos p = pos %~ (.+^ p^.vel) $ p
+    stepVel p = p & vel .~ (d *^ (p^.vel ^+^ p^.force))
+    stepPos p = p & pos %~ (.+^ p^.vel)
 
 
-recalc :: (Additive v, Num n) => Step v n -> Step v n
+recalc :: Step V F -> Step V F
 recalc = calcForces . zeroForces
 
   where
@@ -153,7 +141,7 @@ recalc = calcForces . zeroForces
       = Step fs
       $ ala Endo foldMap (foldMap (\ (es, f) -> mkForce f <$> es) fs) (runST $ V.freeze =<< unsafeThaw ps)
 
-    mkForce :: (Num n, Additive v) => (Point v n -> Point v n -> v n) -> (Int, Int) -> (Vector (Particle v n) -> Vector (Particle v n))
+    mkForce :: (Num n, Additive v) => (Point v n -> Point v n -> v n) -> Edge -> Vector (Particle v n) -> Vector (Particle v n)
     mkForce f (i1, i2) v = case (v ! i1, v ! i2) of
       (p1, p2) -> runST $ do
         m <- unsafeThaw v
@@ -162,11 +150,11 @@ recalc = calcForces . zeroForces
         unsafeFreeze m
 
 
-dist :: (Metric v, Floating n) => (n -> n) -> Point v n -> Point v n -> v n
+dist :: (F -> F) -> Point V F -> Point V F -> V F
 dist f p1 p2 = f (distance p1 p2) *^ signorm (p2 .-. p1)
 
-hooke :: (Metric v, Floating n) => n -> n -> Point v n -> Point v n -> v n
+hooke :: F -> F -> Point V F -> Point V F -> V F
 hooke k l = dist $ \ d -> k * (d - l)
 
-coulomb :: (Metric v, Floating n) => n -> Point v n -> Point v n -> v n
+coulomb :: F -> Point V F -> Point V F -> V F
 coulomb k = dist $ \ d -> -k/ (d*d)
