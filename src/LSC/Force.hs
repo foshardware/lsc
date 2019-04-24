@@ -6,13 +6,16 @@ module LSC.Force where
 
 import Control.Lens
 import Control.Monad
+import Control.Monad.ST
 import Control.Monad.IO.Class
 import Data.Default.Class
 import Data.Foldable
 import Data.Map (keys)
 import Data.Maybe
 import Data.Monoid
-import Data.Vector (Vector, fromList, (!), update)
+import qualified Data.Vector as V
+import Data.Vector (Vector, fromList, (!), copy, fromListN, unsafeThaw, unsafeFreeze)
+import Data.Vector.Mutable (write)
 import Linear.Affine hiding (Vector)
 import Linear.Metric
 import Linear.Vector
@@ -76,12 +79,15 @@ glossForce top = do
 
   let particleMap = initParticle . P . bottomLeft <$> view gates top
 
-  let e = Step (fromList [(edges, hooke 1 4), (allPairs, coulomb 0.1)]) particleMap
+  let it = 16
 
-  liftIO $ runAnimation e renderStep $ \ _ f ->
-    if ceiling f `mod` 10 == 0
-      then step 0.001
-      else id
+  let e = Step (fromList [(edges, hooke 1 4), (allPairs, coulomb 0.1)]) particleMap
+  let ev = fromListN it $ fmap renderStep $ simulate e $ def
+             & damping     .~ 0.001
+             & energyLimit .~ Nothing
+             & stepLimit   .~ Nothing
+
+  liftIO $ runAnimation (0, ev ! 0) snd $ \ _ _ (i, f) -> (succ i, ev ! mod i it)
 
   pure top
 
@@ -117,7 +123,7 @@ placeForce top = do
   let ev = view particles $ last $ simulate e $ def
              & damping     .~ 0.001
              & energyLimit .~ Nothing
-             & stepLimit   .~ Just 1
+             & stepLimit   .~ Just 4
 
   pure $ top
     & gates %~ fmap (\ g -> g & geometry .~ fromDims ev (g ^. number) (lookupDimensions g tech))
@@ -170,13 +176,15 @@ recalc = calcForces . zeroForces
 
     calcForces (Step fs ps)
       = Step fs
-      $ ala Endo foldMap (foldMap (\ (es, f) -> mkForce f <$> es) fs) ps
+      $ ala Endo foldMap (foldMap (\ (es, f) -> mkForce f <$> es) fs) (runST $ V.freeze =<< unsafeThaw ps)
 
-    mkForce f (i1, i2) m = case (m ! i1, m ! i2) of
-      (p1, p2) -> update m $ fromList
-        [ (i1, m ! i1 & force %~ (^+^ f (p1^.pos) (p2^.pos)))
-        , (i2, m ! i2 & force %~ (^-^ f (p1^.pos) (p2^.pos)))
-        ]
+    mkForce :: (Num n, Additive v) => (Point v n -> Point v n -> v n) -> (Int, Int) -> (Vector (Particle v n) -> Vector (Particle v n))
+    mkForce f (i1, i2) v = case (v ! i1, v ! i2) of
+      (p1, p2) -> runST $ do
+        m <- unsafeThaw v
+        write m i1 $! p1 & force %~ (^+^ f (p1^.pos) (p2^.pos))
+        write m i2 $! p2 & force %~ (^+^ f (p1^.pos) (p2^.pos))
+        unsafeFreeze m
 
 
 kinetic :: (Metric v, Num n) => Step v n -> n
