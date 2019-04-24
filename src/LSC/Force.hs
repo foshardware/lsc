@@ -28,7 +28,7 @@ import LSC.Types
 
 
 type V = V2
-type F = Float
+type F = Double
 
 scale :: F
 scale = 100
@@ -44,7 +44,7 @@ glossForce top = do
   let edges = fromList $ join [ distinctPairs $ keys $ net ^. contacts | net <- toList $ top ^. nets ]
   let allPairs = fromList $ distinctPairs [0 .. k-1]
 
-  let particleVector = bottomLeft tech <$> view gates top
+  let particleVector = middle tech <$> view gates top
 
   it <- view iterations <$> environment
 
@@ -60,7 +60,7 @@ renderStep :: Step V F -> Frame
 renderStep = foldMap rectangle . view particles
 
 rectangle :: Particle V F -> Frame
-rectangle p = poly $ bimap (/ scale) (/ scale) <$>
+rectangle p = poly $ bimap realToFrac realToFrac . bimap (/ scale) (/ scale) <$>
   [ (x - w / 2, y - h / 2)
   , (x - w / 2, y + h / 2)
   , (x + w / 2, y + h / 2)
@@ -81,7 +81,7 @@ placeForce top = do
   let edges = fromList $ join [ distinctPairs $ keys $ net ^. contacts | net <- toList $ top ^. nets ]
   let allPairs = fromList $ distinctPairs [0 .. k-1]
 
-  let particleVector = bottomLeft tech <$> view gates top
+  let particleVector = middle tech <$> view gates top
 
   it <- view iterations <$> environment
 
@@ -92,8 +92,8 @@ placeForce top = do
     & gates %~ fmap (\ g -> g & geometry .~ maybeToList (layered r (g ^. number) <$> lookupDimensions g tech))
 
 
-bottomLeft :: Technology -> Gate -> Particle V F
-bottomLeft tech g = Particle
+middle :: Technology -> Gate -> Particle V F
+middle tech g = Particle
   p
   zero
   zero
