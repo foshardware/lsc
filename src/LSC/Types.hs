@@ -260,12 +260,13 @@ gnostic b a = a `runReader` freeze b
 
 
 data CompilerOpts = CompilerOpts
-  { _jogs        :: Int
-  , _rowSize     :: Integer
-  , _halt        :: Int
-  , _enableDebug :: Bool
-  , _iterations  :: Int
-  , _workers     :: Workers
+  { _jogs          :: Int
+  , _rowSize       :: Integer
+  , _halt          :: Int
+  , _enableDebug   :: Bool
+  , _enableVisuals :: Bool
+  , _iterations    :: Int
+  , _workers       :: Workers
   }
 
 data Workers
@@ -478,7 +479,7 @@ instance Default Pin where
 makeFieldsNoPrefix ''CompilerOpts
 
 instance Default CompilerOpts where
-  def = CompilerOpts 2 20000 (16 * 1000000) True 4 Singleton
+  def = CompilerOpts 2 20000 (16 * 1000000) True True 4 Singleton
 
 
 runLSC :: Environment -> Bootstrap () -> LSC a -> IO a

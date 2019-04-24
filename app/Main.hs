@@ -100,11 +100,6 @@ program = do
           liftIO $ plotStdout circuit2d
           exit
 
-      when (arg Animate)
-        $ do
-          circuit2d <- lift $ evalLSC opts tech $ compiler animatePlacement netlist
-          liftIO $ plotStdout circuit2d
-          exit
 
   when (arg Exline && not (arg Blif) && not (arg Firrtl))
     $ do
@@ -136,7 +131,8 @@ data FlagKey
   | Lef
   | Exline
   | Compile
-  | Animate
+  | Visuals
+  | Iterations
   | Smt
   | Cores
   | Debug
@@ -156,9 +152,10 @@ args =
     , Option ['b']      ["blif"]       (ReqArg (Blif, ) "FILE")     "BLIF file"
     , Option ['l']      ["lef"]        (ReqArg (Lef,  ) "FILE")     "LEF file"
     , Option ['d']      ["debug"]      (NoArg  (Debug, mempty))     "print some debug info"
+    , Option ['g']      ["visuals"]    (NoArg  (Visuals, mempty))   "show visuals"
 
-    , Option ['g']      ["animate"]
-        (OptArg  ((Animate, ) . maybe "4" id) "n")                  "animate"
+    , Option ['i']      ["iterations"]
+        (OptArg  ((Iterations, ) . maybe "4" id) "n")               "iterations"
 
     , Option ['c']      ["compile"]
         (OptArg ((Compile,  ) . maybe "svg" id) "svg,magic")        "output format"
@@ -182,11 +179,12 @@ compilerOpts xs = do
   setNumCapabilities j
   ws <- createWorkers j
 
-  let g = last $ 4 : rights [ parse decimal "-g" v | (k, v) <- xs, k == Animate ]
+  let i = last $ 4 : rights [ parse decimal "-i" v | (k, v) <- xs, k == Iterations ]
 
   pure $ def
     & enableDebug .~ elem Debug (fst <$> xs)
-    & iterations .~ g
+    & enableVisuals .~ elem Visuals (fst <$> xs)
+    & iterations .~ i
     & workers .~ ws
 
 

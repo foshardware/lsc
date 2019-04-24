@@ -36,7 +36,7 @@ stage1 = zeroArrow
 
 animatePlacement :: Compiler' NetGraph
 animatePlacement = zeroArrow
-  <+> local placeEasy >>> local glossForce
+  <+> local placeEasy >>> local placeForce
 
 
 

@@ -34,26 +34,32 @@ scale :: R
 scale = 100
 
 
-glossForce :: NetGraph -> LSC NetGraph
-glossForce top = do
+placeForce :: NetGraph -> LSC NetGraph
+placeForce top = do
 
   tech <- technology
 
   let k = top ^. gates . to length
 
   let edges = fromList $ join [ distinctPairs $ keys $ net ^. contacts | net <- toList $ top ^. nets ]
-  let allPairs = fromList $ distinctPairs [0 .. k-1]
+  let nodes = fromList $ distinctPairs [0 .. k-1]
 
   let particleVector = center tech <$> view gates top
 
   it <- view iterations <$> environment
+  ui <- view enableVisuals <$> environment
 
-  let e = Step [(edges, hooke 1 4), (allPairs, coulomb 0.1)] particleVector
+  let e = Step [(edges, hooke 1 4), (nodes, coulomb 0.1)] particleVector
   let r = fromListN it $ simulate 0.001 e
 
-  liftIO $ runAnimation (0, r ! 0) (renderStep . snd) $ \ _ _ (i, f) -> (succ i, r ! mod i it)
+  when ui
+    $ liftIO $ do
+      runAnimation (0, r ! 0) (renderStep . snd) $ \ _ _ (i, f) -> (succ i, r ! mod i it)
 
-  pure top
+  let ps = view particles $ r ! pred it
+
+  pure $ top
+    & gates %~ fmap (\ g -> g & geometry .~ maybeToList (layered ps (g ^. number) <$> lookupDimensions g tech))
 
 
 renderStep :: Step V R -> Frame
@@ -69,27 +75,6 @@ rectangle p = poly $ bimap (/ scale) (/ scale) <$>
   where
     (w, h) = bimap fromIntegral fromIntegral $ p ^. dims
     V2 x y = unP $ p ^. pos
-
-
-placeForce :: NetGraph -> LSC NetGraph
-placeForce top = do
-
-  tech <- technology
-
-  let k = top ^. gates . to length
-
-  let edges = fromList $ join [ distinctPairs $ keys $ net ^. contacts | net <- toList $ top ^. nets ]
-  let allPairs = fromList $ distinctPairs [0 .. k-1]
-
-  let particleVector = center tech <$> view gates top
-
-  it <- view iterations <$> environment
-
-  let e = Step [(edges, hooke 1 4), (allPairs, coulomb 0.1)] particleVector
-  let r = view particles $ last $ take it $ simulate 0.001 e
-
-  pure $ top
-    & gates %~ fmap (\ g -> g & geometry .~ maybeToList (layered r (g ^. number) <$> lookupDimensions g tech))
 
 
 center :: Technology -> Gate -> Particle V R
