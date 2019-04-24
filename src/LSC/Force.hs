@@ -83,7 +83,12 @@ center tech g = Particle
   zero
   zero
   (maybe (10, 10) id $ lookupDimensions g tech)
-  where p = P $ last $ V2 0 0 : [ V2 (r ^. l) (r ^. b) | r <- fmap fromIntegral <$> g ^. geometry ]
+  where
+    p = P $ last $ V2 0 0 :
+        [ V2 (r ^. l + fromIntegral w / 2) (r ^. b + fromIntegral h / 2)
+        | r <- fmap fromIntegral <$> g ^. geometry
+        , (w, h) <- maybe [(10, 10)] pure $ lookupDimensions g tech
+        ]
 
 
 
