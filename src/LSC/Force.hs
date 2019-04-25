@@ -2,26 +2,22 @@
 
 module LSC.Force where
 
-import Control.Exception
 import Control.Lens
 import Control.Monad
 import Control.Monad.ST
 import Control.Monad.IO.Class
-import Data.Default.Class
 import Data.Foldable
 import Data.Map (keys)
 import Data.Maybe
 import Data.Monoid
 import qualified Data.Vector as V
-import Data.Vector (Vector, fromList, (!), copy, fromListN, unsafeThaw, unsafeFreeze)
+import Data.Vector (Vector, fromList, fromListN, unsafeThaw, unsafeFreeze)
 import Data.Vector.Mutable (write)
 import Linear.Affine hiding (Vector)
 import Linear.Metric
 import Linear.Vector
 import Linear.V2
 import Prelude hiding (lookup)
-
-import System.IO.Unsafe
 
 import LSC.Animation
 import LSC.Types
@@ -50,16 +46,17 @@ placeForce top = do
   ui <- view enableVisuals <$> environment
 
   let e = Step [(edges, hooke 1 4), (nodes, coulomb 0.1)] particleVector
-  let r = fromListN it $ simulate 0.001 e
+  let v = fromListN it $ simulate 0.001 e
 
   when ui
     $ liftIO $ do
-      runAnimation (0, r ! 0) (renderStep . snd) $ \ _ _ (i, f) -> (succ i, r ! mod i it)
+      runAnimation (0, v ^? ix 0) (maybe mempty renderStep . snd)
+        $ \ _ _ (i, _) -> (succ i, v ^? ix (mod i it))
 
-  let ps = view particles $ r ! pred it
+  let ps = maybe mempty id $ v ^? ix (pred it) . particles
 
   pure $ top
-    & gates %~ fmap (\ g -> g & geometry .~ maybeToList (layered ps (g ^. number) <$> lookupDimensions g tech))
+    & gates %~ fmap (\ g -> g & geometry .~ toList (layered ps (g ^. number) <$> lookupDims g tech))
 
 
 renderStep :: Step V R -> Frame
@@ -82,25 +79,25 @@ center tech g = Particle
   p
   zero
   zero
-  (maybe (10, 10) id $ lookupDimensions g tech)
+  (maybe (10, 10) id $ lookupDims g tech)
   where
     p = P $ last $ V2 0 0 :
-        [ V2 (r ^. l + fromIntegral w / 2) (r ^. b + fromIntegral h / 2)
-        | r <- fmap fromIntegral <$> g ^. geometry
-        , (w, h) <- maybe [(10, 10)] pure $ lookupDimensions g tech
+        [ V2 (q ^. l + fromIntegral w / 2) (q ^. b + fromIntegral h / 2)
+        | q <- fmap fromIntegral <$> g ^. geometry
+        , (w, h) <- maybe [(10, 10)] pure $ lookupDims g tech
         ]
 
 
 
 layered :: Vector (Particle V R) -> Int -> (Integer, Integer) -> Component Layer Integer
-layered r i (x, y)
+layered v i (x, y)
   = Layered
-    (ceiling a - div x 2)
-    (ceiling b - div y 2)
-    (ceiling a + div x 2)
-    (ceiling b + div y 2)
+    (ceiling vx - div x 2)
+    (ceiling vy - div y 2)
+    (ceiling vx + div x 2)
+    (ceiling vy + div y 2)
     [Metal2, Metal3]
-    where V2 a b = unP $ view pos $ r ! i
+    where V2 vx vy = maybe zero unP $ v ^? ix i . pos
 
 
 simulate :: R -> Step V R -> [Step V R]
@@ -132,8 +129,9 @@ recalc = calcForces . zeroForces
       $ ala Endo foldMap (foldMap (\ (es, f) -> mkForce f <$> es) fs) (runST $ unsafeFreeze =<< V.thaw ps)
 
     mkForce :: (Point V R -> Point V R -> V R) -> Edge -> Vector (Particle V R) -> Vector (Particle V R)
-    mkForce f (i1, i2) v = case (v ! i1, v ! i2) of
-      (p1, p2) -> runST $ do
+    mkForce f (i1, i2) v = case (,) <$> v ^? ix i1 <*> v ^? ix i2 of
+      Nothing -> v
+      Just (p1, p2) -> runST $ do
         m <- unsafeThaw v
         write m i1 $! p1 & force %~ (^+^ f (p1^.pos) (p2^.pos))
         write m i2 $! p2 & force %~ (^+^ f (p1^.pos) (p2^.pos))
@@ -144,7 +142,7 @@ euclidean :: (R -> R) -> Point V R -> Point V R -> V R
 euclidean f p1 p2 = f (distance p1 p2) *^ signorm (p2 .-. p1)
 
 hooke :: R -> R -> Point V R -> Point V R -> V R
-hooke k l = euclidean $ \ d -> k * (d - l)
+hooke k e = euclidean $ \ d -> k * (d - e)
 
 coulomb :: R -> Point V R -> Point V R -> V R
 coulomb k = euclidean $ \ d -> -k / (d*d)

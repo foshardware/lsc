@@ -19,7 +19,6 @@ import Control.Applicative
 import Control.Lens hiding (element)
 import Control.Concurrent.MSem (MSem)
 import Control.Exception
-import Data.Char
 import Data.Default
 import Data.Foldable
 import Data.Function (on)
@@ -509,8 +508,8 @@ instance Default Technology where
   def = Technology 1000 1 mempty (1000, 1000) 30000
 
 
-lookupDimensions :: Gate -> Technology -> Maybe (Integer, Integer)
-lookupDimensions g tech = view dims <$> lookup (g ^. identifier) (tech ^. stdCells)
+lookupDims :: Gate -> Technology -> Maybe (Integer, Integer)
+lookupDims g tech = view dims <$> lookup (g ^. identifier) (tech ^. stdCells)
 
 lambda :: Technology -> Integer
 lambda tech = ceiling $ view scaleFactor tech * view featureSize tech

@@ -37,7 +37,7 @@ sections gate = do
 
   offset <- (2 *) . fst . view standardPin <$> lift technology
 
-  (w, h) <- maybe (0, 0) id . lookupDimensions gate <$> lift technology
+  (w, h) <- maybe (0, 0) id . lookupDims gate <$> lift technology
 
   (y, rs) <- get
 

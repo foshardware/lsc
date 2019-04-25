@@ -404,7 +404,7 @@ gatePolygon netlist gate = do
 
   path <- freeRectangle <&> integrate [Metal2, Metal3]
 
-  standardDimensions <- lookupDimensions gate <$> technology
+  standardDimensions <- lookupDims gate <$> technology
 
   abstractDimensions <- pure $ join $ lookup (gate ^. identifier) (netlist ^. subcells)
     <&> view (supercell . geometry)
