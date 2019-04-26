@@ -40,13 +40,44 @@ placeForce top = do
   let edges = fromList $ join [ distinctPairs $ keys $ net ^. contacts | net <- toList $ top ^. nets ]
   let nodes = fromList $ distinctPairs [0 .. k-1]
 
+  let kr = 7
+
+  let outer = fromList $ distinctPairs [k .. k+kr] ++ [ (i, o) | i <- [0 .. k-1], o <- [k .. k+kr] ]
+  let tight = fromList $ zip [k .. k+kr] [k+1 .. k+kr]
+
   let particleVector = center tech <$> view gates top
+
+  let ev = fromIntegral
+
+  let xmin = minimum [q ^. l . to ev | g <- toList $ top ^. gates, q <- g ^. geometry]
+      ymin = minimum [q ^. b . to ev | g <- toList $ top ^. gates, q <- g ^. geometry]
+      xmax = maximum [q ^. r . to ev | g <- toList $ top ^. gates, q <- g ^. geometry]
+      ymax = maximum [q ^. t . to ev | g <- toList $ top ^. gates, q <- g ^. geometry]
+
+  let gap = 10000
+
+  let ringParticles = fromList
+        [ ringParticle (xmin - gap, ymin - gap)
+        , ringParticle (xmax / 2, ymin - gap)
+        , ringParticle (xmax + gap, ymin - gap)
+        , ringParticle (xmax + gap, ymax / 2)
+        , ringParticle (xmax + gap, ymax + gap)
+        , ringParticle (xmax / 2, ymax + gap)
+        , ringParticle (xmin - gap, ymax + gap)
+        , ringParticle (xmin - gap, ymax / 2)
+        ]
 
   it <- view iterations <$> environment
   ui <- view enableVisuals <$> environment
 
-  let e = Step [(edges, hooke 1 4), (nodes, coulomb 0.1)] particleVector
-  let v = fromListN it $ simulate 0.001 e
+  let forces =
+        [ (edges, hooke 1 4)
+        , (nodes, coulomb 0.1)
+        , (tight, hooke 4 8)
+        , (outer, coulomb 20)
+        ]
+
+  let v = fromListN it $ simulate 0.001 $ Step forces $ particleVector <> ringParticles
 
   when ui
     $ liftIO $ do
@@ -57,6 +88,11 @@ placeForce top = do
 
   pure $ top
     & gates %~ fmap (\ g -> g & geometry .~ toList (layered ps (g ^. number) <$> lookupDims g tech))
+
+
+
+ringParticle :: (R, R) -> Particle V R
+ringParticle (x, y) = Particle (P (V2 x y)) zero zero (42 * ceiling scale, 42 * ceiling scale)
 
 
 renderStep :: Step V R -> Frame
@@ -72,6 +108,7 @@ rectangle p = poly $ bimap (/ scale) (/ scale) <$>
   where
     (w, h) = bimap fromIntegral fromIntegral $ p ^. dims
     V2 x y = unP $ p ^. pos
+
 
 
 center :: Technology -> Gate -> Particle V R
