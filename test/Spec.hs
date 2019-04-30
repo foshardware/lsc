@@ -4,6 +4,7 @@ import Control.Arrow
 import Control.Arrow.Select
 import Control.Concurrent
 import Control.Lens
+import Control.Monad.ST
 import Control.Monad.IO.Class
 import Data.Bits
 import Data.Default
@@ -14,12 +15,31 @@ import Test.Tasty.HUnit
 
 import LSC
 import LSC.Types
+import LSC.FM
 
 
 main :: IO ()
 main = defaultMain $ testGroup "LSC"
-  [ concurrency
+  [ fm
+  , concurrency
   ]
+
+
+fm :: TestTree
+fm = testGroup "FM" $
+  [ testCase "inputRoutine" $ fmInputRoutine
+  ]
+
+fmInputRoutine :: IO ()
+fmInputRoutine = do
+  result <- stToIO $ fmap (fmap $ view partitioning) $ execFM $ bipartition =<< inputRoutine 5 6
+    [ (0,3), (0,4)
+    , (1,1), (1,4)
+    , (2,0), (2,1), (2,2)
+    , (3,1), (3,5)
+    , (4,1), (4,2), (4,3)
+    ]
+  putStrLn $ show result
 
 
 concurrency :: TestTree

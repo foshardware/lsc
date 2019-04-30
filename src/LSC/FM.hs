@@ -78,9 +78,6 @@ snapshot :: FM s ()
 snapshot = update snapshots . (:) . set snapshots mempty =<< lift . readSTRef =<< ask
 
 
-type Partition a = (a, a) -> a
-
-
 type NetArray  = Vector IntSet
 type CellArray = Vector IntSet
 
@@ -88,10 +85,7 @@ type V = CellArray
 type E = NetArray
 
 
-type Parts = (IntSet, IntSet)
-
-type P = Parts
-
+type P = (IntSet, IntSet)
 
 
 bipartition :: (V, E) -> FM s ()
