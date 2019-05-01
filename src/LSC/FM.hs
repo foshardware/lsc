@@ -13,21 +13,21 @@ import Control.Monad.ST
 import Data.Foldable
 import Data.Maybe
 import Data.Monoid
-import Data.IntSet hiding (filter, findMax)
+import Data.IntSet hiding (filter, findMax, foldl')
 import qualified Data.IntSet as Set
 import Data.IntMap (IntMap, fromListWith, findMax, unionWith, insertWith, adjust)
 import qualified Data.IntMap as Map
 import Data.STRef
 import Data.Tuple
 import Data.Vector (Vector, unsafeFreeze, unsafeThaw, thaw, (!))
-import Data.Vector.Mutable hiding (swap, length, set)
+import Data.Vector.Mutable hiding (swap, length, set, move)
 import Prelude hiding (replicate, length)
 
 
 type FM s = ReaderT (STRef s Heu) (ST s)
 
 balanceFactor :: Float
-balanceFactor = 0.7
+balanceFactor = 0.5
 
 
 data Gain a = Gain (IntMap a) (IntMap IntSet)
@@ -44,11 +44,41 @@ maxGain :: Gain a -> (Int, IntSet)
 maxGain (Gain _ m) = findMax m
 
 
+data Move
+  = Move Int Int -- Move Gain Cell
+  deriving Show
+
+
+newtype P a = P { unP :: (a, a) }
+
+instance Eq a => Eq (P a) where
+  P (a, _) == P (b, _) = a == b
+
+instance Semigroup a => Semigroup (P a) where
+  P (a, b) <> P (c, d) = P (a <> c, b <> d)
+
+instance Monoid a => Monoid (P a) where
+  mempty = P mempty
+  mappend = (<>)
+
+instance Show a => Show (P a) where
+  show (P (a, b)) = "<"++ show a ++", "++ show b ++">"
+
+cardinal :: P IntSet -> Int
+cardinal (P (a, b)) = size a + size b 
+
+move :: Int -> P IntSet -> P IntSet
+move c (P (a, b)) | member c a = P (delete c a, insert c b)
+move c (P (a, b)) = P (insert c a, delete c b)
+
+
 data Heu = Heu
-  { _partitioning :: (IntSet, IntSet)
+  { _partitioning :: P IntSet
   , _gains        :: Gain Int
   , _freeCells    :: IntSet
+  , _moves        :: [Move]
   , _snapshots    :: [Heu]
+  , _iterations   :: Int
   } deriving Show
 
 makeFieldsNoPrefix ''Heu
@@ -62,8 +92,8 @@ execFM = fmap snd . runFM
 
 runFM :: FM s a -> ST s (a, [Heu])
 runFM f = do
-  r <- newSTRef $ Heu mempty mempty mempty mempty
-  runReaderT ((,) <$> f <*> value snapshots) r
+  r <- newSTRef $ Heu mempty mempty mempty mempty mempty 0
+  runReaderT ((,) <$> f <*> (snapshot *> value snapshots)) r
 
 
 update :: Simple Setter Heu a -> (a -> a) -> FM s ()
@@ -72,10 +102,13 @@ update v f = do
   lift $ r $ v %~ f
 
 value :: Getter Heu a -> FM s a
-value v = view v <$> join (lift . readSTRef <$> ask)
+value v = view v <$> getState
 
 snapshot :: FM s ()
-snapshot = update snapshots . (:) . set snapshots mempty =<< lift . readSTRef =<< ask
+snapshot = update snapshots . (:) . set snapshots mempty =<< getState
+
+getState :: FM s Heu
+getState = lift . readSTRef =<< ask
 
 
 type NetArray  = Vector IntSet
@@ -85,20 +118,47 @@ type V = CellArray
 type E = NetArray
 
 
-type P = (IntSet, IntSet)
+computeG :: FM s (Int, Heu)
+computeG = do
+  vs <- zip <$> value moves <*> value snapshots
+  hs <- getState
+  let (_, g, h) = foldl' accum (0, 0, hs) vs
+  pure (g, h)
+  where
+    accum :: (Int, Int, Heu) -> (Move, Heu) -> (Int, Int, Heu)
+    accum (gmax, g, h) (Move gc c, heu)
+      | g + gc > gmax
+      = (g + gc, g + gc, heu)
+    accum (gmax, g, h) (Move gc c, heu)
+      | g + gc == gmax
+      , diff heu < diff h
+      = (gmax, g + gc, heu)
+    accum (gmax, g, h) (Move gc c, _)
+      = (gmax, g + gc, h)
 
 
-bipartition :: (V, E) -> FM s ()
-bipartition (v, e) = do
+fiduccia (v, e) = do
   initialPartitioning v
+  bipartition (v, e)
+
+
+bipartition :: (V, E) -> FM s (P IntSet)
+bipartition (v, e) = do
   initialFreeCells v
   initialGains (v, e)
+  update moves $ const mempty
+  update iterations succ
+  p <- value partitioning
   processCell (v, e)
+  (g, h) <- computeG
+  update partitioning $ const $ h ^. partitioning
+  if g <= 0
+    then pure p
+    else bipartition (v, e)
 
 
 processCell :: (V, E) -> FM s ()
 processCell (v, e) = do
-  snapshot
   ci <- selectBaseCell v
   for_ ci $ \ i -> do
     lockCell i
@@ -112,9 +172,13 @@ lockCell = update freeCells . delete
 
 moveCell :: Int -> FM s ()
 moveCell c = do
-  update partitioning $ \ (a, b) -> if member c a
-    then (delete c a, insert c b)
-    else (insert c a, delete c b)
+
+  Gain v _ <- value gains
+  for_ (v ^? ix c) $ \ g -> update moves (Move g c :)
+
+  update partitioning $ move c
+
+  snapshot
 
 
 selectBaseCell :: V -> FM s (Maybe Int)
@@ -153,15 +217,25 @@ decrementGain = modifyGain pred
 incrementGain = modifyGain succ
 
 
-balanceCriterion :: P -> IntSet -> Int -> Int -> Bool
-balanceCriterion (a, b) f c s
+balanceCriterion :: P IntSet -> IntSet -> Int -> Int -> Bool
+balanceCriterion p@(P (a, b)) f c s
    = member c f
   && r * v' - k * smax <= a' && a' <= r * v' + k * smax
   where
     smax = fromIntegral s
     a' = fromIntegral $ if member c a then size a - 1 else size a + 1
-    v' = fromIntegral $ size a + size b
+    v' = fromIntegral $ cardinal p
     k = fromIntegral $ size f
+    r = balanceFactor
+
+
+diff :: Heu -> Float
+diff h = (r * v' + k * smax) - (r * v' - k * smax)
+  where
+    smax = fromIntegral $ fst $ maxGain $ h ^. gains
+    a' = fromIntegral $ h ^. partitioning . to unP . _1 . to size
+    v' = fromIntegral $ cardinal $ h ^. partitioning
+    k = fromIntegral $ h ^. freeCells . to size
     r = balanceFactor
 
 
@@ -170,7 +244,7 @@ initialFreeCells v = update freeCells $ const $ fromAscList [0 .. length v - 1]
 
 
 initialPartitioning :: V -> FM s ()
-initialPartitioning v = update partitioning $ const
+initialPartitioning v = update partitioning $ const $ P
   ( fromAscList [0 .. div (length v) 2 - 1]
   , fromAscList [div (length v) 2 .. length v - 1]
   )
@@ -195,12 +269,12 @@ initialGains (v, e) = do
 
 fromBlock, toBlock :: Int -> E -> FM s (Int -> IntSet)
 fromBlock i e = do
-  (a, b) <- value partitioning
+  P (a, b) <- value partitioning
   if member i a
     then pure $ \ n -> intersection a $ e ! n
     else pure $ \ n -> intersection b $ e ! n
 toBlock i e = do
-  (a, b) <- value partitioning
+  P (a, b) <- value partitioning
   if member i a
     then pure $ \ n -> intersection b $ e ! n
     else pure $ \ n -> intersection a $ e ! n

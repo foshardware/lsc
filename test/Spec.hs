@@ -32,7 +32,7 @@ fm = testGroup "FM" $
 
 fmInputRoutine :: IO ()
 fmInputRoutine = do
-  result <- stToIO $ fmap (fmap $ view partitioning) $ execFM $ bipartition =<< inputRoutine 5 6
+  result <- stToIO $ evalFM $ fiduccia =<< inputRoutine 5 6
     [ (0,3), (0,4)
     , (1,1), (1,4)
     , (2,0), (2,1), (2,2)
