@@ -6,7 +6,7 @@ import Control.Lens
 import Control.Monad.ST
 import Data.Default
 import Data.Foldable
-import Data.HashSet (HashSet, size)
+import Data.IntSet (IntSet, size, elems)
 import Data.Map (assocs, fromList, filter, mapWithKey)
 import qualified Data.Set as Set
 import Data.Vector (fromListN, (!))
@@ -23,8 +23,8 @@ exline top = do
 
   let g i = view gates top ! i
 
-  let g1 = fromListN (size p) (g <$> toList p)
-      g2 = fromListN (size q) (g <$> toList q)
+  let g1 = fromListN (size p) (g <$> elems p)
+      g2 = fromListN (size q) (g <$> elems q)
 
   let e1 = foldMap (^. wires . to assocs . to (fmap snd) . to Set.fromList) g1
       e2 = foldMap (^. wires . to assocs . to (fmap snd) . to Set.fromList) g2
