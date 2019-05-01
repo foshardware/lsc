@@ -13,8 +13,8 @@ import Control.Monad.ST
 import Data.Foldable
 import Data.Maybe
 import Data.Monoid
-import Data.IntSet hiding (filter, findMax, foldl', toList)
-import qualified Data.IntSet as Set
+import Data.HashSet hiding (filter, findMax, foldl', toList)
+import qualified Data.HashSet as Set
 import Data.IntMap (IntMap, fromListWith, findMax, unionWith, insertWith, adjust, assocs)
 import qualified Data.IntMap as Map
 import Data.STRef
@@ -22,6 +22,9 @@ import Data.Tuple
 import Data.Vector (Vector, unsafeFreeze, unsafeThaw, thaw, (!), generate)
 import Data.Vector.Mutable hiding (swap, length, set, move)
 import Prelude hiding (replicate, length, read)
+
+
+type IntSet = HashSet Int
 
 
 type FM s = ReaderT (STRef s Heu) (ST s)
@@ -189,7 +192,7 @@ selectBaseCell v = do
   p <- value partitioning
   f <- value freeCells
   pure $ listToMaybe $
-    [ x | x <- elems $ snd $ maxGain g
+    [ x | x <- Set.toList $ snd $ maxGain g
     , balanceCriterion p f x $ fst $ maxGain g
     ]
 
@@ -201,11 +204,11 @@ updateGains (v, e) c = do
   let t = toBlock p c e
   free <- value freeCells
   moveCell c
-  for_ (elems $ v ! c) $ \ n -> do
-    when (size (t n) == 0) $ sequence_ $ incrementGain <$> elems (f n `intersection` free)
-    when (size (t n) == 1) $ sequence_ $ decrementGain <$> elems (t n `intersection` free)
-    when (size (f n) == succ 0) $ sequence_ $ decrementGain <$> elems (t n `intersection` free)
-    when (size (f n) == succ 1) $ sequence_ $ incrementGain <$> elems (f n `intersection` free)
+  for_ (v ! c) $ \ n -> do
+    when (size (t n) == 0) $ sequence_ $ incrementGain <$> Set.toList (f n `intersection` free)
+    when (size (t n) == 1) $ sequence_ $ decrementGain <$> Set.toList (t n `intersection` free)
+    when (size (f n) == succ 0) $ sequence_ $ decrementGain <$> Set.toList (t n `intersection` free)
+    when (size (f n) == succ 1) $ sequence_ $ incrementGain <$> Set.toList (f n `intersection` free)
 
 
 modifyGain :: (Int -> Int) -> Int -> FM s ()
@@ -243,13 +246,13 @@ diff h = (r * v' + k * smax) - (r * v' - k * smax)
 
 
 initialFreeCells :: V -> FM s ()
-initialFreeCells v = update freeCells $ const $ fromAscList [0 .. length v - 1]
+initialFreeCells v = update freeCells $ const $ Set.fromList [0 .. length v - 1]
 
 
 initialPartitioning :: V -> FM s ()
 initialPartitioning v = update partitioning $ const $ P
-  ( fromAscList [0 .. div (length v) 2 - 1]
-  , fromAscList [div (length v) 2 .. length v - 1]
+  ( Set.fromList [0 .. div (length v) 2 - 1]
+  , Set.fromList [div (length v) 2 .. length v - 1]
   )
 
 
@@ -258,8 +261,8 @@ initialGains (v, e) = do
   p <- value partitioning
   u <- pure $ Map.fromAscList
     [ (,) i
-    $ length [() | n <- elems ns, size (f n) == 1]
-    - length [() | n <- elems ns, size (t n) == 0]
+    $ length [() | n <- toList ns, size (f n) == 1]
+    - length [() | n <- toList ns, size (t n) == 0]
     | (i, ns) <- [0 .. ] `zip` toList v
     , let f = fromBlock p i e
     , let t = toBlock p i e
@@ -271,10 +274,10 @@ initialGains (v, e) = do
 
 
 fromBlock, toBlock :: Partition -> Int -> E -> Int -> IntSet
-fromBlock (P (a, b)) i e n | member i a = intersection a $ e ! n
-fromBlock (P (a, b)) i e n = intersection b $ e ! n
-toBlock (P (a, b)) i e n | member i a = intersection b $ e ! n
-toBlock (P (a, b)) i e n = intersection a $ e ! n
+fromBlock (P (a, b)) i e n | member i a = intersection (e ! n) a
+fromBlock (P (a, b)) i e n = intersection (e ! n) b
+toBlock (P (a, b)) i e n | member i a = intersection (e ! n) b
+toBlock (P (a, b)) i e n = intersection (e ! n) a
 
 
 inputRoutine :: Foldable f => Int -> Int -> f (Int, Int) -> FM s (V, E)

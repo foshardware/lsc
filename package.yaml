@@ -42,6 +42,7 @@ dependencies:
 - text
 - time
 - transformers
+- unordered-containers
 - vector
 - vector-algorithms
 - verilog
