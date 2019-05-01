@@ -35,13 +35,15 @@ toBLIF = BLIF . fmap toModel . flatten subcells
 
 toModel :: NetGraph -> Model
 toModel top = Model
+
   (top ^. identifier)
-  mempty
-  mempty
-  mempty
-  [ Subcircuit (g ^. identifier) mempty
-  | g <- toList $ top ^. gates
-  ]
+
+  [ p ^. identifier | (i, p) <- top ^. supercell . pins . to assocs, p ^. dir == Just In  ]
+  [ p ^. identifier | (i, p) <- top ^. supercell . pins . to assocs, p ^. dir == Just Out ]
+  []
+
+  [ Subcircuit (g ^. identifier) (g ^. wires . to assocs) | g <- toList $ top ^. gates ]
+
 
 fromBLIF :: BLIF -> NetGraph
 fromBLIF (BLIF []) = def

@@ -49,6 +49,8 @@ data Move
   deriving Show
 
 
+type Partition = P IntSet
+
 newtype P a = P { unP :: (a, a) }
 
 instance Eq a => Eq (P a) where
@@ -64,16 +66,16 @@ instance Monoid a => Monoid (P a) where
 instance Show a => Show (P a) where
   show (P (a, b)) = "<"++ show a ++", "++ show b ++">"
 
-cardinal :: P IntSet -> Int
+cardinal :: Partition -> Int
 cardinal (P (a, b)) = size a + size b 
 
-move :: Int -> P IntSet -> P IntSet
+move :: Int -> Partition -> Partition
 move c (P (a, b)) | member c a = P (delete c a, insert c b)
 move c (P (a, b)) = P (insert c a, delete c b)
 
 
 data Heu = Heu
-  { _partitioning :: P IntSet
+  { _partitioning :: Partition
   , _gains        :: Gain Int
   , _freeCells    :: IntSet
   , _moves        :: [Move]
@@ -142,7 +144,7 @@ fiduccia (v, e) = do
   bipartition (v, e)
 
 
-bipartition :: (V, E) -> FM s (P IntSet)
+bipartition :: (V, E) -> FM s Partition
 bipartition (v, e) = do
   initialFreeCells v
   initialGains (v, e)
@@ -217,7 +219,7 @@ decrementGain = modifyGain pred
 incrementGain = modifyGain succ
 
 
-balanceCriterion :: P IntSet -> IntSet -> Int -> Int -> Bool
+balanceCriterion :: Partition -> IntSet -> Int -> Int -> Bool
 balanceCriterion p@(P (a, b)) f c s
    = member c f
   && r * v' - k * smax <= a' && a' <= r * v' + k * smax
