@@ -13,13 +13,13 @@ import Control.Monad.ST
 import Data.Foldable
 import Data.Maybe
 import Data.Monoid
-import Data.IntSet hiding (filter, findMax, foldl')
+import Data.IntSet hiding (filter, findMax, foldl', toList)
 import qualified Data.IntSet as Set
 import Data.IntMap (IntMap, fromListWith, findMax, unionWith, insertWith, adjust)
 import qualified Data.IntMap as Map
 import Data.STRef
 import Data.Tuple
-import Data.Vector (Vector, unsafeFreeze, unsafeThaw, thaw, (!))
+import Data.Vector (Vector, unsafeFreeze, unsafeThaw, thaw, (!), generate)
 import Data.Vector.Mutable hiding (swap, length, set, move)
 import Prelude hiding (replicate, length)
 
@@ -196,8 +196,9 @@ selectBaseCell v = do
 
 updateGains :: (V, E) -> Int -> FM s ()
 updateGains (v, e) c = do
-  f <- fromBlock c e
-  t <- toBlock c e
+  p <- value partitioning
+  let f = fromBlock p c e
+  let t = toBlock p c e
   free <- value freeCells
   moveCell c
   for_ (elems $ v ! c) $ \ n -> do
@@ -256,30 +257,22 @@ initialGains :: (V, E) -> FM s ()
 initialGains (v, e) = do
   m <- replicate (length v) 0
   p <- value partitioning
-  ifor_ v $ \ i c -> do
-    f <- fromBlock i e
-    t <- toBlock i e
-    for_ (elems c) $ \ n -> do
-      when (size (f n) == 1) $ modify m succ i
-      when (size (t n) == 0) $ modify m pred i
-  v <- unsafeFreeze m
+  let u = generate (length v) $ \ i ->
+        let f = fromBlock p i e
+            t = toBlock p i e
+        in length [ () | n <- elems $ v ! i, size (f n) == 1 ]
+         - length [ () | n <- elems $ v ! i, size (t n) == 0 ]
   update gains $ const
-    $ Gain (ifoldMap Map.singleton v)
-    $ fromListWith union [ (v ! x, singleton x) | x <- [0 .. length v - 1] ]
+    $ Gain (Map.fromAscList $ [0..] `zip` toList u)
+    $ fromListWith union [ (u ! x, singleton x) | x <- [0 .. length v - 1] ]
 
 
 
-fromBlock, toBlock :: Int -> E -> FM s (Int -> IntSet)
-fromBlock i e = do
-  P (a, b) <- value partitioning
-  if member i a
-    then pure $ \ n -> intersection a $ e ! n
-    else pure $ \ n -> intersection b $ e ! n
-toBlock i e = do
-  P (a, b) <- value partitioning
-  if member i a
-    then pure $ \ n -> intersection b $ e ! n
-    else pure $ \ n -> intersection a $ e ! n
+fromBlock, toBlock :: Partition -> Int -> E -> Int -> IntSet
+fromBlock (P (a, b)) i e n | member i a = intersection a $ e ! n
+fromBlock (P (a, b)) i e n = intersection b $ e ! n
+toBlock (P (a, b)) i e n | member i a = intersection b $ e ! n
+toBlock (P (a, b)) i e n = intersection a $ e ! n
 
 
 inputRoutine :: Foldable f => Int -> Int -> f (Int, Int) -> FM s (V, E)
