@@ -93,7 +93,7 @@ execFM = fmap snd . runFM
 runFM :: FM s a -> ST s (a, [Heu])
 runFM f = do
   r <- newSTRef $ Heu mempty mempty mempty mempty mempty 0
-  runReaderT ((,) <$> f <*> (snapshot *> value snapshots)) r
+  runReaderT ((,) <$> f <*> value snapshots) r
 
 
 update :: Simple Setter Heu a -> (a -> a) -> FM s ()

@@ -4,7 +4,8 @@
 module LSC.BLIF
   ( module Language.BLIF.Syntax
   , module Language.BLIF.Parser
-  , fromBLIF
+  , module Language.BLIF.Builder
+  , fromBLIF, toBLIF
   , toSubcircuit
   ) where
 
@@ -22,9 +23,25 @@ import Prelude hiding (lookup)
 
 import Language.BLIF.Parser (parseBLIF)
 import Language.BLIF.Syntax
+import Language.BLIF.Builder
 
 import LSC.Types
 
+
+
+toBLIF :: NetGraph -> BLIF
+toBLIF = BLIF . fmap toModel . flatten subcells 
+
+
+toModel :: NetGraph -> Model
+toModel top = Model
+  (top ^. identifier)
+  mempty
+  mempty
+  mempty
+  [ Subcircuit (g ^. identifier) mempty
+  | g <- toList $ top ^. gates
+  ]
 
 fromBLIF :: BLIF -> NetGraph
 fromBLIF (BLIF []) = def

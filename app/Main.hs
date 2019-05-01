@@ -18,13 +18,14 @@ import System.IO
 import Text.Parsec (parse)
 import Text.ParserCombinators.Parsec.Number (decimal)
 
-import LSC.BLIF    (parseBLIF)
+import LSC.BLIF    (parseBLIF, toBLIF)
 import LSC.LEF     (parseLEF, fromLEF)
 import LSC.Verilog (parseVerilog)
 
 import LSC
 import LSC.BLIF
 import LSC.D3
+import LSC.Exline
 import LSC.FIR
 import LSC.SVG
 import LSC.Types
@@ -93,6 +94,12 @@ program = do
         (ioError . userError . show)
         (pure . fromBLIF)
         (parseBLIF net_)
+
+      when (arg Exline)
+        $ do
+          new <- liftIO $ evalLSC opts tech $ exline netlist
+          liftIO $ printBLIF $ toBLIF new
+          exit
 
       when (arg Compile)
         $ do
