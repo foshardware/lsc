@@ -12,12 +12,18 @@ netGraphStats :: NetGraph -> String
 netGraphStats top = unlines $
   [ unwords
     [ top ^. identifier . to unpack <> ":"
-    , top ^. supercell . pins . to length . to show
+    , top ^. subcells . to length . to show, "children"
+    , top ^. supercell . pins . to length . to show, "pins"
+    , top ^. gates ^. to length . to show, "gates"
+    , top ^. nets ^. to length . to show, "nets"
     ]
-  , "children: " <> top ^. subcells . to length . to show
-  ] ++
-  [ unpack i <> ": " <> show (length x)
+  ] <>
+  [ unwords
+    [ unpack i <> ":"
+    , n ^. supercell . pins . to length . to show, "pins"
+    , n ^. gates ^. to length . to show, "gates"
+    , n ^. nets ^. to length . to show, "nets"
+    ]
   | (i, n) <- top ^. subcells . to assocs
-  , let x = n ^. supercell . pins
-  ] ++
+  ] <>
   []

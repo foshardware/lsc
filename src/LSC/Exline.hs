@@ -88,6 +88,7 @@ partition k top = do
 
   let result = top &~ do
         gates .= fromListN 2 [n1, n2]
+        nets .= mempty
         subcells .= fromList [(c1 ^. identifier, c1), (c2 ^. identifier, c2)]
 
   debug $ unlines
