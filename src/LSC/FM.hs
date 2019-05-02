@@ -40,9 +40,6 @@ instance Monoid (Gain a) where
   mempty = Gain mempty mempty
   mappend = (<>)
 
-maxGain :: Gain a -> (Int, IntSet)
-maxGain (Gain _ m) = findMax m
-
 
 data Move
   = Move Int Int -- Move Gain Cell
@@ -66,12 +63,12 @@ instance Monoid a => Monoid (P a) where
 instance Show a => Show (P a) where
   show (P (a, b)) = "<"++ show a ++", "++ show b ++">"
 
-cardinal :: Partition -> Int
-cardinal (P (a, b)) = size a + size b 
-
 move :: Int -> Partition -> Partition
 move c (P (a, b)) | member c a = P (delete c a, insert c b)
 move c (P (a, b)) = P (insert c a, delete c b)
+
+partitionBalance :: Partition -> Int
+partitionBalance (P (a, b)) = abs $ size a - size b
 
 
 data Heu = Heu
@@ -133,7 +130,7 @@ computeG = do
       = (g + gc, g + gc, heu)
     accum (gmax, g, h) (Move gc c, heu)
       | g + gc == gmax
-      , diff heu < diff h
+      , partitionBalance (view partitioning heu) < partitionBalance (view partitioning h)
       = (gmax, g + gc, heu)
     accum (gmax, g, h) (Move gc c, _)
       = (gmax, g + gc, h)
@@ -169,29 +166,24 @@ processCell (v, e) = do
 
 
 lockCell :: Int -> FM s ()
-lockCell = update freeCells . delete
+lockCell c = do
+  update freeCells $ delete c
+  update gains $ removeGain c
 
 
 moveCell :: Int -> FM s ()
 moveCell c = do
-
   Gain v _ <- value gains
   for_ (v ^? ix c) $ \ g -> update moves (Move g c :)
-
   update partitioning $ move c
-
   snapshot
 
 
 selectBaseCell :: V -> FM s (Maybe Int)
 selectBaseCell v = do
   g <- value gains
-  p <- value partitioning
-  f <- value freeCells
-  pure $ listToMaybe $
-    [ x | x <- elems $ snd $ maxGain g
-    , balanceCriterion p f x $ fst $ maxGain g
-    ]
+  h <- getState
+  pure $ listToMaybe [ x | x <- elems $ snd $ maxGain g, balanceCriterion h x ]
 
 
 updateGains :: (V, E) -> Int -> FM s ()
@@ -208,38 +200,59 @@ updateGains (v, e) c = do
     when (size (f n) == succ 1) $ sequence_ $ incrementGain <$> elems (f n `intersection` free)
 
 
-modifyGain :: (Int -> Int) -> Int -> FM s ()
-modifyGain f c = update gains $ \ (Gain v m) -> case v ^? ix c of
-    Nothing -> Gain v m
-    Just gj -> Gain
-      (adjust f c v)
-      (insertWith union (f gj) (singleton c) $ adjust (delete c) gj m)
+maxGain :: Gain a -> (Int, IntSet)
+maxGain (Gain v m)
+  |(i, s) <- findMax m
+  , Set.null s
+  = maxGain
+  $ Gain v
+  $ Map.delete i m
+maxGain (Gain _ m) = findMax m
+
+
+removeGain :: Int -> Gain Int -> Gain Int
+removeGain c (Gain u m)
+  | Just j <- u ^? ix c
+  , Just g <- m ^? ix j 
+  , Set.null g
+  = Gain u
+  $ Map.delete j m
+removeGain c (Gain u m)
+  | Just j <- u ^? ix c
+  = Gain u
+  $ adjust (delete c) j m
+removeGain _ g = g
+
+
+modifyGain :: (Int -> Int) -> Int -> Gain Int -> Gain Int
+modifyGain f c (Gain u m)
+  | Just j <- u ^? ix c
+  , Just g <- m ^? ix j
+  , Set.null g
+  = Gain (adjust f c u)
+  $ insertWith union (f j) (singleton c) $ Map.delete j m
+modifyGain f c (Gain u m)
+  | Just j <- u ^? ix c
+  = Gain (adjust f c u)
+  $ insertWith union (f j) (singleton c) $ adjust (delete c) j m
+modifyGain _ _ g = g
+
 
 incrementGain, decrementGain :: Int -> FM s ()
-decrementGain = modifyGain pred
-incrementGain = modifyGain succ
+decrementGain = update gains . modifyGain pred
+incrementGain = update gains . modifyGain succ
 
 
-balanceCriterion :: Partition -> IntSet -> Int -> Int -> Bool
-balanceCriterion p@(P (a, b)) f c s
-   = member c f
-  && r * v' - k * smax <= a' && a' <= r * v' + k * smax
+balanceCriterion :: Heu -> Int -> Bool
+balanceCriterion h c
+  = r * v - k * smax <= a && a <= r * v + k * smax
   where
-    smax = fromIntegral s
-    a' = fromIntegral $ if member c a then size a - 1 else size a + 1
-    v' = fromIntegral $ cardinal p
-    k = fromIntegral $ size f
-    r = balanceFactor
-
-
-diff :: Heu -> Float
-diff h = (r * v' + k * smax) - (r * v' - k * smax)
-  where
-    smax = fromIntegral $ fst $ maxGain $ h ^. gains
-    a' = fromIntegral $ h ^. partitioning . to unP . _1 . to size
-    v' = fromIntegral $ cardinal $ h ^. partitioning
+    P (p, q) = h ^. partitioning
+    a = fromIntegral $ last $ [succ $ size p] ++ [pred $ size p | member c p]
+    v = fromIntegral $ size p + size q
     k = fromIntegral $ h ^. freeCells . to size
     r = balanceFactor
+    smax = fromIntegral $ h ^. gains . to maxGain . _1
 
 
 initialFreeCells :: V -> FM s ()
