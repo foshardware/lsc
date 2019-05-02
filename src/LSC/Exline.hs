@@ -4,6 +4,7 @@ module LSC.Exline where
 
 import Control.Lens
 import Control.Monad.ST
+import Control.Monad.IO.Class
 import Data.Default
 import Data.Foldable
 import Data.IntSet (IntSet, size, elems)
@@ -18,14 +19,18 @@ import LSC.Types
 
 
 exline :: NetGraph -> LSC NetGraph
-exline = partition 3
+exline = bisection
 
 
-partition :: Int -> NetGraph -> LSC NetGraph
-partition 0 top = pure top
-partition k top = do
+bisection :: NetGraph -> LSC NetGraph
+bisection top = do
 
-  let P (p, q) = runST $ evalFM $ partitionFM top
+  debug
+    [ "exlining starts."
+    , "\r\n", netGraphStats top
+    ]
+
+  P (p, q) <- liftIO $ stToIO $ evalFM $ partitionFM top
 
   -- get a gate
   let g i = view gates top ! i
@@ -66,12 +71,12 @@ partition k top = do
         identifier .= view identifier top <> "_1"
         supercell %= (pins .~ p1 <> f1)
         gates .= g1
-        nets .= mempty
+        nets .= rebuildEdges g2
   let c2 = top &~ do
         identifier .= view identifier top <> "_2"
         supercell %= (pins .~ p2 <> f2)
         gates .= g2
-        nets .= mempty
+        nets .= rebuildEdges g2
 
   -- wires for each new cell
   let w1 = mapWithKey (\ i _ -> i) p1
@@ -88,13 +93,14 @@ partition k top = do
 
   let result = top &~ do
         gates .= fromListN 2 [n1, n2]
-        nets .= mempty
+        nets .= rebuildEdges (fromListN 2 [n1, n2])
         subcells .= fromList [(c1 ^. identifier, c1), (c2 ^. identifier, c2)]
 
-  debug $ unlines
-      [ "net graph stats", "", netGraphStats result
-      , "cut size:", show $ length cut
-      ] : []
+  debug
+    [ "exlining finished."
+    , "\r\n", netGraphStats result
+    , "cut size:", show $ length cut
+    ]
 
   pure result
 
@@ -108,4 +114,3 @@ partitionFM top = fiducciaMattheyses =<< inputRoutine
     , (c, _) <- w ^. contacts . to assocs
     ]
 
-  

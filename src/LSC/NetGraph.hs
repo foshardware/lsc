@@ -2,8 +2,11 @@
 module LSC.NetGraph where
 
 import Control.Lens
-import Data.Map (assocs)
+import Data.Default
+import Data.Foldable
+import Data.Map (Map, assocs, singleton, fromListWith)
 import Data.Text (unpack)
+import Data.Vector (Vector)
 
 import LSC.Types
 
@@ -27,3 +30,13 @@ netGraphStats top = unlines $
   | (i, n) <- top ^. subcells . to assocs
   ] <>
   []
+
+
+rebuildEdges :: Vector Gate -> Map Identifier Net
+rebuildEdges nodes = fromListWith (<>)
+    [ (net, Net net mempty (singleton (gate ^. number) [pin]))
+    | gate <- toList nodes
+    , (contact, net) <- gate ^. wires & assocs
+    , let pin = def & identifier .~ contact
+    ]
+

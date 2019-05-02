@@ -25,6 +25,7 @@ import Language.BLIF.Parser (parseBLIF)
 import Language.BLIF.Syntax
 import Language.BLIF.Builder
 
+import LSC.NetGraph
 import LSC.Types
 
 
@@ -69,12 +70,7 @@ fromModel (Model name inputs outputs clocks commands)
         | c <- catMaybes $ fromNetlist <$> commands
         ]
 
-    edges = fromListWith mappend
-        [ (net, Net net mempty (singleton (gate ^. number) [pin]))
-        | gate <- toList nodes
-        , (contact, net) <- gate ^. wires & assocs
-        , let pin = def & identifier .~ contact
-        ]
+    edges = rebuildEdges nodes
 
     superCell = def
       & pins <>~ fromList [(i, Pin i (Just  In) def) | i <- inputs ++ clocks] 
