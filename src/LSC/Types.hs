@@ -474,6 +474,11 @@ instance Ord Pin where
 instance Default Pin where
   def = Pin mempty Nothing def
 
+invert :: Pin -> Pin
+invert pin | pin ^. dir == pure  In = pin & dir .~ pure Out
+invert pin | pin ^. dir == pure Out = pin & dir .~ pure  In
+invert pin = pin
+
 
 makeFieldsNoPrefix ''CompilerOpts
 

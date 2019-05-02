@@ -4,7 +4,8 @@
 module LSC.BLIF
   ( module Language.BLIF.Syntax
   , module Language.BLIF.Parser
-  , fromBLIF
+  , module Language.BLIF.Builder
+  , fromBLIF, toBLIF
   , toSubcircuit
   ) where
 
@@ -22,8 +23,27 @@ import Prelude hiding (lookup)
 
 import Language.BLIF.Parser (parseBLIF)
 import Language.BLIF.Syntax
+import Language.BLIF.Builder
 
+import LSC.NetGraph
 import LSC.Types
+
+
+
+toBLIF :: NetGraph -> BLIF
+toBLIF = BLIF . fmap toModel . flatten subcells 
+
+
+toModel :: NetGraph -> Model
+toModel top = Model
+
+  (top ^. identifier)
+
+  [ p ^. identifier | (i, p) <- top ^. supercell . pins . to assocs, p ^. dir == Just In  ]
+  [ p ^. identifier | (i, p) <- top ^. supercell . pins . to assocs, p ^. dir == Just Out ]
+  []
+
+  [ Subcircuit (g ^. identifier) (g ^. wires . to assocs) | g <- toList $ top ^. gates ]
 
 
 fromBLIF :: BLIF -> NetGraph
@@ -50,12 +70,7 @@ fromModel (Model name inputs outputs clocks commands)
         | c <- catMaybes $ fromNetlist <$> commands
         ]
 
-    edges = fromListWith mappend
-        [ (net, Net net mempty (singleton (gate ^. number) [pin]))
-        | gate <- toList nodes
-        , (contact, net) <- gate ^. wires & assocs
-        , let pin = def & identifier .~ contact
-        ]
+    edges = rebuildEdges nodes
 
     superCell = def
       & pins <>~ fromList [(i, Pin i (Just  In) def) | i <- inputs ++ clocks] 

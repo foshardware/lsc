@@ -25,12 +25,11 @@ fromLEF (LEF options _ _ _ _ macros) = do
 
   tech <- get
   bootstrap $ set stdCells $ Map.fromList
-    [ def
-        & pins .~ Map.fromList (macroPins tech macroOptions)
-        & dims .~ dimensions tech macroOptions
-        & vdd  .~ maybe def id (macroVdd tech macroOptions)
-        & gnd  .~ maybe def id (macroGnd tech macroOptions)
-        & (,) name
+    [ (,) name $ def &~ do
+        pins .= Map.fromList (macroPins tech macroOptions)
+        dims .= dimensions tech macroOptions
+        vdd  .= maybe def id (macroVdd tech macroOptions)
+        gnd  .= maybe def id (macroGnd tech macroOptions)
     | Macro name macroOptions _ <- macros
     ]
 
