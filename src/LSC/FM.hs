@@ -266,10 +266,14 @@ initialFreeCells v = update freeCells $ const $ fromAscList [0 .. length v - 1]
 
 
 initialPartitioning :: V -> FM s ()
-initialPartitioning v = update partitioning $ const $ P
-  ( fromAscList $ filter even [0 .. length v - 1]
-  , fromAscList $ filter  odd [0 .. length v - 1]
-  )
+initialPartitioning v = update partitioning $ const $
+  if length v < 3000
+  then P (fromAscList [x | x <- base v, parity x], fromAscList [x | x <- base v, not $ parity x])
+  else P (fromAscList [x | x <- base v, half v x], fromAscList [x | x <- base v, not $ half v x])
+  where
+    base v = [0 .. length v - 1]
+    half v i = i <= div (length v) 2
+    parity = even
 
 
 initialGains :: (V, E) -> FM s ()
