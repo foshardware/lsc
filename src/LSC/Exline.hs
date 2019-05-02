@@ -7,45 +7,71 @@ import Control.Monad.ST
 import Data.Default
 import Data.Foldable
 import Data.IntSet (IntSet, size, elems)
-import Data.Map (assocs, fromList, filter, mapWithKey)
+import Data.Map (assocs, fromList, filter, mapWithKey, lookup, restrictKeys, withoutKeys)
 import qualified Data.Set as Set
 import Data.Vector (fromListN, (!))
-import Prelude hiding (filter)
+import Prelude hiding (filter, lookup)
 
 import LSC.FM
 import LSC.Types
 
 
 exline :: NetGraph -> LSC NetGraph
-exline top = do
+exline = partition 3
 
-  let P (p, q) = runST $ evalFM $ exlineFM top
 
+partition :: Int -> NetGraph -> LSC NetGraph
+partition 0 top = pure top
+partition k top = do
+
+  let P (p, q) = runST $ evalFM $ partitionFM top
+
+  -- get a gate
   let g i = view gates top ! i
 
+  -- gate vector for each partition
   let g1 = fromListN (size p) (g <$> elems p)
       g2 = fromListN (size q) (g <$> elems q)
 
-  let e1 = foldMap (^. wires . to assocs . to (fmap snd) . to Set.fromList) g1
-      e2 = foldMap (^. wires . to assocs . to (fmap snd) . to Set.fromList) g2
+  -- edge identifiers for each partition
+  let e1 = Set.fromList $ snd <$> foldMap (view $ wires . to assocs) g1
+      e2 = Set.fromList $ snd <$> foldMap (view $ wires . to assocs) g2
 
+      eb = Set.intersection e1 e2
+
+  -- signals originating in first partition
+  cells <- view stdCells <$> technology
+  signp <- pure $ Set.fromList
+      [ e
+      | e <- Set.elems e1 <> Set.elems e2
+      , c <- toList $ lookup e cells
+      ]
+
+  let fs = fromList [(e, def & identifier .~ e & dir .~ pure In) | e <- toList eb]
+      f1 =  withoutKeys fs signp
+      f2 = restrictKeys fs signp
+
+  -- super cell pins for each partition
   let p1 = filter (flip Set.member e1 . view identifier) (top ^. supercell . pins)
       p2 = filter (flip Set.member e2 . view identifier) (top ^. supercell . pins)
 
+  -- super cells for each partition
   let c1 = top &~ do
-        supercell %= (pins .~ p1)
+        identifier .= view identifier top <> "_1"
+        supercell %= (pins .~ p1 <> f1)
         gates .= g1
         nets .= mempty
-        identifier .= view identifier top <> "_1"
   let c2 = top &~ do
-        supercell %= (pins .~ p2)
+        identifier .= view identifier top <> "_2"
+        supercell %= (pins .~ p2 <> f2)
         gates .= g2
         nets .= mempty
-        identifier .= view identifier top <> "_2"
 
+  -- wires for each new cell
   let w1 = mapWithKey (\ i _ -> i) p1
       w2 = mapWithKey (\ i _ -> i) p2
 
+  -- new cell for each partition
   let n1 = def &~ do
         identifier .= view identifier c1
         wires .= w1
@@ -58,16 +84,15 @@ exline top = do
     subcells .= fromList [(c1 ^. identifier, c1), (c2 ^. identifier, c2)]
 
 
-exlineIO :: NetGraph -> IO Partition
-exlineIO = stToIO . evalFM . exlineFM
 
+partitionFM :: NetGraph -> FM s Partition
+partitionFM top = do
 
-exlineFM :: NetGraph -> FM s Partition
-exlineFM top = do
   graph <- inputRoutine (top ^. nets . to length) (top ^. gates . to length)
-    [ (n, c)
-    | (n, net) <- zip [0..] $ toList $ top ^. nets
-    , (c,   _) <- net ^. contacts . to assocs
-    ]
-  fiduccia graph
+      [ (n, c)
+      | (n, w) <- zip [0..] $ toList $ top ^. nets
+      , (c, _) <- w ^. contacts . to assocs
+      ]
+
+  fiducciaMattheyses graph
   

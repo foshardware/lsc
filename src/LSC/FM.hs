@@ -136,7 +136,7 @@ computeG = do
       = (gmax, g + gc, h)
 
 
-fiduccia (v, e) = do
+fiducciaMattheyses (v, e) = do
   initialPartitioning v
   bipartition (v, e)
 
@@ -216,11 +216,13 @@ removeGain c (Gain u m)
   , Just g <- m ^? ix j 
   , Set.null g
   = Gain u
-  $ Map.delete j m
+  . Map.delete j
+  $ m
 removeGain c (Gain u m)
   | Just j <- u ^? ix c
   = Gain u
-  $ adjust (delete c) j m
+  . adjust (delete c) j
+  $ m
 removeGain _ g = g
 
 
@@ -230,11 +232,15 @@ modifyGain f c (Gain u m)
   , Just g <- m ^? ix j
   , Set.null g
   = Gain (adjust f c u)
-  $ insertWith union (f j) (singleton c) $ Map.delete j m
+  . adjust (insert c) (f j)
+  . Map.delete j
+  $ m
 modifyGain f c (Gain u m)
   | Just j <- u ^? ix c
   = Gain (adjust f c u)
-  $ insertWith union (f j) (singleton c) $ adjust (delete c) j m
+  . adjust (insert c) (f j)
+  . adjust (delete c) j
+  $ m
 modifyGain _ _ g = g
 
 

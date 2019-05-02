@@ -69,6 +69,9 @@ compiler :: Compiler a b -> a -> LSC b
 compiler = unLS . reduce
 
 
+func :: (a -> b) -> Compiler a b
+func f = local $ pure . f
+
 remote_ :: LSC b -> Compiler' b
 remote_ f = remote (<$ f)
 
