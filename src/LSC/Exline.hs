@@ -39,7 +39,7 @@ partition k top = do
       e2 = Set.fromList $ snd <$> foldMap (view $ wires . to assocs) g2
 
       eb = Set.intersection e1 e2
-      ee = Set.difference eb $ top ^. supercell . pins . to keysSet
+      cut = Set.difference eb $ top ^. supercell . pins . to keysSet
 
   -- signals originating in first partition
   cells <- view stdCells <$> technology
@@ -52,13 +52,14 @@ partition k top = do
         , sp ^. dir == Just Out
         ]
 
-  let fs = fromList [(e, def & identifier .~ e & dir .~ Just Out) | e <- toList ee]
-      f1 = restrictKeys fs s1 <> fmap invert (withoutKeys fs s1)
-      f2 = withoutKeys fs s1 <> fmap invert (restrictKeys fs s1)
+  -- cut edges between partitions
+  let fc = fromList [(e, def & identifier .~ e & dir .~ Just Out) | e <- toList cut]
+      f1 = restrictKeys fc s1 <> fmap invert (withoutKeys fc s1)
+      f2 = withoutKeys fc s1 <> fmap invert (restrictKeys fc s1)
 
   -- super cell pins for each partition
-  let p1 = filter (\ x -> Set.member (x ^. identifier) e1) (top ^. supercell . pins)
-      p2 = filter (\ x -> Set.member (x ^. identifier) e2) (top ^. supercell . pins)
+  let p1 = restrictKeys (top ^. supercell . pins) e1
+      p2 = restrictKeys (top ^. supercell . pins) e2
 
   -- super cells for each partition
   let c1 = top &~ do
@@ -89,10 +90,10 @@ partition k top = do
         gates .= fromListN 2 [n1, n2]
         subcells .= fromList [(c1 ^. identifier, c1), (c2 ^. identifier, c2)]
 
-  debug
-      [ netGraphStats result
-      , "cut size:", show $ length ee
-      ]
+  debug $ unlines
+      [ "net graph stats", "", netGraphStats result
+      , "cut size:", show $ length cut
+      ] : []
 
   pure result
 

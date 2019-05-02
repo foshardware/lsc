@@ -267,8 +267,8 @@ initialFreeCells v = update freeCells $ const $ fromAscList [0 .. length v - 1]
 
 initialPartitioning :: V -> FM s ()
 initialPartitioning v = update partitioning $ const $ P
-  ( fromAscList [0 .. div (length v) 2 - 1]
-  , fromAscList [div (length v) 2 .. length v - 1]
+  ( fromAscList $ filter even [0 .. length v - 1]
+  , fromAscList $ filter  odd [0 .. length v - 1]
   )
 
 
