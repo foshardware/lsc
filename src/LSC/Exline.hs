@@ -13,6 +13,7 @@ import Data.Vector (fromListN, (!))
 import Prelude hiding (filter, lookup)
 
 import LSC.FM
+import LSC.NetGraph
 import LSC.Types
 
 
@@ -83,20 +84,26 @@ partition k top = do
         identifier .= view identifier c2
         wires .= w2
 
-  pure $ top &~ do
-    gates .= fromListN 2 [n1, n2]
-    subcells .= fromList [(c1 ^. identifier, c1), (c2 ^. identifier, c2)]
 
+  let result = top &~ do
+        gates .= fromListN 2 [n1, n2]
+        subcells .= fromList [(c1 ^. identifier, c1), (c2 ^. identifier, c2)]
+
+  debug
+      [ netGraphStats result
+      , "cut size:", show $ length ee
+      ]
+
+  pure result
 
 
 partitionFM :: NetGraph -> FM s Partition
-partitionFM top = do
+partitionFM top = fiducciaMattheyses =<< inputRoutine
+    (top ^. nets . to length)
+    (top ^. gates . to length)
+    [ (n, c)
+    | (n, w) <- zip [0..] $ toList $ top ^. nets
+    , (c, _) <- w ^. contacts . to assocs
+    ]
 
-  graph <- inputRoutine (top ^. nets . to length) (top ^. gates . to length)
-      [ (n, c)
-      | (n, w) <- zip [0..] $ toList $ top ^. nets
-      , (c, _) <- w ^. contacts . to assocs
-      ]
-
-  fiducciaMattheyses graph
   
