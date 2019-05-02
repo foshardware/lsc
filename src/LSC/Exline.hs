@@ -7,7 +7,7 @@ import Control.Monad.ST
 import Data.Default
 import Data.Foldable
 import Data.IntSet (IntSet, size, elems)
-import Data.Map (assocs, fromList, filter, mapWithKey, lookup, restrictKeys, withoutKeys)
+import Data.Map (assocs, fromList, filter, mapWithKey, lookup, restrictKeys, withoutKeys, keysSet)
 import qualified Data.Set as Set
 import Data.Vector (fromListN, (!))
 import Prelude hiding (filter, lookup)
@@ -38,22 +38,26 @@ partition k top = do
       e2 = Set.fromList $ snd <$> foldMap (view $ wires . to assocs) g2
 
       eb = Set.intersection e1 e2
+      ee = Set.difference eb $ top ^. supercell . pins . to keysSet
 
   -- signals originating in first partition
   cells <- view stdCells <$> technology
-  signp <- pure $ Set.fromList
-      [ e
-      | e <- Set.elems e1 <> Set.elems e2
-      , c <- toList $ lookup e cells
-      ]
+  let s1 = Set.fromList
+        [ name
+        | g <- toList g1
+        , c <- toList $ view identifier g `lookup` cells
+        , (i, name) <- g ^. wires . to assocs
+        , sp <- toList $ lookup i $ c ^. pins
+        , sp ^. dir == Just Out
+        ]
 
-  let fs = fromList [(e, def & identifier .~ e & dir .~ pure In) | e <- toList eb]
-      f1 =  withoutKeys fs signp
-      f2 = restrictKeys fs signp
+  let fs = fromList [(e, def & identifier .~ e & dir .~ Just Out) | e <- toList ee]
+      f1 = restrictKeys fs s1 <> fmap invert (withoutKeys fs s1)
+      f2 = withoutKeys fs s1 <> fmap invert (restrictKeys fs s1)
 
   -- super cell pins for each partition
-  let p1 = filter (flip Set.member e1 . view identifier) (top ^. supercell . pins)
-      p2 = filter (flip Set.member e2 . view identifier) (top ^. supercell . pins)
+  let p1 = filter (\ x -> Set.member (x ^. identifier) e1) (top ^. supercell . pins)
+      p2 = filter (\ x -> Set.member (x ^. identifier) e2) (top ^. supercell . pins)
 
   -- super cells for each partition
   let c1 = top &~ do
