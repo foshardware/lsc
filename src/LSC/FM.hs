@@ -13,7 +13,7 @@ import Control.Monad.ST
 import Data.Foldable
 import Data.Maybe
 import Data.Monoid
-import Data.IntSet hiding (filter, findMax, foldl', toList)
+import Data.IntSet hiding (filter, findMax, foldl', toList, null)
 import qualified Data.IntSet as Set
 import Data.IntMap (IntMap, fromListWith, findMax, unionWith, insertWith, adjust, assocs)
 import qualified Data.IntMap as Map
@@ -21,7 +21,7 @@ import Data.Ratio
 import Data.STRef
 import Data.Tuple
 import Data.Vector (Vector, unsafeFreeze, unsafeThaw, thaw, (!), generate)
-import Data.Vector.Mutable hiding (swap, length, set, move)
+import Data.Vector.Mutable hiding (swap, length, set, move, null)
 import Prelude hiding (replicate, length, read)
 
 
@@ -31,7 +31,7 @@ balanceFactor :: Rational
 balanceFactor = 1 % 2
 
 
-data Gain a = Gain (IntMap a) (IntMap IntSet)
+data Gain a = Gain (IntMap a) (IntMap [a])
   deriving Show
 
 instance Semigroup (Gain a) where
@@ -184,7 +184,7 @@ selectBaseCell :: V -> FM s (Maybe Int)
 selectBaseCell v = do
   g <- value gains
   h <- getState
-  pure $ listToMaybe [ x | x <- elems $ snd $ maxGain g, balanceCriterion h x ]
+  pure $ listToMaybe [ x | x <- snd $ maxGain g, balanceCriterion h x ]
 
 
 updateGains :: (V, E) -> Int -> FM s ()
@@ -201,10 +201,10 @@ updateGains (v, e) c = do
     when (size (f n) == succ 1) $ sequence_ $ incrementGain <$> elems (f n `intersection` free)
 
 
-maxGain :: Gain a -> (Int, IntSet)
+maxGain :: Gain a -> (Int, [a])
 maxGain (Gain v m)
   |(i, s) <- findMax m
-  , Set.null s
+  , null s
   = maxGain
   $ Gain v
   $ Map.delete i m
@@ -215,14 +215,14 @@ removeGain :: Int -> Gain Int -> Gain Int
 removeGain c (Gain u m)
   | Just j <- u ^? ix c
   , Just g <- m ^? ix j 
-  , Set.null g
+  , g == pure c
   = Gain u
   . Map.delete j
   $ m
 removeGain c (Gain u m)
   | Just j <- u ^? ix c
   = Gain u
-  . adjust (delete c) j
+  . adjust (filter (/= c)) j
   $ m
 removeGain _ g = g
 
@@ -231,16 +231,16 @@ modifyGain :: (Int -> Int) -> Int -> Gain Int -> Gain Int
 modifyGain f c (Gain u m)
   | Just j <- u ^? ix c
   , Just g <- m ^? ix j
-  , Set.null g
+  , g == pure c
   = Gain (adjust f c u)
-  . adjust (insert c) (f j)
+  . insertWith (<>) (f j) [c]
   . Map.delete j
   $ m
 modifyGain f c (Gain u m)
   | Just j <- u ^? ix c
   = Gain (adjust f c u)
-  . adjust (insert c) (f j)
-  . adjust (delete c) j
+  . insertWith (<>) (f j) [c]
+  . adjust (filter (/= c)) j
   $ m
 modifyGain _ _ g = g
 
@@ -290,7 +290,7 @@ initialGains (v, e) = do
     ]
   update gains $ const
     $ Gain u
-    $ fromListWith union [ (x, singleton k) | (k, x) <- assocs u ]
+    $ fromListWith (<>) [ (x, [k]) | (k, x) <- assocs u ]
 
 
 
