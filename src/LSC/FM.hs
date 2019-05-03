@@ -215,7 +215,7 @@ removeGain :: Int -> Gain Int -> Gain Int
 removeGain c (Gain u m)
   | Just j <- u ^? ix c
   , Just g <- m ^? ix j 
-  , Set.null g
+  , g == singleton c
   = Gain u
   . Map.delete j
   $ m
@@ -231,15 +231,15 @@ modifyGain :: (Int -> Int) -> Int -> Gain Int -> Gain Int
 modifyGain f c (Gain u m)
   | Just j <- u ^? ix c
   , Just g <- m ^? ix j
-  , Set.null g
+  , g == singleton c
   = Gain (adjust f c u)
-  . adjust (insert c) (f j)
+  . insertWith union (f j) (singleton c)
   . Map.delete j
   $ m
 modifyGain f c (Gain u m)
   | Just j <- u ^? ix c
   = Gain (adjust f c u)
-  . adjust (insert c) (f j)
+  . insertWith union (f j) (singleton c)
   . adjust (delete c) j
   $ m
 modifyGain _ _ g = g
