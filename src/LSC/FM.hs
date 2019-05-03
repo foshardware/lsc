@@ -116,21 +116,20 @@ type E = NetArray
 
 computeG :: FM s (Int, Partition)
 computeG = do
-  vs <- value moves
-  hs <- value partitioning
-  let (_, g, h) = foldl' accum (0, 0, hs) vs
+  p <- value partitioning
+  (_, g, h) <- foldl' accum (0, 0, p) <$> value moves
   pure (g, h)
   where
     accum :: (Int, Int, Partition) -> (Move, Partition) -> (Int, Int, Partition)
-    accum (gmax, g, h) (Move gc c, heu)
+    accum (gmax, g, _) (Move gc c, q)
       | g + gc > gmax
-      = (g + gc, g + gc, heu)
-    accum (gmax, g, h) (Move gc c, heu)
+      = (g + gc, g + gc, q)
+    accum (gmax, g, p) (Move gc c, q)
       | g + gc == gmax
-      , partitionBalance heu < partitionBalance h
-      = (gmax, g + gc, heu)
-    accum (gmax, g, h) (Move gc c, _)
-      = (gmax, g + gc, h)
+      , partitionBalance p > partitionBalance q
+      = (gmax, g + gc, q)
+    accum (gmax, g, p) (Move gc c, _)
+      = (gmax, g + gc, p)
 
 
 fiducciaMattheyses (v, e) = do
