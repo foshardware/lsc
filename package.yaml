@@ -28,6 +28,7 @@ dependencies:
 - firrtl
 - gloss
 - hashable
+- hashtables
 - kan-extensions
 - lef
 - lens

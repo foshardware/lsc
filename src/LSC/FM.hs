@@ -31,7 +31,7 @@ balanceFactor :: Rational
 balanceFactor = 1 % 2
 
 
-data Gain a = Gain (IntMap a) (IntMap [a])
+data Gain a = Gain (IntMap Int) (IntMap [a])
   deriving Show
 
 instance Semigroup (Gain a) where
