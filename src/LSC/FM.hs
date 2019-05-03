@@ -11,62 +11,75 @@ import Control.Monad
 import Control.Monad.Reader
 import Control.Monad.ST
 import Data.Foldable
-import Data.HashTable.ST.Cuckoo
 import Data.Maybe
-import Data.IntSet (IntSet)
-import qualified Data.IntSet as Set
 import Data.Monoid
+import Data.IntSet hiding (findMax, foldl', toList)
+import qualified Data.IntSet as Set
+import Data.IntMap (IntMap, fromListWith, findMax, unionWith, insertWith, adjust, assocs)
+import qualified Data.IntMap as Map
 import Data.Ratio
 import Data.STRef
 import Data.Tuple
 import Data.Vector (Vector, unsafeFreeze, unsafeThaw, thaw, (!), generate)
 import Data.Vector.Mutable hiding (swap, length, set, move)
-import Prelude hiding (replicate, length, read, filter, lookup)
+import Prelude hiding (replicate, length, read, filter)
 
 
-type FM s = ReaderT (STRef s (Heu s)) (ST s)
+type FM s = ReaderT (STRef s Heu) (ST s)
 
 balanceFactor :: Rational
 balanceFactor = 1 % 2
 
 
-data Gain s = Gain
-  { _size :: STRef s !Int
-  , _gain :: STRef s !Int
-  , _viaNode :: HashTable s Int Int
-  , _viaGain :: HashTable s Int (HashTable s Int ())
-  }
+data Gain a = Gain (IntMap a) (IntMap IntSet)
+  deriving Show
+
+instance Semigroup (Gain a) where
+  Gain v m <> Gain u n = Gain (u <> v) (unionWith (<>) m n)
+
+instance Monoid (Gain a) where
+  mempty = Gain mempty mempty
+  mappend = (<>)
+
 
 data Move
-  = Move !Int !Int -- Move Gain Cell
+  = Move Int Int -- Move Gain Cell
   deriving Show
 
 
-type Partition s = P (HashTable s Int ())
+type Partition = P IntSet
 
 newtype P a = P { unP :: (a, a) }
 
+instance Eq a => Eq (P a) where
+  P (a, _) == P (b, _) = a == b
 
-move :: Int -> Partition s -> ST s ()
-move c (P (a, b)) = do
-  p <- lookup c a
-  case p of
-    Just _ -> insert b c () *> delete a c
-    _      -> insert a c () *> delete b c
+instance Semigroup a => Semigroup (P a) where
+  P (a, b) <> P (c, d) = P (a <> c, b <> d)
 
-partitionBalance :: Partition s -> ST s Int
-partitionBalance (P (a, b)) = do
-  abs $ size a - size b
+instance Monoid a => Monoid (P a) where
+  mempty = P mempty
+  mappend = (<>)
+
+instance Show a => Show (P a) where
+  show (P (a, b)) = "<"++ show a ++", "++ show b ++">"
+
+move :: Int -> Partition -> Partition
+move c (P (a, b)) | member c a = P (delete c a, insert c b)
+move c (P (a, b)) = P (insert c a, delete c b)
+
+partitionBalance :: Partition -> Int
+partitionBalance (P (a, b)) = abs $ size a - size b
 
 
-data Heu s = Heu
-  { _partitioning :: Partition s
-  , _gains        :: Gain s
-  , _freeCells    :: HashTable s Int ()
+data Heu = Heu
+  { _partitioning :: Partition
+  , _gains        :: Gain Int
+  , _freeCells    :: IntSet
   , _moves        :: [Move]
-  , _snapshots    :: [Heu s]
+  , _snapshots    :: [Heu]
   , _iterations   :: Int
-  }
+  } deriving Show
 
 makeFieldsNoPrefix ''Heu
 
@@ -188,29 +201,18 @@ updateGains (v, e) c = do
     when (size (f n) == succ 1) $ sequence_ $ incrementGain <$> elems (f n `intersection` free)
 
 
-maxGain :: Gain s -> ST s (Int, HashTable s Int ())
-maxGain (Gain i v m) = do
-  r <- lookup m i
-  case r of
-    Just ht -> (i, ht)
-    Nothing -> error $ "maxGain at "++ show i
+maxGain :: Gain a -> (Int, IntSet)
+maxGain (Gain v m)
+  |(i, s) <- findMax m
+  , Set.null s
+  = maxGain
+  $ Gain v
+  $ Map.delete i m
+maxGain (Gain _ m) = findMax m
 
 
-removeGain :: Int -> Gain s -> ST s ()
-removeGain c g = do
-  r <- lookup (g ^. viaNode) c
-  case r of
-    Just j -> do
-      mutateST (g ^. viaGain) j $ \ x -> do
-        case x of
-          Just mj -> do
-            delete mj c
-             modifySTRef succ $ g ^. size
-            
-          Nothing -> pure ()
-        
-        
-
+removeGain :: Int -> Gain Int -> Gain Int
+removeGain c (Gain u m)
   | Just j <- u ^? ix c
   , Just g <- m ^? ix j 
   , g == singleton c
