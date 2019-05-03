@@ -13,7 +13,7 @@ import Control.Monad.ST
 import Data.Foldable
 import Data.Maybe
 import Data.Monoid
-import Data.IntSet hiding (filter, findMax, foldl', toList)
+import Data.IntSet hiding (findMax, foldl', toList)
 import qualified Data.IntSet as Set
 import Data.IntMap (IntMap, fromListWith, findMax, unionWith, insertWith, adjust, assocs)
 import qualified Data.IntMap as Map
@@ -22,7 +22,7 @@ import Data.STRef
 import Data.Tuple
 import Data.Vector (Vector, unsafeFreeze, unsafeThaw, thaw, (!), generate)
 import Data.Vector.Mutable hiding (swap, length, set, move)
-import Prelude hiding (replicate, length, read)
+import Prelude hiding (replicate, length, read, filter)
 
 
 type FM s = ReaderT (STRef s Heu) (ST s)
@@ -282,8 +282,8 @@ initialGains (v, e) = do
   p <- value partitioning
   u <- pure $ Map.fromAscList
     [ (,) i
-    $ length [() | n <- elems ns, size (f n) == 1]
-    - length [() | n <- elems ns, size (t n) == 0]
+    $ size (Set.filter (\ n -> size (f n) == 1) ns)
+    - size (Set.filter (\ n -> size (t n) == 0) ns)
     | (i, ns) <- [0 .. ] `zip` toList v
     , let f = fromBlock p i e
     , let t = toBlock p i e
