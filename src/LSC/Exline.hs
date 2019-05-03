@@ -30,7 +30,7 @@ bisection top = do
     , "\r\n", netGraphStats top
     ]
 
-  P (p, q) <- liftIO $ stToIO $ evalFM $ partitionFM top
+  P p q <- liftIO $ stToIO $ evalFM $ partitionFM top
 
   -- get a gate
   let g i = view gates top ! i

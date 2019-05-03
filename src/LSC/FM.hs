@@ -49,27 +49,30 @@ data Move
 
 type Partition = P IntSet
 
-newtype P a = P { unP :: (a, a) }
+data P a = P !a !a
+
+unP :: P a -> (a, a)
+unP (P a b) = (a, b)
 
 instance Eq a => Eq (P a) where
-  P (a, _) == P (b, _) = a == b
+  P a _ == P b _ = a == b
 
 instance Semigroup a => Semigroup (P a) where
-  P (a, b) <> P (c, d) = P (a <> c, b <> d)
+  P a b <> P c d = P (a <> c) (b <> d)
 
 instance Monoid a => Monoid (P a) where
-  mempty = P mempty
+  mempty = P mempty mempty
   mappend = (<>)
 
 instance Show a => Show (P a) where
-  show (P (a, b)) = "<"++ show a ++", "++ show b ++">"
+  show (P a b) = "<"++ show a ++", "++ show b ++">"
 
 move :: Int -> Partition -> Partition
-move c (P (a, b)) | member c a = P (delete c a, insert c b)
-move c (P (a, b)) = P (insert c a, delete c b)
+move c (P a b) | member c a = P (delete c a) (insert c b)
+move c (P a b) = P (insert c a) (delete c b)
 
 partitionBalance :: Partition -> Int
-partitionBalance (P (a, b)) = abs $ size a - size b
+partitionBalance (P a b) = abs $ size a - size b
 
 
 data Heu = Heu
@@ -254,7 +257,7 @@ balanceCriterion :: Heu -> Int -> Bool
 balanceCriterion h c
   = div v r - k * smax <= a && a <= div v r + k * smax
   where
-    P (p, q) = h ^. partitioning
+    P p q = h ^. partitioning
     a = last $ [succ $ size p] ++ [pred $ size p | member c p]
     v = size p + size q
     k = h ^. freeCells . to size
@@ -269,8 +272,8 @@ initialFreeCells v = update freeCells $ const $ fromAscList [0 .. length v - 1]
 initialPartitioning :: V -> FM s ()
 initialPartitioning v = update partitioning $ const $
   if length v < 3000
-  then P (fromAscList [x | x <- base v, parity x], fromAscList [x | x <- base v, not $ parity x])
-  else P (fromAscList [x | x <- base v, half v x], fromAscList [x | x <- base v, not $ half v x])
+  then P (fromAscList [x | x <- base v, parity x]) (fromAscList [x | x <- base v, not $ parity x])
+  else P (fromAscList [x | x <- base v, half v x]) (fromAscList [x | x <- base v, not $ half v x])
   where
     base v = [0 .. length v - 1]
     half v i = i <= div (length v) 2
@@ -295,10 +298,10 @@ initialGains (v, e) = do
 
 
 fromBlock, toBlock :: Partition -> Int -> E -> Int -> IntSet
-fromBlock (P (a, b)) i e n | member i a = intersection a $ e ! n
-fromBlock (P (a, b)) i e n = intersection b $ e ! n
-toBlock (P (a, b)) i e n | member i a = intersection b $ e ! n
-toBlock (P (a, b)) i e n = intersection a $ e ! n
+fromBlock (P a b) i e n | member i a = intersection a $ e ! n
+fromBlock (P a b) i e n = intersection b $ e ! n
+toBlock (P a b) i e n | member i a = intersection b $ e ! n
+toBlock (P a b) i e n = intersection a $ e ! n
 
 
 inputRoutine :: Foldable f => Int -> Int -> f (Int, Int) -> FM s (V, E)
