@@ -24,6 +24,7 @@ dependencies:
 - containers
 - data-default
 - data-default-class
+- hashtables
 - file-embed
 - firrtl
 - gloss
