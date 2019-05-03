@@ -17,6 +17,7 @@ import Data.IntSet hiding (filter, findMax, foldl', toList)
 import qualified Data.IntSet as Set
 import Data.IntMap (IntMap, fromListWith, findMax, unionWith, insertWith, adjust, assocs)
 import qualified Data.IntMap as Map
+import Data.Ratio
 import Data.STRef
 import Data.Tuple
 import Data.Vector (Vector, unsafeFreeze, unsafeThaw, thaw, (!), generate)
@@ -26,8 +27,8 @@ import Prelude hiding (replicate, length, read)
 
 type FM s = ReaderT (STRef s Heu) (ST s)
 
-balanceFactor :: Float
-balanceFactor = 0.5
+balanceFactor :: Rational
+balanceFactor = 1 % 2
 
 
 data Gain a = Gain (IntMap a) (IntMap IntSet)
@@ -251,14 +252,14 @@ incrementGain = update gains . modifyGain succ
 
 balanceCriterion :: Heu -> Int -> Bool
 balanceCriterion h c
-  = r * v - k * smax <= a && a <= r * v + k * smax
+  = div v r - k * smax <= a && a <= div v r + k * smax
   where
     P (p, q) = h ^. partitioning
-    a = fromIntegral $ last $ [succ $ size p] ++ [pred $ size p | member c p]
-    v = fromIntegral $ size p + size q
-    k = fromIntegral $ h ^. freeCells . to size
-    r = balanceFactor
-    smax = fromIntegral $ h ^. gains . to maxGain . _1
+    a = last $ [succ $ size p] ++ [pred $ size p | member c p]
+    v = size p + size q
+    k = h ^. freeCells . to size
+    r = fromIntegral $ denominator balanceFactor `div` numerator balanceFactor
+    smax = h ^. gains . to maxGain . _1
 
 
 initialFreeCells :: V -> FM s ()
