@@ -79,8 +79,7 @@ data Heu = Heu
   { _partitioning :: Partition
   , _gains        :: Gain Int
   , _freeCells    :: IntSet
-  , _moves        :: [Move]
-  , _snapshots    :: [Heu]
+  , _moves        :: [(Move, Partition)]
   , _iterations   :: Int
   } deriving Show
 
@@ -88,15 +87,12 @@ makeFieldsNoPrefix ''Heu
 
 
 evalFM :: FM s a -> ST s a
-evalFM = fmap fst . runFM
+evalFM = runFM
 
-execFM :: FM s a -> ST s [Heu]
-execFM = fmap snd . runFM
-
-runFM :: FM s a -> ST s (a, [Heu])
+runFM :: FM s a -> ST s a
 runFM f = do
-  r <- newSTRef $ Heu mempty mempty mempty mempty mempty 0
-  runReaderT ((,) <$> f <*> value snapshots) r
+  r <- newSTRef $ Heu mempty mempty mempty mempty 0
+  runReaderT f r
 
 
 update :: Simple Setter Heu a -> (a -> a) -> FM s ()
@@ -106,9 +102,6 @@ update v f = do
 
 value :: Getter Heu a -> FM s a
 value v = view v <$> getState
-
-snapshot :: FM s ()
-snapshot = update snapshots . (:) . set snapshots mempty =<< getState
 
 getState :: FM s Heu
 getState = lift . readSTRef =<< ask
@@ -121,20 +114,20 @@ type V = CellArray
 type E = NetArray
 
 
-computeG :: FM s (Int, Heu)
+computeG :: FM s (Int, Partition)
 computeG = do
-  vs <- zip <$> value moves <*> value snapshots
-  hs <- getState
+  vs <- value moves
+  hs <- value partitioning
   let (_, g, h) = foldl' accum (0, 0, hs) vs
   pure (g, h)
   where
-    accum :: (Int, Int, Heu) -> (Move, Heu) -> (Int, Int, Heu)
+    accum :: (Int, Int, Partition) -> (Move, Partition) -> (Int, Int, Partition)
     accum (gmax, g, h) (Move gc c, heu)
       | g + gc > gmax
       = (g + gc, g + gc, heu)
     accum (gmax, g, h) (Move gc c, heu)
       | g + gc == gmax
-      , partitionBalance (view partitioning heu) < partitionBalance (view partitioning h)
+      , partitionBalance heu < partitionBalance h
       = (gmax, g + gc, heu)
     accum (gmax, g, h) (Move gc c, _)
       = (gmax, g + gc, h)
@@ -151,10 +144,9 @@ bipartition (v, e) = do
   initialGains (v, e)
   update moves $ const mempty
   update iterations succ
-  p <- value partitioning
   processCell (v, e)
-  (g, h) <- computeG
-  update partitioning $ const $ h ^. partitioning
+  (g, p) <- computeG
+  update partitioning $ const p
   if g <= 0
     then pure p
     else bipartition (v, e)
@@ -178,9 +170,10 @@ lockCell c = do
 moveCell :: Int -> FM s ()
 moveCell c = do
   Gain v _ <- value gains
-  for_ (v ^? ix c) $ \ g -> update moves (Move g c :)
-  update partitioning $ move c
-  snapshot
+  for_ (v ^? ix c) $ \ g -> do
+    update partitioning $ move c
+    p <- value partitioning
+    update moves ((Move g c, p) :)
 
 
 selectBaseCell :: V -> FM s (Maybe Int)

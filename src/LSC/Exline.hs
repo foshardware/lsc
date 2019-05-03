@@ -13,7 +13,7 @@ import qualified Data.Set as Set
 import Data.Vector (fromListN, (!))
 import Prelude hiding (filter, lookup)
 
-import LSC.FM
+import LSC.FM as FM
 import LSC.NetGraph
 import LSC.Types
 
@@ -30,7 +30,7 @@ bisection top = do
     , "\r\n", netGraphStats top
     ]
 
-  P p q <- liftIO $ stToIO $ evalFM $ partitionFM top
+  (P p q, it) <- liftIO $ stToIO $ evalFM $ (,) <$> partitionFM top <*> value FM.iterations
 
   -- get a gate
   let g i = view gates top ! i
@@ -99,7 +99,8 @@ bisection top = do
   debug
     [ "exlining finished."
     , "\r\n", netGraphStats result
-    , "cut size:", show $ length cut
+    , "\r\n", "iterations:", show it
+    , "\r\n", "cut size:", show $ length cut
     ]
 
   pure result
