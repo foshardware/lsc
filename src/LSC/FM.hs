@@ -13,7 +13,7 @@ import Control.Monad.ST
 import Data.Foldable
 import Data.Maybe
 import Data.Monoid
-import Data.IntSet hiding (findMax, foldl', toList)
+import Data.IntSet hiding (filter, findMax, foldl', toList, null)
 import qualified Data.IntSet as Set
 import Data.IntMap (IntMap, fromListWith, findMax, unionWith, insertWith, adjust, assocs)
 import qualified Data.IntMap as Map
@@ -21,8 +21,8 @@ import Data.Ratio
 import Data.STRef
 import Data.Tuple
 import Data.Vector (Vector, unsafeFreeze, unsafeThaw, thaw, (!), generate)
-import Data.Vector.Mutable hiding (swap, length, set, move)
-import Prelude hiding (replicate, length, read, filter)
+import Data.Vector.Mutable hiding (swap, length, set, move, null)
+import Prelude hiding (replicate, length, read)
 
 
 type FM s = ReaderT (STRef s Heu) (ST s)
@@ -31,7 +31,7 @@ balanceFactor :: Rational
 balanceFactor = 1 % 2
 
 
-data Gain a = Gain (IntMap a) (IntMap IntSet)
+data Gain a = Gain (IntMap Int) (IntMap [a])
   deriving Show
 
 instance Semigroup (Gain a) where
@@ -49,35 +49,37 @@ data Move
 
 type Partition = P IntSet
 
-newtype P a = P { unP :: (a, a) }
+data P a = P !a !a
+
+unP :: P a -> (a, a)
+unP (P a b) = (a, b)
 
 instance Eq a => Eq (P a) where
-  P (a, _) == P (b, _) = a == b
+  P a _ == P b _ = a == b
 
 instance Semigroup a => Semigroup (P a) where
-  P (a, b) <> P (c, d) = P (a <> c, b <> d)
+  P a b <> P c d = P (a <> c) (b <> d)
 
 instance Monoid a => Monoid (P a) where
-  mempty = P mempty
+  mempty = P mempty mempty
   mappend = (<>)
 
 instance Show a => Show (P a) where
-  show (P (a, b)) = "<"++ show a ++", "++ show b ++">"
+  show (P a b) = "<"++ show a ++", "++ show b ++">"
 
 move :: Int -> Partition -> Partition
-move c (P (a, b)) | member c a = P (delete c a, insert c b)
-move c (P (a, b)) = P (insert c a, delete c b)
+move c (P a b) | member c a = P (delete c a) (insert c b)
+move c (P a b) = P (insert c a) (delete c b)
 
 partitionBalance :: Partition -> Int
-partitionBalance (P (a, b)) = abs $ size a - size b
+partitionBalance (P a b) = abs $ size a - size b
 
 
 data Heu = Heu
   { _partitioning :: Partition
   , _gains        :: Gain Int
   , _freeCells    :: IntSet
-  , _moves        :: [Move]
-  , _snapshots    :: [Heu]
+  , _moves        :: [(Move, Partition)]
   , _iterations   :: Int
   } deriving Show
 
@@ -85,15 +87,12 @@ makeFieldsNoPrefix ''Heu
 
 
 evalFM :: FM s a -> ST s a
-evalFM = fmap fst . runFM
+evalFM = runFM
 
-execFM :: FM s a -> ST s [Heu]
-execFM = fmap snd . runFM
-
-runFM :: FM s a -> ST s (a, [Heu])
+runFM :: FM s a -> ST s a
 runFM f = do
-  r <- newSTRef $ Heu mempty mempty mempty mempty mempty 0
-  runReaderT ((,) <$> f <*> value snapshots) r
+  r <- newSTRef $ Heu mempty mempty mempty mempty 0
+  runReaderT f r
 
 
 update :: Simple Setter Heu a -> (a -> a) -> FM s ()
@@ -103,9 +102,6 @@ update v f = do
 
 value :: Getter Heu a -> FM s a
 value v = view v <$> getState
-
-snapshot :: FM s ()
-snapshot = update snapshots . (:) . set snapshots mempty =<< getState
 
 getState :: FM s Heu
 getState = lift . readSTRef =<< ask
@@ -118,23 +114,22 @@ type V = CellArray
 type E = NetArray
 
 
-computeG :: FM s (Int, Heu)
+computeG :: FM s (Int, Partition)
 computeG = do
-  vs <- zip <$> value moves <*> value snapshots
-  hs <- getState
-  let (_, g, h) = foldl' accum (0, 0, hs) vs
+  p <- value partitioning
+  (_, g, h) <- foldl' accum (0, 0, p) <$> value moves
   pure (g, h)
   where
-    accum :: (Int, Int, Heu) -> (Move, Heu) -> (Int, Int, Heu)
-    accum (gmax, g, h) (Move gc c, heu)
+    accum :: (Int, Int, Partition) -> (Move, Partition) -> (Int, Int, Partition)
+    accum (gmax, g, _) (Move gc c, q)
       | g + gc > gmax
-      = (g + gc, g + gc, heu)
-    accum (gmax, g, h) (Move gc c, heu)
+      = (g + gc, g + gc, q)
+    accum (gmax, g, p) (Move gc c, q)
       | g + gc == gmax
-      , partitionBalance (view partitioning heu) < partitionBalance (view partitioning h)
-      = (gmax, g + gc, heu)
-    accum (gmax, g, h) (Move gc c, _)
-      = (gmax, g + gc, h)
+      , partitionBalance p > partitionBalance q
+      = (gmax, g + gc, q)
+    accum (gmax, g, p) (Move gc c, _)
+      = (gmax, g + gc, p)
 
 
 fiducciaMattheyses (v, e) = do
@@ -148,10 +143,9 @@ bipartition (v, e) = do
   initialGains (v, e)
   update moves $ const mempty
   update iterations succ
-  p <- value partitioning
   processCell (v, e)
-  (g, h) <- computeG
-  update partitioning $ const $ h ^. partitioning
+  (g, p) <- computeG
+  update partitioning $ const p
   if g <= 0
     then pure p
     else bipartition (v, e)
@@ -175,16 +169,17 @@ lockCell c = do
 moveCell :: Int -> FM s ()
 moveCell c = do
   Gain v _ <- value gains
-  for_ (v ^? ix c) $ \ g -> update moves (Move g c :)
-  update partitioning $ move c
-  snapshot
+  for_ (v ^? ix c) $ \ g -> do
+    update partitioning $ move c
+    p <- value partitioning
+    update moves ((Move g c, p) :)
 
 
 selectBaseCell :: V -> FM s (Maybe Int)
 selectBaseCell v = do
   g <- value gains
   h <- getState
-  pure $ listToMaybe [ x | x <- elems $ snd $ maxGain g, balanceCriterion h x ]
+  pure $ listToMaybe [ x | x <- snd $ maxGain g, balanceCriterion h x ]
 
 
 updateGains :: (V, E) -> Int -> FM s ()
@@ -201,10 +196,10 @@ updateGains (v, e) c = do
     when (size (f n) == succ 1) $ sequence_ $ incrementGain <$> elems (f n `intersection` free)
 
 
-maxGain :: Gain a -> (Int, IntSet)
+maxGain :: Gain a -> (Int, [a])
 maxGain (Gain v m)
   |(i, s) <- findMax m
-  , Set.null s
+  , null s
   = maxGain
   $ Gain v
   $ Map.delete i m
@@ -215,14 +210,14 @@ removeGain :: Int -> Gain Int -> Gain Int
 removeGain c (Gain u m)
   | Just j <- u ^? ix c
   , Just g <- m ^? ix j 
-  , g == singleton c
+  , g == pure c
   = Gain u
   . Map.delete j
   $ m
 removeGain c (Gain u m)
   | Just j <- u ^? ix c
   = Gain u
-  . adjust (delete c) j
+  . adjust (filter (/= c)) j
   $ m
 removeGain _ g = g
 
@@ -231,16 +226,16 @@ modifyGain :: (Int -> Int) -> Int -> Gain Int -> Gain Int
 modifyGain f c (Gain u m)
   | Just j <- u ^? ix c
   , Just g <- m ^? ix j
-  , g == singleton c
+  , g == pure c
   = Gain (adjust f c u)
-  . insertWith union (f j) (singleton c)
+  . insertWith (<>) (f j) [c]
   . Map.delete j
   $ m
 modifyGain f c (Gain u m)
   | Just j <- u ^? ix c
   = Gain (adjust f c u)
-  . insertWith union (f j) (singleton c)
-  . adjust (delete c) j
+  . insertWith (<>) (f j) [c]
+  . adjust (filter (/= c)) j
   $ m
 modifyGain _ _ g = g
 
@@ -254,7 +249,7 @@ balanceCriterion :: Heu -> Int -> Bool
 balanceCriterion h c
   = div v r - k * smax <= a && a <= div v r + k * smax
   where
-    P (p, q) = h ^. partitioning
+    P p q = h ^. partitioning
     a = last $ [succ $ size p] ++ [pred $ size p | member c p]
     v = size p + size q
     k = h ^. freeCells . to size
@@ -269,8 +264,8 @@ initialFreeCells v = update freeCells $ const $ fromAscList [0 .. length v - 1]
 initialPartitioning :: V -> FM s ()
 initialPartitioning v = update partitioning $ const $
   if length v < 3000
-  then P (fromAscList [x | x <- base v, parity x], fromAscList [x | x <- base v, not $ parity x])
-  else P (fromAscList [x | x <- base v, half v x], fromAscList [x | x <- base v, not $ half v x])
+  then P (fromAscList [x | x <- base v, parity x]) (fromAscList [x | x <- base v, not $ parity x])
+  else P (fromAscList [x | x <- base v, half v x]) (fromAscList [x | x <- base v, not $ half v x])
   where
     base v = [0 .. length v - 1]
     half v i = i <= div (length v) 2
@@ -290,15 +285,15 @@ initialGains (v, e) = do
     ]
   update gains $ const
     $ Gain u
-    $ fromListWith union [ (x, singleton k) | (k, x) <- assocs u ]
+    $ fromListWith (<>) [ (x, [k]) | (k, x) <- assocs u ]
 
 
 
 fromBlock, toBlock :: Partition -> Int -> E -> Int -> IntSet
-fromBlock (P (a, b)) i e n | member i a = intersection a $ e ! n
-fromBlock (P (a, b)) i e n = intersection b $ e ! n
-toBlock (P (a, b)) i e n | member i a = intersection b $ e ! n
-toBlock (P (a, b)) i e n = intersection a $ e ! n
+fromBlock (P a b) i e n | member i a = intersection a $ e ! n
+fromBlock (P a b) i e n = intersection b $ e ! n
+toBlock (P a b) i e n | member i a = intersection b $ e ! n
+toBlock (P a b) i e n = intersection a $ e ! n
 
 
 inputRoutine :: Foldable f => Int -> Int -> f (Int, Int) -> FM s (V, E)
