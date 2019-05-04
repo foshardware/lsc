@@ -150,13 +150,18 @@ fiducciaMattheyses (v, e) = do
 
 bipartition :: (V, E) -> FM s Partition
 bipartition (v, e) = do
-  initialFreeCells v
-  initialGains (v, e)
+
+  update freeCells $ const $ fromAscList [0 .. length v - 1]
   update moves $ const mempty
-  update iterations succ
+
+  initialGains (v, e)
   processCell (v, e)
+
   (g, p) <- computeG
+
+  update iterations succ
   update partitioning $ const p
+
   if g <= 0
     then pure p
     else bipartition (v, e)
@@ -261,10 +266,6 @@ balanceCriterion h smax c
     v = size p + size q
     k = h ^. freeCells . to size
     r = fromIntegral $ denominator balanceFactor `div` numerator balanceFactor
-
-
-initialFreeCells :: V -> FM s ()
-initialFreeCells v = update freeCells $ const $ fromAscList [0 .. length v - 1]
 
 
 initialGains :: (V, E) -> FM s ()
