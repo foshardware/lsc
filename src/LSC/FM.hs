@@ -219,7 +219,7 @@ removeGain c (Gain gmax u m) = do
         modifySTRef gmax $ Set.delete j 
         H.delete m j
       else do
-        H.mutate m j $ (, ()) . maybe Nothing (pure . filter (/= c))
+        H.mutate m j $ (, ()) . fmap (filter (/= c))
 
 
 modifyGain :: (Int -> Int) -> Int -> Gain s Int -> ST s ()
@@ -235,7 +235,7 @@ modifyGain f c (Gain gmax u m) = do
         H.mutate m (f j) $ (, ()) . pure . maybe [c] (c:)
       else do
         modifySTRef gmax $ Set.insert (f j)
-        H.mutate m j $ (, ()) . maybe Nothing (pure . filter (/= c))
+        H.mutate m j $ (, ()) . fmap (filter (/= c))
         H.mutate m (f j) $ (, ()) . pure . maybe [c] (c:)
 
 
@@ -274,7 +274,6 @@ initialGains :: (V, E) -> FM s ()
 initialGains (v, e) = do
 
   gmax <- st $ newSTRef mempty
-
   p <- value partitioning
 
   u <- st $ H.newSized $ length v
@@ -288,7 +287,7 @@ initialGains (v, e) = do
       - size (Set.filter (\ n -> size (t n) == 0) ns)
 
   st $ flip H.mapM_ u $ \ (k, x) -> do
-    modifySTRef' gmax $ Set.insert x
+    modifySTRef gmax $ Set.insert x
     H.mutate m x $ (, ()) . pure . maybe [k] (k:)
 
   update gains $ const $ Gain gmax u m
