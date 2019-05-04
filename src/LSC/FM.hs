@@ -3,6 +3,7 @@
 {-# LANGUAGE FunctionalDependencies #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE TupleSections #-}
 
 module LSC.FM where
 
@@ -13,33 +14,29 @@ import Control.Monad.ST
 import Data.Foldable
 import Data.Maybe
 import Data.Monoid
-import Data.IntSet hiding (filter, findMax, foldl', toList, null)
-import qualified Data.IntSet as Set
-import Data.IntMap (IntMap, fromListWith, findMax, unionWith, insertWith, adjust, assocs)
-import qualified Data.IntMap as Map
+import Data.HashTable.ST.Cuckoo (HashTable)
+import qualified Data.HashTable.ST.Cuckoo as H
+import Data.IntSet (IntSet, findMax, intersection, insert, delete, member, size, fromAscList, elems)
+import qualified Data.IntSet as S
 import Data.Ratio
 import Data.STRef
 import Data.Tuple
-import Data.Vector (Vector, unsafeFreeze, unsafeThaw, thaw, (!), generate)
-import Data.Vector.Mutable hiding (swap, length, set, move, null)
+import Data.Vector (Vector, unsafeFreeze, unsafeThaw, (!))
+import Data.Vector.Mutable (modify, replicate)
 import Prelude hiding (replicate, length, read)
 
 
-type FM s = ReaderT (STRef s Heu) (ST s)
+type FM s = ReaderT (STRef s (Heu s)) (ST s)
+
 
 balanceFactor :: Rational
 balanceFactor = 1 % 2
 
 
-data Gain a = Gain (IntMap Int) (IntMap [a])
-  deriving Show
-
-instance Semigroup (Gain a) where
-  Gain v m <> Gain u n = Gain (u <> v) (unionWith (<>) m n)
-
-instance Monoid (Gain a) where
-  mempty = Gain mempty mempty
-  mappend = (<>)
+data Gain s a = Gain
+  (STRef s IntSet)      -- track existing gains
+  (HashTable s a Int)   -- gains indexed by node
+  (HashTable s Int [a]) -- nodes indexed by gain
 
 
 data Move
@@ -75,15 +72,19 @@ partitionBalance :: Partition -> Int
 partitionBalance (P a b) = abs $ size a - size b
 
 
-data Heu = Heu
+data Heu s = Heu
   { _partitioning :: Partition
-  , _gains        :: Gain Int
+  , _gains        :: Gain s Int
   , _freeCells    :: IntSet
   , _moves        :: [(Move, Partition)]
   , _iterations   :: Int
-  } deriving Show
+  }
 
 makeFieldsNoPrefix ''Heu
+
+
+st :: ST s a -> FM s a
+st = lift
 
 
 evalFM :: FM s a -> ST s a
@@ -91,20 +92,22 @@ evalFM = runFM
 
 runFM :: FM s a -> ST s a
 runFM f = do
-  r <- newSTRef $ Heu mempty mempty mempty mempty 0
+  gmax <- newSTRef mempty
+  (u, m) <- (,) <$> H.new <*> H.new
+  r <- newSTRef $ Heu mempty (Gain gmax u m) mempty mempty 0
   runReaderT f r
 
 
-update :: Simple Setter Heu a -> (a -> a) -> FM s ()
+update :: Simple Setter (Heu s) a -> (a -> a) -> FM s ()
 update v f = do
   r <- modifySTRef <$> ask
-  lift $ r $ v %~ f
+  st $ r $ v %~ f
 
-value :: Getter Heu a -> FM s a
+value :: Getter (Heu s) a -> FM s a
 value v = view v <$> getState
 
-getState :: FM s Heu
-getState = lift . readSTRef =<< ask
+getState :: FM s (Heu s)
+getState = st . readSTRef =<< ask
 
 
 type NetArray  = Vector IntSet
@@ -132,9 +135,21 @@ computeG = do
       = (gmax, g + gc, p)
 
 
+fiducciaMattheyses :: (V, E) -> FM s Partition
 fiducciaMattheyses (v, e) = do
-  initialPartitioning v
+
+  update partitioning $ const $
+    if length v < 3000
+    then P (fromAscList [x | x <- base v, parity x]) (fromAscList [x | x <- base v, not $ parity x])
+    else P (fromAscList [x | x <- base v, half v x]) (fromAscList [x | x <- base v, not $ half v x])
+
   bipartition (v, e)
+
+  where
+    base v = [0 .. length v - 1]
+    half v i = i <= div (length v) 2
+    parity = even
+
 
 
 bipartition :: (V, E) -> FM s Partition
@@ -163,13 +178,14 @@ processCell (v, e) = do
 lockCell :: Int -> FM s ()
 lockCell c = do
   update freeCells $ delete c
-  update gains $ removeGain c
+  st . removeGain c =<< value gains
 
 
 moveCell :: Int -> FM s ()
 moveCell c = do
-  Gain v _ <- value gains
-  for_ (v ^? ix c) $ \ g -> do
+  Gain _ u _ <- value gains
+  v <- st $ H.lookup u c
+  for_ v $ \ g -> do
     update partitioning $ move c
     p <- value partitioning
     update moves ((Move g c, p) :)
@@ -179,7 +195,8 @@ selectBaseCell :: V -> FM s (Maybe Int)
 selectBaseCell v = do
   g <- value gains
   h <- getState
-  pure $ listToMaybe [ x | x <- snd $ maxGain g, balanceCriterion h x ]
+  (i, xs) <- st $ maxGain g
+  pure $ listToMaybe [ x | x <- join $ maybeToList xs, balanceCriterion h i x ]
 
 
 updateGains :: (V, E) -> Int -> FM s ()
@@ -196,57 +213,51 @@ updateGains (v, e) c = do
     when (size (f n) == succ 1) $ sequence_ $ incrementGain <$> elems (f n `intersection` free)
 
 
-maxGain :: Gain a -> (Int, [a])
-maxGain (Gain v m)
-  |(i, s) <- findMax m
-  , null s
-  = maxGain
-  $ Gain v
-  $ Map.delete i m
-maxGain (Gain _ m) = findMax m
+maxGain :: Gain s a -> ST s (Int, Maybe [a])
+maxGain (Gain gmax u m) = do
+  g <- findMax <$> readSTRef gmax
+  (g, ) <$> H.lookup m g
 
 
-removeGain :: Int -> Gain Int -> Gain Int
-removeGain c (Gain u m)
-  | Just j <- u ^? ix c
-  , Just g <- m ^? ix j 
-  , g == pure c
-  = Gain u
-  . Map.delete j
-  $ m
-removeGain c (Gain u m)
-  | Just j <- u ^? ix c
-  = Gain u
-  . adjust (filter (/= c)) j
-  $ m
-removeGain _ g = g
+removeGain :: Int -> Gain s Int -> ST s ()
+removeGain c (Gain gmax u m) = do
+  mj <- H.lookup u c
+  for_ mj $ \ j -> do
+    mg <- H.lookup m j
+    for_ mg $ \ ds ->
+      if ds == pure c
+      then do
+        modifySTRef gmax $ delete j 
+        H.delete m j
+      else do
+        H.mutate m j $ (, ()) . fmap (filter (/= c))
 
 
-modifyGain :: (Int -> Int) -> Int -> Gain Int -> Gain Int
-modifyGain f c (Gain u m)
-  | Just j <- u ^? ix c
-  , Just g <- m ^? ix j
-  , g == pure c
-  = Gain (adjust f c u)
-  . insertWith (<>) (f j) [c]
-  . Map.delete j
-  $ m
-modifyGain f c (Gain u m)
-  | Just j <- u ^? ix c
-  = Gain (adjust f c u)
-  . insertWith (<>) (f j) [c]
-  . adjust (filter (/= c)) j
-  $ m
-modifyGain _ _ g = g
+modifyGain :: (Int -> Int) -> Int -> Gain s Int -> ST s ()
+modifyGain f c (Gain gmax u m) = do
+  mj <- H.lookup u c
+  H.mutate u c $ (, ()) . fmap f
+  for_ mj $ \ j -> do
+    mg <- H.lookup m j
+    for_ mg $ \ ds ->
+      if ds == pure c
+      then do
+        modifySTRef gmax $ delete j
+        H.delete m j
+        H.mutate m (f j) $ (, ()) . pure . maybe [c] (c:)
+      else do
+        modifySTRef gmax $ insert (f j)
+        H.mutate m j $ (, ()) . fmap (filter (/= c))
+        H.mutate m (f j) $ (, ()) . pure . maybe [c] (c:)
 
 
 incrementGain, decrementGain :: Int -> FM s ()
-decrementGain = update gains . modifyGain pred
-incrementGain = update gains . modifyGain succ
+decrementGain c = st . modifyGain pred c =<< value gains
+incrementGain c = st . modifyGain succ c =<< value gains
 
 
-balanceCriterion :: Heu -> Int -> Bool
-balanceCriterion h c
+balanceCriterion :: Heu s -> Int -> Int -> Bool
+balanceCriterion h smax c
   = div v r - k * smax <= a && a <= div v r + k * smax
   where
     P p q = h ^. partitioning
@@ -254,39 +265,33 @@ balanceCriterion h c
     v = size p + size q
     k = h ^. freeCells . to size
     r = fromIntegral $ denominator balanceFactor `div` numerator balanceFactor
-    smax = h ^. gains . to maxGain . _1
 
 
 initialFreeCells :: V -> FM s ()
 initialFreeCells v = update freeCells $ const $ fromAscList [0 .. length v - 1]
 
 
-initialPartitioning :: V -> FM s ()
-initialPartitioning v = update partitioning $ const $
-  if length v < 3000
-  then P (fromAscList [x | x <- base v, parity x]) (fromAscList [x | x <- base v, not $ parity x])
-  else P (fromAscList [x | x <- base v, half v x]) (fromAscList [x | x <- base v, not $ half v x])
-  where
-    base v = [0 .. length v - 1]
-    half v i = i <= div (length v) 2
-    parity = even
-
-
 initialGains :: (V, E) -> FM s ()
 initialGains (v, e) = do
-  p <- value partitioning
-  u <- pure $ Map.fromAscList
-    [ (,) i
-    $ size (Set.filter (\ n -> size (f n) == 1) ns)
-    - size (Set.filter (\ n -> size (t n) == 0) ns)
-    | (i, ns) <- [0 .. ] `zip` toList v
-    , let f = fromBlock p i e
-    , let t = toBlock p i e
-    ]
-  update gains $ const
-    $ Gain u
-    $ fromListWith (<>) [ (x, [k]) | (k, x) <- assocs u ]
 
+  gmax <- st $ newSTRef mempty
+  p <- value partitioning
+
+  u <- st $ H.newSized $ length v
+  m <- st H.new
+
+  st $ flip imapM_ v $ \ i ns -> do
+    let f = fromBlock p i e
+    let t = toBlock p i e
+    H.insert u i
+      $ size (S.filter (\ n -> size (f n) == 1) ns)
+      - size (S.filter (\ n -> size (t n) == 0) ns)
+
+  st $ flip H.mapM_ u $ \ (k, x) -> do
+    modifySTRef gmax $ insert x
+    H.mutate m x $ (, ()) . pure . maybe [k] (k:)
+
+  update gains $ const $ Gain gmax u m
 
 
 fromBlock, toBlock :: Partition -> Int -> E -> Int -> IntSet
@@ -297,11 +302,11 @@ toBlock (P a b) i e n = intersection a $ e ! n
 
 
 inputRoutine :: Foldable f => Int -> Int -> f (Int, Int) -> FM s (V, E)
-inputRoutine n c xs = do
+inputRoutine n c xs = lift $ do
   nv <- replicate n mempty
   cv <- replicate c mempty
   for_ xs $ \ (x, y) -> do
-    modify nv (Set.insert y) x
-    modify cv (Set.insert x) y
+    modify nv (insert y) x
+    modify cv (insert x) y
   (,) <$> unsafeFreeze cv <*> unsafeFreeze nv
 
