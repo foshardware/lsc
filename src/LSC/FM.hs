@@ -16,7 +16,6 @@ import Data.Maybe
 import Data.Monoid
 import Data.HashTable.ST.Cuckoo (HashTable)
 import qualified Data.HashTable.ST.Cuckoo as H
-import qualified Data.HashTable.Class as HC
 import Data.IntSet hiding (filter, findMax, foldl', toList, null)
 import qualified Data.IntSet as Set
 import Data.IntMap (IntMap, fromListWith, findMax, unionWith, insertWith, adjust, assocs)
@@ -30,6 +29,7 @@ import Prelude hiding (replicate, length, read)
 
 
 type FM s = ReaderT (STRef s (Heu s)) (ST s)
+
 
 balanceFactor :: Rational
 balanceFactor = 1 % 2
@@ -151,8 +151,7 @@ bipartition (v, e) = do
   processCell (v, e)
   (g, p) <- computeG
   update partitioning $ const p
-  it <- value iterations
-  if it >= 10 || g <= 0
+  if g <= 0
     then pure p
     else bipartition (v, e)
 
@@ -262,7 +261,7 @@ initialFreeCells v = update freeCells $ const $ fromAscList [0 .. length v - 1]
 
 initialPartitioning :: V -> FM s ()
 initialPartitioning v = update partitioning $ const $
-  if length v < 30000
+  if length v < 3000
   then P (fromAscList [x | x <- base v, parity x]) (fromAscList [x | x <- base v, not $ parity x])
   else P (fromAscList [x | x <- base v, half v x]) (fromAscList [x | x <- base v, not $ half v x])
   where
@@ -278,25 +277,21 @@ initialGains (v, e) = do
 
   p <- value partitioning
 
-  u <- st H.new
-  st $ for_ ([0.. ] `zip` toList v) $ \ (i, ns) -> do
+  u <- st $ H.newSized $ length v
+  m <- st H.new
+
+  st $ flip imapM_ v $ \ i ns -> do
     let f = fromBlock p i e
     let t = toBlock p i e
     H.insert u i
       $ size (Set.filter (\ n -> size (f n) == 1) ns)
       - size (Set.filter (\ n -> size (t n) == 0) ns)
 
-  m <- st H.new
-  st $ do
-    es <- HC.toList u
-    for_ es $ \ (k, x) -> do
-      modifySTRef' gmax $ Set.insert x
-      H.mutate m x $ \ v -> case v of
-        Nothing -> (Just [k], ())
-        Just ks -> (Just (k : ks), ())
+  st $ flip H.mapM_ u $ \ (k, x) -> do
+    modifySTRef' gmax $ Set.insert x
+    H.mutate m x $ (, ()) . pure . maybe [k] (k:)
 
   update gains $ const $ Gain gmax u m
-
 
 
 fromBlock, toBlock :: Partition -> Int -> E -> Int -> IntSet
