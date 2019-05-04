@@ -20,7 +20,7 @@ import Data.IntSet hiding (filter, null, foldl')
 import qualified Data.IntSet as S
 import Data.Ratio
 import Data.STRef
-import Data.Vector (Vector, unsafeFreeze, unsafeThaw, (!))
+import Data.Vector (Vector, freeze, thaw, (!))
 import Data.Vector.Mutable (STVector, new, read, modify, replicate)
 import Prelude hiding (replicate, length, read)
 
@@ -293,7 +293,7 @@ initialGains (v, e) = do
       gain <- H.newSized $ size gmax
       flip imapM_ nodes $ \ k x ->
           H.mutate gain x $ (, ()) . pure . maybe [k] (k:)
-      Gain <$> newSTRef gmax <*> unsafeThaw nodes <*> pure gain
+      Gain <$> newSTRef gmax <*> thaw nodes <*> pure gain
 
   update gains $ const g
 
@@ -318,11 +318,11 @@ toBlock (P a _) _ e n = intersection a $ e ! n
 
 
 inputRoutine :: Foldable f => Int -> Int -> f (Int, Int) -> FM s (V, E)
-inputRoutine n c xs = lift $ do
-  nv <- replicate n mempty
-  cv <- replicate c mempty
+inputRoutine n c xs = st $ do
+  ns <- replicate n mempty
+  cs <- replicate c mempty
   for_ xs $ \ (x, y) -> do
-    modify nv (insert y) x
-    modify cv (insert x) y
-  (,) <$> unsafeFreeze cv <*> unsafeFreeze nv
+    modify ns (insert y) x
+    modify cs (insert x) y
+  (,) <$> freeze cs <*> freeze ns
 
