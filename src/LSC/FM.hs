@@ -15,14 +15,14 @@ import Data.Foldable
 import Data.Maybe
 import Data.Monoid
 import Data.HashTable.ST.Cuckoo (HashTable)
-import qualified Data.HashTable.ST.Cuckoo as H
+import Data.HashTable.ST.Cuckoo (mutate, lookup, new, newSized)
 import Data.IntSet hiding (filter, null, foldl')
 import qualified Data.IntSet as S
 import Data.Ratio
 import Data.STRef
 import Data.Vector (Vector, freeze, thaw, (!))
-import Data.Vector.Mutable (STVector, new, read, modify, replicate)
-import Prelude hiding (replicate, length, read)
+import Data.Vector.Mutable (STVector, read, modify, replicate)
+import Prelude hiding (replicate, length, read, lookup)
 
 
 type FM s = ReaderT (STRef s (Heu s)) (ST s)
@@ -91,7 +91,7 @@ evalFM = runFM
 
 runFM :: FM s a -> ST s a
 runFM f = do
-  g <- Gain <$> newSTRef mempty <*> new 0 <*> H.new
+  g <- Gain <$> newSTRef mempty <*> thaw mempty <*> new
   r <- newSTRef $ Heu mempty g mempty mempty 0
   runReaderT f r
 
@@ -231,7 +231,7 @@ maxGain = do
   mg <- st $ maxView <$> readSTRef gmax
   case mg of
     Just (g, _) -> do
-      mb <- st $ H.lookup m g
+      mb <- st $ lookup m g
       if maybe True null mb
         then fail $ "maxGain: empty bucket for gain " <> show g
         else pure $ (g, ) <$> mb
@@ -247,11 +247,11 @@ removeGain c = do
 
     j <- read u c
 
-    mg <- H.lookup m j
+    mg <- lookup m j
     for_ mg $ \ ds -> do
 
         when (ds == pure c) $ modifySTRef gmax $ delete j
-        H.mutate m j $ (, ()) . fmap (filter (/= c))
+        mutate m j $ (, ()) . fmap (filter (/= c))
 
 
 
@@ -265,14 +265,14 @@ modifyGain f c = do
     j <- read u c
     modify u f c
 
-    mg <- H.lookup m j
+    mg <- lookup m j
     for_ mg $ \ ds -> do
 
         when (ds == pure c) $ modifySTRef gmax $ delete j
-        H.mutate m j $ (, ()) . fmap (filter (/= c))
+        mutate m j $ (, ()) . fmap (filter (/= c))
 
         modifySTRef gmax $ insert (f j)
-        H.mutate m (f j) $ (, ()) . pure . maybe [c] (c:)
+        mutate m (f j) $ (, ()) . pure . maybe [c] (c:)
 
 
 
@@ -290,9 +290,9 @@ initialGains (v, e) = do
   let gmax = foldMap singleton nodes
 
   g <- st $ do
-      gain <- H.newSized $ size gmax
+      gain <- newSized $ size gmax
       flip imapM_ nodes $ \ k x ->
-          H.mutate gain x $ (, ()) . pure . maybe [k] (k:)
+          mutate gain x $ (, ()) . pure . maybe [k] (k:)
       Gain <$> newSTRef gmax <*> thaw nodes <*> pure gain
 
   update gains $ const g
