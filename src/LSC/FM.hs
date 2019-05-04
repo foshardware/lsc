@@ -119,7 +119,7 @@ type E = NetArray
 computeG :: FM s (Int, Partition)
 computeG = do
   p <- value partitioning
-  (_, g, h) <- foldl' accum (0, 0, p) <$> value moves
+  (_, g, h) <- foldl' accum (0, 0, p) . reverse <$> value moves
   pure (g, h)
   where
     accum :: (Int, Int, Partition) -> (Move, Partition) -> (Int, Int, Partition)
