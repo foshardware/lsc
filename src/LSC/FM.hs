@@ -148,7 +148,7 @@ bipartition (v, e) = do
   (g, p) <- computeG
   update partitioning $ const p
   it <- value iterations
-  if it >= 3 || g <= 0
+  if it >= 20 || g <= 0
     then pure p
     else bipartition (v, e)
 
@@ -209,41 +209,31 @@ maxGain (Gain gmax u m) = do
 removeGain :: Int -> Gain s Int -> ST s ()
 removeGain c (Gain gmax u m) = do
   mj <- H.lookup u c
-  case mj of
-    Nothing -> pure ()
-    Just j -> do
-      mg <- H.lookup m j
-      case mg of
-        Nothing -> pure ()
-        Just [c] -> do
-          modifySTRef' gmax $ Set.delete j 
-          H.delete m j
-        Just [] -> do
-          H.delete m j
-        Just ds -> do
-          H.mutate m j $ (, ()) . pure . maybe [] (filter (/= c))
+  for_ mj $ \ j -> do
+    mg <- H.lookup m j
+    for_ mg $ \ ds -> if ds == pure c || null ds
+      then do
+        modifySTRef gmax $ Set.delete j 
+        H.delete m j
+      else do
+        H.mutate m j $ (, ()) . maybe Nothing (pure . filter (/= c))
 
 
 modifyGain :: (Int -> Int) -> Int -> Gain s Int -> ST s ()
 modifyGain f c (Gain gmax u m) = do
   mj <- H.lookup u c
   H.mutate u c $ (, ()) . fmap f
-  case mj of
-    Nothing -> pure ()
-    Just j -> do
-      mg <- H.lookup m j
-      case mg of
-        Nothing -> pure ()
-        Just [c] -> do
-          modifySTRef' gmax $ Set.delete j 
-          H.delete m j
-          H.mutate m (f j) $ (, ()) . pure . maybe [c] (c:)
-        Just [] -> do
-          H.delete m j
-          H.mutate m (f j) $ (, ()) . pure . maybe [c] (c:)
-        Just ds -> do
-          H.mutate m j $ (, ()) . pure . maybe [] (filter (/= c))
-          H.mutate m (f j) $ (, ()) . pure . maybe [c] (c:)
+  for_ mj $ \ j -> do
+    mg <- H.lookup m j
+    for_ mg $ \ ds -> if ds == pure c || null ds
+      then do
+        modifySTRef gmax $ Set.delete j
+        H.delete m j
+        H.mutate m (f j) $ (, ()) . pure . maybe [c] (c:)
+      else do
+        modifySTRef gmax $ Set.insert (f j)
+        H.mutate m j $ (, ()) . maybe Nothing (pure . filter (/= c))
+        H.mutate m (f j) $ (, ()) . pure . maybe [c] (c:)
 
 
 incrementGain, decrementGain :: Int -> FM s ()
