@@ -179,7 +179,7 @@ processCell (v, e) = do
 lockCell :: Int -> FM s ()
 lockCell c = do
   update freeCells $ delete c
-  st . removeGain c =<< value gains
+  removeGain c
 
 
 moveCell :: Int -> FM s ()
@@ -194,69 +194,112 @@ moveCell c = do
 
 selectBaseCell :: FM s (Maybe Int)
 selectBaseCell = do
-  g <- value gains
   h <- snapshot
-  (i, bucket) <- st $ maxGain g
+  (i, bucket) <- maxGain
   case bucket of
     Nothing -> fail "select base cell: empty bucket"
-    Just xs -> pure $ listToMaybe [x | x <- xs, balanceCriterion h i x]
+    Just xs -> pure $ balanceCriterion h i `find` xs
 
 
 updateGains :: (V, E) -> Int -> FM s ()
 updateGains (v, e) c = do
+
   p <- value partitioning
+
   let f = fromBlock p c e
   let t = toBlock p c e
   free <- value freeCells
+
   moveCell c
+
   for_ (elems $ v ! c) $ \ n -> do
-    when (size (t n) == 0) $ sequence_ $ incrementGain <$> elems (f n `intersection` free)
-    when (size (t n) == 1) $ sequence_ $ decrementGain <$> elems (t n `intersection` free)
-    when (size (f n) == succ 0) $ sequence_ $ decrementGain <$> elems (t n `intersection` free)
-    when (size (f n) == succ 1) $ sequence_ $ incrementGain <$> elems (f n `intersection` free)
+
+    -- reflect changes before the move
+    when (size (t n) == 0) $ sequence_ $ modifyGain succ <$> elems (f n `intersection` free)
+    when (size (t n) == 1) $ sequence_ $ modifyGain pred <$> elems (t n `intersection` free)
+
+    -- reflect changes after the move
+    when (size (f n) == succ 0) $ sequence_ $ modifyGain pred <$> elems (t n `intersection` free)
+    when (size (f n) == succ 1) $ sequence_ $ modifyGain succ <$> elems (f n `intersection` free)
 
 
-maxGain :: Gain s a -> ST s (Int, Maybe [a])
-maxGain (Gain gmax _ m) = do
-  g <- findMax <$> readSTRef gmax
-  (g, ) <$> H.lookup m g
+
+maxGain :: FM s (Int, Maybe [Int])
+maxGain = do
+  Gain gmax _ m <- value gains
+  st $ do
+    g <- findMax <$> readSTRef gmax
+    (g, ) <$> H.lookup m g
 
 
-removeGain :: Int -> Gain s Int -> ST s ()
-removeGain c (Gain gmax u m) = do
-  mj <- H.lookup u c
-  for_ mj $ \ j -> do
-    mg <- H.lookup m j
-    for_ mg $ \ ds ->
-      if ds == pure c
-      then do
-        modifySTRef gmax $ delete j 
-        H.delete m j
-      else do
+
+removeGain :: Int -> FM s ()
+removeGain c = do
+
+  Gain gmax u m <- value gains
+
+  st $ do
+
+    mj <- H.lookup u c
+
+    for_ mj $ \ j -> do
+      mg <- H.lookup m j
+      for_ mg $ \ ds -> do
+
+        when (ds == pure c) $ modifySTRef gmax $ delete j
         H.mutate m j $ (, ()) . fmap (filter (/= c))
 
 
-modifyGain :: (Int -> Int) -> Int -> Gain s Int -> ST s ()
-modifyGain f c (Gain gmax u m) = do
-  mj <- H.lookup u c
-  H.mutate u c $ (, ()) . fmap f
-  for_ mj $ \ j -> do
-    mg <- H.lookup m j
-    for_ mg $ \ ds ->
-      if ds == pure c
-      then do
-        modifySTRef gmax $ delete j . insert (f j)
-        H.delete m j
-        H.mutate m (f j) $ (, ()) . pure . maybe [c] (c:)
-      else do
+
+modifyGain :: (Int -> Int) -> Int -> FM s ()
+modifyGain f c = do
+
+  Gain gmax u m <- value gains
+
+  st $ do
+
+    mj <- H.lookup u c
+    H.mutate u c $ (, ()) . fmap f
+
+    for_ mj $ \ j -> do
+      mg <- H.lookup m j
+      for_ mg $ \ ds -> do
+
+        when (ds == pure c) $ modifySTRef gmax $ delete j
+        H.mutate m j $ (, ()) . fmap (filter (/= c))
+
         modifySTRef gmax $ insert (f j)
-        H.mutate m j $ (, ()) . fmap (filter (/= c))
         H.mutate m (f j) $ (, ()) . pure . maybe [c] (c:)
 
 
-incrementGain, decrementGain :: Int -> FM s ()
-decrementGain c = st . modifyGain pred c =<< value gains
-incrementGain c = st . modifyGain succ c =<< value gains
+
+initialGains :: (V, E) -> FM s ()
+initialGains (v, e) = do
+
+  p <- value partitioning
+
+  g <- st $ do
+
+    gmax <- newSTRef mempty
+
+    u <- H.newSized $ length v
+    m <- H.new
+
+    flip imapM_ v $ \ i ns -> do
+      let f = fromBlock p i e
+      let t = toBlock p i e
+      H.insert u i
+        $ size (S.filter (\ n -> size (f n) == 1) ns)
+        - size (S.filter (\ n -> size (t n) == 0) ns)
+
+    flip H.mapM_ u $ \ (k, x) -> do
+      modifySTRef gmax $ insert x
+      H.mutate m x $ (, ()) . pure . maybe [k] (k:)
+
+    pure $ Gain gmax u m
+
+  update gains $ const g
+
 
 
 balanceCriterion :: Heu s -> Int -> Int -> Bool
@@ -268,29 +311,6 @@ balanceCriterion h smax c
     v = size p + size q
     k = h ^. freeCells . to size
     r = fromIntegral $ denominator balanceFactor `div` numerator balanceFactor
-
-
-initialGains :: (V, E) -> FM s ()
-initialGains (v, e) = do
-
-  gmax <- st $ newSTRef mempty
-  p <- value partitioning
-
-  u <- st $ H.newSized $ length v
-  m <- st H.new
-
-  st $ flip imapM_ v $ \ i ns -> do
-    let f = fromBlock p i e
-    let t = toBlock p i e
-    H.insert u i
-      $ size (S.filter (\ n -> size (f n) == 1) ns)
-      - size (S.filter (\ n -> size (t n) == 0) ns)
-
-  st $ flip H.mapM_ u $ \ (k, x) -> do
-    modifySTRef gmax $ insert x
-    H.mutate m x $ (, ()) . pure . maybe [k] (k:)
-
-  update gains $ const $ Gain gmax u m
 
 
 fromBlock, toBlock :: Partition -> Int -> E -> Int -> IntSet
