@@ -85,6 +85,10 @@ data Heu s = Heu
 makeFieldsNoPrefix ''Heu
 
 
+st :: ST s a -> FM s a
+st = lift
+
+
 evalFM :: FM s a -> ST s a
 evalFM = runFM
 
@@ -99,13 +103,13 @@ runFM f = do
 update :: Simple Setter (Heu s) a -> (a -> a) -> FM s ()
 update v f = do
   r <- modifySTRef <$> ask
-  lift $ r $ v %~ f
+  st $ r $ v %~ f
 
 value :: Getter (Heu s) a -> FM s a
 value v = view v <$> getState
 
 getState :: FM s (Heu s)
-getState = lift . readSTRef =<< ask
+getState = st . readSTRef =<< ask
 
 
 type NetArray  = Vector IntSet
@@ -148,7 +152,7 @@ bipartition (v, e) = do
   (g, p) <- computeG
   update partitioning $ const p
   it <- value iterations
-  if it >= 20 || g <= 0
+  if it >= 10 || g <= 0
     then pure p
     else bipartition (v, e)
 
@@ -165,13 +169,13 @@ processCell (v, e) = do
 lockCell :: Int -> FM s ()
 lockCell c = do
   update freeCells $ delete c
-  lift . removeGain c =<< value gains
+  st . removeGain c =<< value gains
 
 
 moveCell :: Int -> FM s ()
 moveCell c = do
   Gain _ u _ <- value gains
-  v <- lift $ H.lookup u c
+  v <- st $ H.lookup u c
   for_ v $ \ g -> do
     update partitioning $ move c
     p <- value partitioning
@@ -182,7 +186,7 @@ selectBaseCell :: V -> FM s (Maybe Int)
 selectBaseCell v = do
   g <- value gains
   h <- getState
-  (i, xs) <- lift $ maxGain g
+  (i, xs) <- st $ maxGain g
   pure $ listToMaybe [ x | x <- join $ maybeToList xs, balanceCriterion h i x ]
 
 
@@ -237,8 +241,8 @@ modifyGain f c (Gain gmax u m) = do
 
 
 incrementGain, decrementGain :: Int -> FM s ()
-decrementGain c = lift . modifyGain pred c =<< value gains
-incrementGain c = lift . modifyGain succ c =<< value gains
+decrementGain c = st . modifyGain pred c =<< value gains
+incrementGain c = st . modifyGain succ c =<< value gains
 
 
 balanceCriterion :: Heu s -> Int -> Int -> Bool
@@ -270,20 +274,20 @@ initialPartitioning v = update partitioning $ const $
 initialGains :: (V, E) -> FM s ()
 initialGains (v, e) = do
 
-  gmax <- lift $ newSTRef mempty
+  gmax <- st $ newSTRef mempty
 
   p <- value partitioning
 
-  u <- lift H.new
-  lift $ for_ ([0.. ] `zip` toList v) $ \ (i, ns) -> do
+  u <- st H.new
+  st $ for_ ([0.. ] `zip` toList v) $ \ (i, ns) -> do
     let f = fromBlock p i e
     let t = toBlock p i e
     H.insert u i
       $ size (Set.filter (\ n -> size (f n) == 1) ns)
       - size (Set.filter (\ n -> size (t n) == 0) ns)
 
-  m <- lift H.new
-  lift $ do
+  m <- st H.new
+  st $ do
     es <- HC.toList u
     for_ es $ \ (k, x) -> do
       modifySTRef' gmax $ Set.insert x
@@ -303,7 +307,7 @@ toBlock (P a b) i e n = intersection a $ e ! n
 
 
 inputRoutine :: Foldable f => Int -> Int -> f (Int, Int) -> FM s (V, E)
-inputRoutine n c xs = do
+inputRoutine n c xs = lift $ do
   nv <- replicate n mempty
   cv <- replicate c mempty
   for_ xs $ \ (x, y) -> do
