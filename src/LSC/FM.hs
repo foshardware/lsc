@@ -196,8 +196,10 @@ selectBaseCell :: FM s (Maybe Int)
 selectBaseCell = do
   g <- value gains
   h <- snapshot
-  (i, xs) <- st $ maxGain g
-  pure $ listToMaybe [ x | x <- join $ maybeToList xs, balanceCriterion h i x ]
+  (i, bucket) <- st $ maxGain g
+  case bucket of
+    Nothing -> fail "select base cell: empty bucket"
+    Just xs -> pure $ listToMaybe [x | x <- xs, balanceCriterion h i x]
 
 
 updateGains :: (V, E) -> Int -> FM s ()
