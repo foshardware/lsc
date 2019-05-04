@@ -16,7 +16,7 @@ import Data.Maybe
 import Data.Monoid
 import Data.HashTable.ST.Cuckoo (HashTable)
 import qualified Data.HashTable.ST.Cuckoo as H
-import Data.IntSet (IntSet, findMax, intersection, insert, delete, member, size, fromAscList, elems)
+import Data.IntSet (IntSet, maxView, intersection, insert, delete, member, size, fromAscList, elems)
 import qualified Data.IntSet as S
 import Data.Ratio
 import Data.STRef
@@ -195,10 +195,10 @@ moveCell c = do
 selectBaseCell :: FM s (Maybe Int)
 selectBaseCell = do
   h <- snapshot
-  (i, bucket) <- maxGain
+  bucket <- maxGain
   case bucket of
-    Nothing -> fail "select base cell: empty bucket"
-    Just xs -> pure $ balanceCriterion h i `find` xs
+    Just (i, xs) -> pure $ balanceCriterion h i `find` xs
+    _ -> pure Nothing
 
 
 updateGains :: (V, E) -> Int -> FM s ()
@@ -215,22 +215,26 @@ updateGains (v, e) c = do
   for_ (elems $ v ! c) $ \ n -> do
 
     -- reflect changes before the move
-    when (size (t n) == 0) $ sequence_ $ modifyGain succ <$> elems (f n `intersection` free)
-    when (size (t n) == 1) $ sequence_ $ modifyGain pred <$> elems (t n `intersection` free)
+    when (size (t n) == 0) $ for_ (elems $ f n `intersection` free) (modifyGain succ)
+    when (size (t n) == 1) $ for_ (elems $ t n `intersection` free) (modifyGain pred)
 
     -- reflect changes after the move
-    when (size (f n) == succ 0) $ sequence_ $ modifyGain pred <$> elems (t n `intersection` free)
-    when (size (f n) == succ 1) $ sequence_ $ modifyGain succ <$> elems (f n `intersection` free)
+    when (size (f n) == succ 0) $ for_ (elems $ t n `intersection` free) (modifyGain pred)
+    when (size (f n) == succ 1) $ for_ (elems $ f n `intersection` free) (modifyGain succ)
 
 
 
-maxGain :: FM s (Int, Maybe [Int])
+maxGain :: FM s (Maybe (Int, [Int]))
 maxGain = do
   Gain gmax _ m <- value gains
-  st $ do
-    g <- findMax <$> readSTRef gmax
-    (g, ) <$> H.lookup m g
-
+  mg <- st $ maxView <$> readSTRef gmax
+  case mg of
+    Just (g, _) -> do
+      mb <- st $ H.lookup m g
+      if maybe True null mb
+        then fail $ "maxGain: empty bucket for gain " <> show g
+        else pure $ (g, ) <$> mb
+    _ -> pure Nothing
 
 
 removeGain :: Int -> FM s ()
