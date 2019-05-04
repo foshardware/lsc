@@ -102,10 +102,10 @@ update v f = do
   st $ r $ v %~ f
 
 value :: Getter (Heu s) a -> FM s a
-value v = view v <$> getState
+value v = view v <$> snapshot
 
-getState :: FM s (Heu s)
-getState = st . readSTRef =<< ask
+snapshot :: FM s (Heu s)
+snapshot = st . readSTRef =<< ask
 
 
 type NetArray  = Vector IntSet
@@ -190,7 +190,7 @@ moveCell c = do
 selectBaseCell :: FM s (Maybe Int)
 selectBaseCell = do
   g <- value gains
-  h <- getState
+  h <- snapshot
   (i, xs) <- st $ maxGain g
   pure $ listToMaybe [ x | x <- join $ maybeToList xs, balanceCriterion h i x ]
 
@@ -238,7 +238,7 @@ modifyGain f c (Gain gmax u m) = do
     for_ mg $ \ ds ->
       if ds == pure c
       then do
-        modifySTRef gmax $ delete j
+        modifySTRef gmax $ delete j . insert (f j)
         H.delete m j
         H.mutate m (f j) $ (, ()) . pure . maybe [c] (c:)
       else do
