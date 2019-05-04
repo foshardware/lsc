@@ -16,15 +16,13 @@ import Data.Maybe
 import Data.Monoid
 import Data.HashTable.ST.Cuckoo (HashTable)
 import qualified Data.HashTable.ST.Cuckoo as H
-import Data.IntSet hiding (filter, findMax, foldl', toList, null)
-import qualified Data.IntSet as Set
-import Data.IntMap (IntMap, fromListWith, findMax, unionWith, insertWith, adjust, assocs)
-import qualified Data.IntMap as Map
+import Data.IntSet (IntSet, findMax, intersection, insert, delete, member, size, fromAscList, elems)
+import qualified Data.IntSet as S
 import Data.Ratio
 import Data.STRef
 import Data.Tuple
-import Data.Vector (Vector, unsafeFreeze, unsafeThaw, thaw, (!), generate)
-import Data.Vector.Mutable hiding (swap, length, set, move, null, new)
+import Data.Vector (Vector, unsafeFreeze, unsafeThaw, (!))
+import Data.Vector.Mutable (modify, replicate)
 import Prelude hiding (replicate, length, read)
 
 
@@ -137,9 +135,21 @@ computeG = do
       = (gmax, g + gc, p)
 
 
+fiducciaMattheyses :: (V, E) -> FM s Partition
 fiducciaMattheyses (v, e) = do
-  initialPartitioning v
+
+  update partitioning $ const $
+    if length v < 3000
+    then P (fromAscList [x | x <- base v, parity x]) (fromAscList [x | x <- base v, not $ parity x])
+    else P (fromAscList [x | x <- base v, half v x]) (fromAscList [x | x <- base v, not $ half v x])
+
   bipartition (v, e)
+
+  where
+    base v = [0 .. length v - 1]
+    half v i = i <= div (length v) 2
+    parity = even
+
 
 
 bipartition :: (V, E) -> FM s Partition
@@ -205,7 +215,7 @@ updateGains (v, e) c = do
 
 maxGain :: Gain s a -> ST s (Int, Maybe [a])
 maxGain (Gain gmax u m) = do
-  g <- Set.findMax <$> readSTRef gmax
+  g <- findMax <$> readSTRef gmax
   (g, ) <$> H.lookup m g
 
 
@@ -214,9 +224,10 @@ removeGain c (Gain gmax u m) = do
   mj <- H.lookup u c
   for_ mj $ \ j -> do
     mg <- H.lookup m j
-    for_ mg $ \ ds -> if ds == pure c || null ds
+    for_ mg $ \ ds ->
+      if ds == pure c
       then do
-        modifySTRef gmax $ Set.delete j 
+        modifySTRef gmax $ delete j 
         H.delete m j
       else do
         H.mutate m j $ (, ()) . fmap (filter (/= c))
@@ -228,13 +239,14 @@ modifyGain f c (Gain gmax u m) = do
   H.mutate u c $ (, ()) . fmap f
   for_ mj $ \ j -> do
     mg <- H.lookup m j
-    for_ mg $ \ ds -> if ds == pure c || null ds
+    for_ mg $ \ ds ->
+      if ds == pure c
       then do
-        modifySTRef gmax $ Set.delete j
+        modifySTRef gmax $ delete j
         H.delete m j
         H.mutate m (f j) $ (, ()) . pure . maybe [c] (c:)
       else do
-        modifySTRef gmax $ Set.insert (f j)
+        modifySTRef gmax $ insert (f j)
         H.mutate m j $ (, ()) . fmap (filter (/= c))
         H.mutate m (f j) $ (, ()) . pure . maybe [c] (c:)
 
@@ -259,17 +271,6 @@ initialFreeCells :: V -> FM s ()
 initialFreeCells v = update freeCells $ const $ fromAscList [0 .. length v - 1]
 
 
-initialPartitioning :: V -> FM s ()
-initialPartitioning v = update partitioning $ const $
-  if length v < 3000
-  then P (fromAscList [x | x <- base v, parity x]) (fromAscList [x | x <- base v, not $ parity x])
-  else P (fromAscList [x | x <- base v, half v x]) (fromAscList [x | x <- base v, not $ half v x])
-  where
-    base v = [0 .. length v - 1]
-    half v i = i <= div (length v) 2
-    parity = even
-
-
 initialGains :: (V, E) -> FM s ()
 initialGains (v, e) = do
 
@@ -283,11 +284,11 @@ initialGains (v, e) = do
     let f = fromBlock p i e
     let t = toBlock p i e
     H.insert u i
-      $ size (Set.filter (\ n -> size (f n) == 1) ns)
-      - size (Set.filter (\ n -> size (t n) == 0) ns)
+      $ size (S.filter (\ n -> size (f n) == 1) ns)
+      - size (S.filter (\ n -> size (t n) == 0) ns)
 
   st $ flip H.mapM_ u $ \ (k, x) -> do
-    modifySTRef gmax $ Set.insert x
+    modifySTRef gmax $ insert x
     H.mutate m x $ (, ()) . pure . maybe [k] (k:)
 
   update gains $ const $ Gain gmax u m
@@ -305,7 +306,7 @@ inputRoutine n c xs = lift $ do
   nv <- replicate n mempty
   cv <- replicate c mempty
   for_ xs $ \ (x, y) -> do
-    modify nv (Set.insert y) x
-    modify cv (Set.insert x) y
+    modify nv (insert y) x
+    modify cv (insert x) y
   (,) <$> unsafeFreeze cv <*> unsafeFreeze nv
 
