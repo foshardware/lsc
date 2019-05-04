@@ -20,8 +20,8 @@ import Data.IntSet (IntSet, maxView, intersection, insert, delete, member, size,
 import qualified Data.IntSet as S
 import Data.Ratio
 import Data.STRef
-import Data.Vector (Vector, unsafeFreeze, (!))
-import Data.Vector.Mutable (modify, replicate)
+import Data.Vector (Vector, freeze, unsafeFreeze, (!))
+import Data.Vector.Mutable (STVector, new, read, write, modify, replicate)
 import Prelude hiding (replicate, length, read)
 
 
@@ -33,9 +33,9 @@ balanceFactor = 1 % 2
 
 
 data Gain s a = Gain
-  (STRef s IntSet)      -- track existing gains
-  (HashTable s a Int)   -- gains indexed by node
-  (HashTable s Int [a]) -- nodes indexed by gain
+  (STRef s IntSet)        -- track existing gains
+  (STVector s Int)        -- gains indexed by node
+  (HashTable s Int [Int]) -- nodes indexed by gain
 
 
 data Move
@@ -91,7 +91,7 @@ evalFM = runFM
 
 runFM :: FM s a -> ST s a
 runFM f = do
-  g <- Gain <$> newSTRef mempty <*> H.new <*> H.new
+  g <- Gain <$> newSTRef mempty <*> new 0 <*> H.new
   r <- newSTRef $ Heu mempty g mempty mempty 0
   runReaderT f r
 
@@ -187,11 +187,10 @@ lockCell c = do
 moveCell :: Int -> FM s ()
 moveCell c = do
   Gain _ u _ <- value gains
-  v <- st $ H.lookup u c
-  for_ v $ \ g -> do
-    update partitioning $ move c
-    p <- value partitioning
-    update moves ((Move g c, p) :)
+  g <- st $ read u c
+  update partitioning $ move c
+  p <- value partitioning
+  update moves ((Move g c, p) :)
 
 
 selectBaseCell :: FM s (Maybe Int)
@@ -246,11 +245,10 @@ removeGain c = do
 
   st $ do
 
-    mj <- H.lookup u c
+    j <- read u c
 
-    for_ mj $ \ j -> do
-      mg <- H.lookup m j
-      for_ mg $ \ ds -> do
+    mg <- H.lookup m j
+    for_ mg $ \ ds -> do
 
         when (ds == pure c) $ modifySTRef gmax $ delete j
         H.mutate m j $ (, ()) . fmap (filter (/= c))
@@ -264,12 +262,11 @@ modifyGain f c = do
 
   st $ do
 
-    mj <- H.lookup u c
-    H.mutate u c $ (, ()) . fmap f
+    j <- read u c
+    modify u f c
 
-    for_ mj $ \ j -> do
-      mg <- H.lookup m j
-      for_ mg $ \ ds -> do
+    mg <- H.lookup m j
+    for_ mg $ \ ds -> do
 
         when (ds == pure c) $ modifySTRef gmax $ delete j
         H.mutate m j $ (, ()) . fmap (filter (/= c))
@@ -288,7 +285,7 @@ initialGains (v, e) = do
 
     gmax <- newSTRef mempty
 
-    hashNodes <- H.newSized $ length v
+    hashNodes <- new $ length v
     flip imapM_ v $ \ i ns -> do
 
       let f = fromBlock p i e
@@ -296,11 +293,13 @@ initialGains (v, e) = do
       let x = size (S.filter (\ n -> size (f n) == 1) ns)
             - size (S.filter (\ n -> size (t n) == 0) ns)
 
-      H.insert hashNodes i x
+      write hashNodes i x
       modifySTRef gmax $ insert x
 
+    nodes <- freeze hashNodes
+
     hashGains <- H.newSized . size =<< readSTRef gmax
-    flip H.mapM_ hashNodes $ \ (k, x) -> do
+    flip imapM_ ns $ \ k x -> do
       H.mutate hashGains x $ (, ()) . pure . maybe [k] (k:)
 
     pure $ Gain gmax hashNodes hashGains
