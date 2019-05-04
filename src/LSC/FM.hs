@@ -91,9 +91,8 @@ evalFM = runFM
 
 runFM :: FM s a -> ST s a
 runFM f = do
-  gmax <- newSTRef mempty
-  (u, m) <- (,) <$> H.new <*> H.new
-  r <- newSTRef $ Heu mempty (Gain gmax u m) mempty mempty 0
+  g <- Gain <$> newSTRef mempty <*> H.new <*> H.new
+  r <- newSTRef $ Heu mempty g mempty mempty 0
   runReaderT f r
 
 
