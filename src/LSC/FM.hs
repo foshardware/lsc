@@ -20,8 +20,7 @@ import Data.IntSet (IntSet, findMax, intersection, insert, delete, member, size,
 import qualified Data.IntSet as S
 import Data.Ratio
 import Data.STRef
-import Data.Tuple
-import Data.Vector (Vector, unsafeFreeze, unsafeThaw, (!))
+import Data.Vector (Vector, unsafeFreeze, (!))
 import Data.Vector.Mutable (modify, replicate)
 import Prelude hiding (replicate, length, read)
 
@@ -124,14 +123,14 @@ computeG = do
   pure (g, h)
   where
     accum :: (Int, Int, Partition) -> (Move, Partition) -> (Int, Int, Partition)
-    accum (gmax, g, _) (Move gc c, q)
+    accum (gmax, g, _) (Move gc _, q)
       | g + gc > gmax
       = (g + gc, g + gc, q)
-    accum (gmax, g, p) (Move gc c, q)
+    accum (gmax, g, p) (Move gc _, q)
       | g + gc == gmax
       , partitionBalance p > partitionBalance q
       = (gmax, g + gc, q)
-    accum (gmax, g, p) (Move gc c, _)
+    accum (gmax, g, p) (Move gc _, _)
       = (gmax, g + gc, p)
 
 
@@ -140,16 +139,14 @@ fiducciaMattheyses (v, e) = do
 
   update partitioning $ const $
     if length v < 3000
-    then P (fromAscList [x | x <- base v, parity x]) (fromAscList [x | x <- base v, not $ parity x])
-    else P (fromAscList [x | x <- base v, half v x]) (fromAscList [x | x <- base v, not $ half v x])
+    then P (fromAscList [x | x <- base, even x]) (fromAscList [x | x <- base, not $ even x])
+    else P (fromAscList [x | x <- base, half x]) (fromAscList [x | x <- base, not $ half x])
 
   bipartition (v, e)
 
   where
-    base v = [0 .. length v - 1]
-    half v i = i <= div (length v) 2
-    parity = even
-
+    base = [0 .. length v - 1]
+    half i = i <= div (length v) 2
 
 
 bipartition :: (V, E) -> FM s Partition
@@ -168,7 +165,7 @@ bipartition (v, e) = do
 
 processCell :: (V, E) -> FM s ()
 processCell (v, e) = do
-  ci <- selectBaseCell v
+  ci <- selectBaseCell
   for_ ci $ \ i -> do
     lockCell i
     updateGains (v, e) i
@@ -191,8 +188,8 @@ moveCell c = do
     update moves ((Move g c, p) :)
 
 
-selectBaseCell :: V -> FM s (Maybe Int)
-selectBaseCell v = do
+selectBaseCell :: FM s (Maybe Int)
+selectBaseCell = do
   g <- value gains
   h <- getState
   (i, xs) <- st $ maxGain g
@@ -214,7 +211,7 @@ updateGains (v, e) c = do
 
 
 maxGain :: Gain s a -> ST s (Int, Maybe [a])
-maxGain (Gain gmax u m) = do
+maxGain (Gain gmax _ m) = do
   g <- findMax <$> readSTRef gmax
   (g, ) <$> H.lookup m g
 
@@ -295,10 +292,10 @@ initialGains (v, e) = do
 
 
 fromBlock, toBlock :: Partition -> Int -> E -> Int -> IntSet
-fromBlock (P a b) i e n | member i a = intersection a $ e ! n
-fromBlock (P a b) i e n = intersection b $ e ! n
+fromBlock (P a _) i e n | member i a = intersection a $ e ! n
+fromBlock (P _ b) _ e n = intersection b $ e ! n
 toBlock (P a b) i e n | member i a = intersection b $ e ! n
-toBlock (P a b) i e n = intersection a $ e ! n
+toBlock (P a _) _ e n = intersection a $ e ! n
 
 
 inputRoutine :: Foldable f => Int -> Int -> f (Int, Int) -> FM s (V, E)

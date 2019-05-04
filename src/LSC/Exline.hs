@@ -7,8 +7,8 @@ import Control.Monad.ST
 import Control.Monad.IO.Class
 import Data.Default
 import Data.Foldable
-import Data.IntSet (IntSet, size, elems)
-import Data.Map (assocs, fromList, filter, mapWithKey, lookup, restrictKeys, withoutKeys, keysSet)
+import Data.IntSet (size, elems)
+import Data.Map (assocs, fromList, mapWithKey, lookup, restrictKeys, withoutKeys, keysSet)
 import qualified Data.Set as Set
 import Data.Vector (fromListN, (!))
 import Prelude hiding (filter, lookup)
@@ -50,9 +50,9 @@ bisection top = do
   cells <- view stdCells <$> technology
   let s1 = Set.fromList
         [ name
-        | g <- toList g1
-        , c <- toList $ view identifier g `lookup` cells
-        , (i, name) <- g ^. wires . to assocs
+        | n <- toList g1
+        , c <- toList $ view identifier n `lookup` cells
+        , (i, name) <- n ^. wires . to assocs
         , sp <- toList $ lookup i $ c ^. pins
         , sp ^. dir == Just Out
         ]
