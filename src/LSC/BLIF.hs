@@ -12,11 +12,7 @@ module LSC.BLIF
 import Control.Lens
 import Data.Default
 import Data.Foldable
-import Data.Map
-  ( assocs
-  , singleton
-  , fromList, fromListWith
-  )
+import Data.Map (assocs, elems, fromList)
 import Data.Maybe
 import qualified Data.Vector as Vector
 import Prelude hiding (lookup)
@@ -39,8 +35,8 @@ toModel top = Model
 
   (top ^. identifier)
 
-  [ p ^. identifier | (i, p) <- top ^. supercell . pins . to assocs, p ^. dir == Just In  ]
-  [ p ^. identifier | (i, p) <- top ^. supercell . pins . to assocs, p ^. dir == Just Out ]
+  [ p ^. identifier | p <- top ^. supercell . pins . to elems, p ^. dir == Just In  ]
+  [ p ^. identifier | p <- top ^. supercell . pins . to elems, p ^. dir == Just Out ]
   []
 
   [ Subcircuit (g ^. identifier) (g ^. wires . to assocs) | g <- toList $ top ^. gates ]
