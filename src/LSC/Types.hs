@@ -39,35 +39,12 @@ import Control.Monad.Fail
 import Control.Monad.Reader
 import Control.Monad.State
 
-import Linear.Affine (Point)
-
 import Data.Time.Clock.POSIX
 import System.Console.Concurrent
 
 import GHC.Generics
 import Prelude hiding (lookup)
 
-
-
-data Particle v n = Particle
-  { _pos   :: Point v n
-  , _vel   :: v n
-  , _force :: v n
-  , _dims  :: (Integer, Integer)
-  } deriving (Eq, Show)
-
-makeFieldsNoPrefix ''Particle
-
-
-type Edge = (Int, Int)
-
-
-data Step v n = Step
-  { _forces    :: [(Vector Edge, Point v n -> Point v n -> v n)]
-  , _particles :: Vector (Particle v n)
-  }
-
-makeFieldsNoPrefix ''Step
 
 
 data RTL = RTL

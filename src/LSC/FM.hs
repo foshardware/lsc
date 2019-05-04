@@ -208,7 +208,8 @@ updateGains (v, e) c = do
   p <- value partitioning
 
   let f = fromBlock p c e
-  let t = toBlock p c e
+      t = toBlock p c e
+
   free <- value freeCells
 
   moveCell c

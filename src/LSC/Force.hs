@@ -1,4 +1,9 @@
+{-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE FunctionalDependencies #-}
+{-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE RankNTypes #-}
 
 module LSC.Force where
 
@@ -28,6 +33,27 @@ type R = Double
 
 scale :: R
 scale = 100
+
+
+data Particle v n = Particle
+  { _pos   :: Point v n
+  , _vel   :: v n
+  , _force :: v n
+  , _dims  :: (Integer, Integer)
+  } deriving (Eq, Show)
+
+makeFieldsNoPrefix ''Particle
+
+
+type Edge = (Int, Int)
+
+
+data Step v n = Step
+  { _forces    :: [(Vector Edge, Point v n -> Point v n -> v n)]
+  , _particles :: Vector (Particle v n)
+  }
+
+makeFieldsNoPrefix ''Step
 
 
 placeForce :: NetGraph -> LSC NetGraph
