@@ -151,16 +151,18 @@ fiducciaMattheyses (v, e) = do
 bipartition :: (V, E) -> FM s Partition
 bipartition (v, e) = do
 
+  p <- value partitioning
+
   update freeCells $ const $ fromAscList [0 .. length v - 1]
   update moves $ const mempty
 
   initialGains (v, e)
   processCell (v, e)
 
-  (g, p) <- computeG
+  (g, q) <- computeG
 
   update iterations succ
-  update partitioning $ const p
+  update partitioning $ const q
 
   if g <= 0
     then pure p
@@ -286,21 +288,22 @@ initialGains (v, e) = do
 
     gmax <- newSTRef mempty
 
-    u <- H.newSized $ length v
-    m <- H.new
-
+    hashNodes <- H.newSized $ length v
     flip imapM_ v $ \ i ns -> do
+
       let f = fromBlock p i e
       let t = toBlock p i e
-      H.insert u i
-        $ size (S.filter (\ n -> size (f n) == 1) ns)
-        - size (S.filter (\ n -> size (t n) == 0) ns)
+      let x = size (S.filter (\ n -> size (f n) == 1) ns)
+            - size (S.filter (\ n -> size (t n) == 0) ns)
 
-    flip H.mapM_ u $ \ (k, x) -> do
+      H.insert hashNodes i x
       modifySTRef gmax $ insert x
-      H.mutate m x $ (, ()) . pure . maybe [k] (k:)
 
-    pure $ Gain gmax u m
+    hashGains <- H.newSized . size =<< readSTRef gmax
+    flip H.mapM_ hashNodes $ \ (k, x) -> do
+      H.mutate hashGains x $ (, ()) . pure . maybe [k] (k:)
+
+    pure $ Gain gmax hashNodes hashGains
 
   update gains $ const g
 
