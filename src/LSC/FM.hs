@@ -16,12 +16,12 @@ import Data.Maybe
 import Data.Monoid
 import Data.HashTable.ST.Cuckoo (HashTable)
 import qualified Data.HashTable.ST.Cuckoo as H
-import Data.IntSet (IntSet, maxView, intersection, insert, delete, member, size, fromAscList, elems)
+import Data.IntSet hiding (filter, null, foldl')
 import qualified Data.IntSet as S
 import Data.Ratio
 import Data.STRef
-import Data.Vector (Vector, freeze, unsafeFreeze, (!))
-import Data.Vector.Mutable (STVector, new, read, write, modify, replicate)
+import Data.Vector (Vector, unsafeFreeze, unsafeThaw, (!))
+import Data.Vector.Mutable (STVector, new, read, modify, replicate)
 import Prelude hiding (replicate, length, read)
 
 
@@ -33,9 +33,9 @@ balanceFactor = 1 % 2
 
 
 data Gain s a = Gain
-  (STRef s IntSet)        -- track existing gains
-  (STVector s Int)        -- gains indexed by node
-  (HashTable s Int [Int]) -- nodes indexed by gain
+  (STRef s IntSet)      -- track existing gains
+  (STVector s Int)      -- gains indexed by node
+  (HashTable s Int [a]) -- nodes indexed by gain
 
 
 data Move
@@ -281,28 +281,19 @@ initialGains (v, e) = do
 
   p <- value partitioning
 
+  let nodes = flip imap v $ \ i ns ->
+        let f = fromBlock p i e
+            t = toBlock p i e
+         in size (S.filter (\ n -> size (f n) == 1) ns)
+          - size (S.filter (\ n -> size (t n) == 0) ns)
+
+  let gmax = foldMap singleton nodes
+
   g <- st $ do
-
-    gmax <- newSTRef mempty
-
-    hashNodes <- new $ length v
-    flip imapM_ v $ \ i ns -> do
-
-      let f = fromBlock p i e
-      let t = toBlock p i e
-      let x = size (S.filter (\ n -> size (f n) == 1) ns)
-            - size (S.filter (\ n -> size (t n) == 0) ns)
-
-      write hashNodes i x
-      modifySTRef gmax $ insert x
-
-    nodes <- freeze hashNodes
-
-    hashGains <- H.newSized . size =<< readSTRef gmax
-    flip imapM_ ns $ \ k x -> do
-      H.mutate hashGains x $ (, ()) . pure . maybe [k] (k:)
-
-    pure $ Gain gmax hashNodes hashGains
+      gain <- H.newSized $ size gmax
+      flip imapM_ nodes $ \ k x ->
+          H.mutate gain x $ (, ()) . pure . maybe [k] (k:)
+      Gain <$> newSTRef gmax <*> unsafeThaw nodes <*> pure gain
 
   update gains $ const g
 
