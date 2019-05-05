@@ -20,8 +20,8 @@ import Data.IntSet hiding (filter, null, foldl')
 import qualified Data.IntSet as S
 import Data.Ratio
 import Data.STRef
-import Data.Vector (Vector, freeze, thaw, (!))
-import Data.Vector.Mutable (STVector, read, modify, replicate)
+import Data.Vector (Vector, unsafeFreeze, unsafeThaw, freeze, thaw, generate, (!))
+import Data.Vector.Mutable (STVector, read, modify, replicate, unsafeSwap)
 import Prelude hiding (replicate, length, read, lookup)
 import System.Random
 
@@ -79,7 +79,7 @@ data Heu s = Heu
   , _freeCells    :: IntSet
   , _moves        :: [(Move, Partition)]
   , _seed         :: Seed s
-  , _iterations   :: Int
+  , _iterations   :: !Int
   }
 
 makeFieldsNoPrefix ''Heu
@@ -95,12 +95,21 @@ nonDeterministic f = do
     r <- newSTRef s
     runFMWithSeed r f
 
-randomNumbers :: Int -> FM s [Int]
-randomNumbers n = do
+randomStack :: Int -> FM s [Int]
+randomStack n = do
   s <- value seed
   st $ do
     (ns, rs) <- splitAt n <$> readSTRef s
     ns <$ writeSTRef s rs
+
+randomPermutation :: Int -> FM s (Vector Int)
+randomPermutation n = do
+  v <- st $ unsafeThaw $ generate n id
+  r <- randomStack n
+  for_ (zip r [0 .. n - 2]) $ \ (x, i) -> do
+    let j = i + mod x (n - i)
+    unsafeSwap v i j
+  unsafeFreeze v
 
 
 evalFM :: FM s a -> ST s a
