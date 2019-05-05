@@ -16,10 +16,12 @@ dependencies:
 - array
 - arrowgant
 - async
+- base16-bytestring
 - blaze-svg
 - blif
 - bytestring
 - cabal-file-th
+- cereal
 - concurrent-output
 - containers
 - data-default

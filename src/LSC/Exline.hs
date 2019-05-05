@@ -103,7 +103,7 @@ bisection top = do
 
   -- super cells for each partition
   let c1 = top &~ do
-        identifier .= view identifier top <> "+"
+        identifier .= view identifier top <> "_"
         supercell %= (pins .~ p1 <> f1)
         gates .= g1
         nets .= rebuildEdges g1
