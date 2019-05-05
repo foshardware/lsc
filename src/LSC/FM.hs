@@ -9,6 +9,7 @@ module LSC.FM where
 
 import Control.Lens
 import Control.Monad
+import Control.Monad.Primitive
 import Control.Monad.Reader
 import Control.Monad.ST
 import Data.Foldable
@@ -23,7 +24,7 @@ import Data.STRef
 import Data.Vector (Vector, unsafeFreeze, unsafeThaw, freeze, thaw, generate, (!))
 import Data.Vector.Mutable (STVector, read, modify, replicate, unsafeSwap)
 import Prelude hiding (replicate, length, read, lookup)
-import System.Random
+import System.Random.MWC
 
 
 
@@ -70,44 +71,33 @@ partitionBalance :: Partition -> Int
 partitionBalance (P a b) = abs $ size a - size b
 
 
-type Seed s = STRef s [Int]
-
-
 data Heu s = Heu
   { _partitioning :: Partition
   , _gains        :: Gain s Int
   , _freeCells    :: IntSet
   , _moves        :: [(Move, Partition)]
-  , _seed         :: Seed s
   , _iterations   :: !Int
   }
 
 makeFieldsNoPrefix ''Heu
 
 
-type FM s = ReaderT (STRef s (Heu s)) (ST s)
+type FM s = ReaderT (GenST s, STRef s (Heu s)) (ST s)
 
 
 nonDeterministic :: FM RealWorld a -> IO a
-nonDeterministic f = do
-  s <- randoms <$> getStdGen
-  stToIO $ do
-    r <- newSTRef s
-    runFMWithSeed r f
+nonDeterministic f = withSystemRandom $ \ r -> stToIO $ runFMWithGen r f
 
-randomStack :: Int -> FM s [Int]
-randomStack n = do
-  s <- value seed
-  st $ do
-    (ns, rs) <- splitAt n <$> readSTRef s
-    ns <$ writeSTRef s rs
+prng :: FM s (GenST s)
+prng = fst <$> ask
 
 randomPermutation :: Int -> FM s (Vector Int)
 randomPermutation n = do
+  gen <- prng
   v <- st $ unsafeThaw $ generate n id
-  r <- randomStack n
-  for_ (zip r [0 .. n - 2]) $ \ (x, i) -> do
-    let j = i + mod x (n - i)
+  for_ [0 .. n - 2] $ \ i -> do
+    r <- uniform gen
+    let j = i + mod r (n - i)
     unsafeSwap v i j
   unsafeFreeze v
 
@@ -116,15 +106,13 @@ evalFM :: FM s a -> ST s a
 evalFM = runFM
 
 runFM :: FM s a -> ST s a
-runFM f = do
-  s <- newSTRef mempty
-  runFMWithSeed s f
+runFM = runFMWithGen undefined
 
-runFMWithSeed :: Seed s -> FM s a -> ST s a
-runFMWithSeed s f = do
+runFMWithGen :: GenST s -> FM s a -> ST s a
+runFMWithGen s f = do
   g <- Gain <$> newSTRef mempty <*> thaw mempty <*> new
-  r <- newSTRef $ Heu mempty g mempty mempty s 0
-  runReaderT f r
+  r <- newSTRef $ Heu mempty g mempty mempty 0
+  runReaderT f (s, r)
 
 
 st :: ST s a -> FM s a
@@ -133,14 +121,14 @@ st = lift
 
 update :: Simple Setter (Heu s) a -> (a -> a) -> FM s ()
 update v f = do
-  r <- modifySTRef <$> ask
+  r <- modifySTRef . snd <$> ask
   st $ r $ v %~ f
 
 value :: Getter (Heu s) a -> FM s a
 value v = view v <$> snapshot
 
 snapshot :: FM s (Heu s)
-snapshot = st . readSTRef =<< ask
+snapshot = st . readSTRef . snd =<< ask
 
 
 type NetArray  = Vector IntSet
