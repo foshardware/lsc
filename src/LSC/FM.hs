@@ -91,10 +91,18 @@ prng :: FM s (GenST s)
 prng = fst <$> ask
 
 
--- seed bits: 256 * 32 = 8192
--- maximum list length: 966
+-- | This function does not reach all possible permutations for lists
+--   consisting of more than 966 elements. Any PRNGs possible states
+--   are bound by its possible seed values.
+--   In the case of MWC the period is 2^8222 which allow for roughly
+--   969! different states.
 --
---   966! =~ 2^8192
+-- seed bits: 8222
+-- maximum list length: 969
+--
+--   969! =~ 2^8222
+--
+-- Monotonicity of  n! / (2^n): 
 --
 -- desired seed bits: 256909
 -- desired list length: 20000
