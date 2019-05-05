@@ -64,7 +64,7 @@ bisection top = do
     , netGraphStats top
     ]
 
-  (it, P p q) <- liftIO $ nonDeterministic $ (,) <$> value FM.iterations <*> partitionFM top
+  (P p q, it) <- liftIO $ nonDeterministic $ (,) <$> partitionFM top <*> value FM.iterations
 
   -- get a gate
   let g i = view gates top ! i

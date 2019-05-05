@@ -72,8 +72,7 @@ partitionBalance (P a b) = abs $ size a - size b
 
 
 data Heu s = Heu
-  { _partitioning :: Partition
-  , _gains        :: Gain s Int
+  { _gains        :: Gain s Int
   , _freeCells    :: IntSet
   , _moves        :: [(Move, Partition)]
   , _iterations   :: !Int
@@ -119,7 +118,7 @@ runFM = runFMWithGen undefined
 runFMWithGen :: GenST s -> FM s a -> ST s a
 runFMWithGen s f = do
   g <- Gain <$> newSTRef mempty <*> thaw mempty <*> new
-  r <- newSTRef $ Heu mempty g mempty mempty 0
+  r <- newSTRef $ Heu g mempty mempty 0
   runReaderT f (s, r)
 
 
@@ -146,10 +145,45 @@ type V = CellArray
 type E = NetArray
 
 
-computeG :: FM s (Int, Partition)
-computeG = do
-  p <- value partitioning
-  (_, g, h) <- foldl' accum (0, 0, p) . reverse <$> value moves
+multiLevel :: (V, E) -> FM s Partition
+multiLevel = fiducciaMattheyses
+
+
+fiducciaMattheyses :: (V, E) -> FM s Partition
+fiducciaMattheyses (v, e) = do
+
+  bipartition (v, e) $
+    if length v < 3000
+    then P (fromAscList [x | x <- base, even x]) (fromAscList [x | x <- base, not $ even x])
+    else P (fromAscList [x | x <- base, half x]) (fromAscList [x | x <- base, not $ half x])
+
+  where
+    base = [0 .. length v - 1]
+    half i = i <= div (length v) 2
+
+
+bipartition :: (V, E) -> Partition -> FM s Partition
+bipartition (v, e) p = do
+
+  update freeCells $ const $ fromAscList [0 .. length v - 1]
+  update moves $ const mempty
+
+  initialGains (v, e) p
+  processCell (v, e) p
+
+  (g, q) <- computeG p
+
+  update iterations succ
+
+  if g <= 0
+    then pure p
+    else bipartition (v, e) q
+
+
+
+computeG :: Partition -> FM s (Int, Partition)
+computeG p0 = do
+  (_, g, h) <- foldl' accum (0, 0, p0) . reverse <$> value moves
   pure (g, h)
   where
     accum :: (Int, Int, Partition) -> (Move, Partition) -> (Int, Int, Partition)
@@ -164,49 +198,15 @@ computeG = do
       = (gmax, g + gc, p)
 
 
-fiducciaMattheyses :: (V, E) -> FM s Partition
-fiducciaMattheyses (v, e) = do
 
-  update partitioning $ const $
-    if length v < 3000
-    then P (fromAscList [x | x <- base, even x]) (fromAscList [x | x <- base, not $ even x])
-    else P (fromAscList [x | x <- base, half x]) (fromAscList [x | x <- base, not $ half x])
-
-  bipartition (v, e)
-
-  where
-    base = [0 .. length v - 1]
-    half i = i <= div (length v) 2
-
-
-bipartition :: (V, E) -> FM s Partition
-bipartition (v, e) = do
-
-  p <- value partitioning
-
-  update freeCells $ const $ fromAscList [0 .. length v - 1]
-  update moves $ const mempty
-
-  initialGains (v, e)
-  processCell (v, e)
-
-  (g, q) <- computeG
-
-  update iterations succ
-  update partitioning $ const q
-
-  if g <= 0
-    then pure p
-    else bipartition (v, e)
-
-
-processCell :: (V, E) -> FM s ()
-processCell (v, e) = do
-  ci <- selectBaseCell
-  for_ ci $ \ i -> do
-    lockCell i
-    updateGains (v, e) i
-    processCell (v, e)
+processCell :: (V, E) -> Partition -> FM s ()
+processCell (v, e) p = do
+  ck <- selectBaseCell p
+  for_ ck $ \ c -> do
+    lockCell c
+    q <- moveCell c p
+    updateGains c (v, e) p
+    processCell (v, e) q
 
 
 lockCell :: Int -> FM s ()
@@ -215,35 +215,31 @@ lockCell c = do
   removeGain c
 
 
-moveCell :: Int -> FM s ()
-moveCell c = do
+moveCell :: Int -> Partition -> FM s Partition
+moveCell c p = do
   Gain _ u _ <- value gains
   g <- st $ read u c
-  update partitioning $ move c
-  p <- value partitioning
-  update moves ((Move g c, p) :)
+  let q = move c p
+  update moves ((Move g c, q) :)
+  pure q
 
 
-selectBaseCell :: FM s (Maybe Int)
-selectBaseCell = do
-  h <- snapshot
+selectBaseCell :: Partition -> FM s (Maybe Int)
+selectBaseCell p = do
+  h <- value freeCells
   bucket <- maxGain
   case bucket of
-    Just (i, xs) -> pure $ balanceCriterion h i `find` xs
+    Just (i, xs) -> pure $ balanceCriterion h p i `find` xs
     _ -> pure Nothing
 
 
-updateGains :: (V, E) -> Int -> FM s ()
-updateGains (v, e) c = do
-
-  p <- value partitioning
+updateGains :: Int -> (V, E) -> Partition -> FM s ()
+updateGains c (v, e) p = do
 
   let f = fromBlock p c e
       t = toBlock p c e
 
   free <- value freeCells
-
-  moveCell c
 
   for_ (elems $ v ! c) $ \ n -> do
 
@@ -308,10 +304,8 @@ modifyGain f c = do
 
 
 
-initialGains :: (V, E) -> FM s ()
-initialGains (v, e) = do
-
-  p <- value partitioning
+initialGains :: (V, E) -> Partition -> FM s ()
+initialGains (v, e) p = do
 
   let nodes = flip imap v $ \ i ns ->
         let f = fromBlock p i e
@@ -331,14 +325,13 @@ initialGains (v, e) = do
 
 
 
-balanceCriterion :: Heu s -> Int -> Int -> Bool
-balanceCriterion h smax c
+balanceCriterion :: IntSet -> Partition -> Int -> Int -> Bool
+balanceCriterion h (P p q) smax c
   = div v r - k * smax <= a && a <= div v r + k * smax
   where
-    P p q = h ^. partitioning
     a = last (succ : [pred | member c p]) (size p)
     v = size p + size q
-    k = h ^. freeCells . to size
+    k = size h
     r = fromIntegral $ denominator balanceFactor `div` numerator balanceFactor
 
 
