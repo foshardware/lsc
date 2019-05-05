@@ -91,14 +91,12 @@ nonDeterministic f = withSystemRandom $ \ r -> stToIO $ runFMWithGen r f
 prng :: FM s (GenST s)
 prng = fst <$> ask
 
+
 randomPermutation :: Int -> FM s (Vector Int)
 randomPermutation n = do
   gen <- prng
   v <- st $ unsafeThaw $ generate n id
-  for_ [0 .. n - 2] $ \ i -> do
-    r <- uniform gen
-    let j = i + mod r (n - i)
-    unsafeSwap v i j
+  for_ [0 .. n - 2] $ \ i -> unsafeSwap v i =<< uniformR (i, n - 1) gen
   unsafeFreeze v
 
 
