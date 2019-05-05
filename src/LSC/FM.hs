@@ -92,6 +92,16 @@ prng :: FM s (GenST s)
 prng = fst <$> ask
 
 
+-- seed bits: 256 * 32 = 8192
+-- maximum list length: 966
+--
+--   966! =~ 2^8192
+--
+-- desired seed bits: 256909
+-- desired list length: 20000
+--
+--   20000! =~ 2^256909
+--
 randomPermutation :: Int -> FM s (Vector Int)
 randomPermutation n = do
   gen <- prng
