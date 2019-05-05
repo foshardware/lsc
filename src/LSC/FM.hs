@@ -92,10 +92,10 @@ prng = fst <$> ask
 
 
 -- | This function does not reach all possible permutations for lists
---   consisting of more than 966 elements. Any PRNGs possible states
+--   consisting of more than 969 elements. Any PRNGs possible states
 --   are bound by its possible seed values.
---   In the case of MWC the period is 2^8222 which allow for roughly
---   969! different states.
+--   In the case of MWC8222 the period is 2^8222 which allows for
+--   not more than 969! different states.
 --
 -- seed bits: 8222
 -- maximum list length: 969
