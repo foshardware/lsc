@@ -480,7 +480,7 @@ debug msg = do
   enabled <- view enableDebug <$> environment
   when enabled $ unless (null msg) $ liftIO $ do
     time <- show . round <$> getPOSIXTime
-    errorConcurrent $ unlines [unwords $ time : "->" : toList msg]
+    errorConcurrent $ unlines $ unwords ["->", time] : toList msg
     flushConcurrentOutput
 
 

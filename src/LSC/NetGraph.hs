@@ -21,15 +21,7 @@ netGraphStats top = unlines $
     , top ^. nets ^. to length . to show, "nets"
     ]
   ] <>
-  [ unwords
-    [ unpack i <> ":"
-    , n ^. supercell . pins . to length . to show, "pins,"
-    , n ^. gates ^. to length . to show, "gates,"
-    , n ^. nets ^. to length . to show, "nets"
-    ]
-  | (i, n) <- top ^. subcells . to assocs
-  ] <>
-  []
+  [ netGraphStats n | (_, n) <- top ^. subcells . to assocs ]
 
 
 rebuildEdges :: Vector Gate -> Map Identifier Net

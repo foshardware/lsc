@@ -25,8 +25,6 @@ import Data.Vector.Mutable (STVector, read, modify, replicate)
 import Prelude hiding (replicate, length, read, lookup)
 
 
-type FM s = ReaderT (STRef s (Heu s)) (ST s)
-
 
 balanceFactor :: Rational
 balanceFactor = 1 % 2
@@ -82,8 +80,7 @@ data Heu s = Heu
 makeFieldsNoPrefix ''Heu
 
 
-st :: ST s a -> FM s a
-st = lift
+type FM s = ReaderT (STRef s (Heu s)) (ST s)
 
 
 evalFM :: FM s a -> ST s a
@@ -94,6 +91,10 @@ runFM f = do
   g <- Gain <$> newSTRef mempty <*> thaw mempty <*> new
   r <- newSTRef $ Heu mempty g mempty mempty 0
   runReaderT f r
+
+
+st :: ST s a -> FM s a
+st = lift
 
 
 update :: Simple Setter (Heu s) a -> (a -> a) -> FM s ()
@@ -290,13 +291,13 @@ initialGains (v, e) = do
 
   let gmax = foldMap singleton nodes
 
-  g <- st $ do
+  initial <- st $ do
       gain <- newSized $ size gmax
       flip imapM_ nodes $ \ k x ->
           mutate gain x $ (, ()) . pure . maybe [k] (k:)
       Gain <$> newSTRef gmax <*> thaw nodes <*> pure gain
 
-  update gains $ const g
+  update gains $ const initial
 
 
 
@@ -305,7 +306,7 @@ balanceCriterion h smax c
   = div v r - k * smax <= a && a <= div v r + k * smax
   where
     P p q = h ^. partitioning
-    a = last $ [succ $ size p] ++ [pred $ size p | member c p]
+    a = last (succ : [pred | member c p]) (size p)
     v = size p + size q
     k = h ^. freeCells . to size
     r = fromIntegral $ denominator balanceFactor `div` numerator balanceFactor

@@ -8,8 +8,9 @@ import Control.Monad.IO.Class
 import Data.Default
 import Data.Foldable
 import Data.IntSet (size, elems)
-import Data.Map (assocs, fromList, mapWithKey, lookup, restrictKeys, withoutKeys, keysSet)
+import Data.Map hiding (size, elems, toList, null, (!))
 import qualified Data.Set as Set
+import Data.Text (unpack)
 import Data.Vector (fromListN, (!))
 import Prelude hiding (filter, lookup)
 
@@ -18,16 +19,37 @@ import LSC.NetGraph
 import LSC.Types
 
 
+
 exline :: NetGraph -> LSC NetGraph
-exline = bisection
+exline top = do
+
+  result <- recursiveBisection 40 top
+
+  debug
+    [ unpack (top ^. identifier) ++ ": final stats"
+    , netGraphStats result
+    ]
+
+  pure result
+
+
+
+recursiveBisection :: Int -> NetGraph -> LSC NetGraph
+recursiveBisection i top
+  | top ^. gates . to length < i = pure top
+recursiveBisection i top = do
+  next <- bisection top
+  subs <- recursiveBisection i `mapM` view subcells next
+  pure $ next &~ do
+    subcells .= subs
 
 
 bisection :: NetGraph -> LSC NetGraph
 bisection top = do
 
   debug
-    [ "exlining starts."
-    , "\r\n", netGraphStats top
+    [ unpack (top ^. identifier) ++ ": exlining starts"
+    , netGraphStats top
     ]
 
   (P p q, it) <- liftIO $ stToIO $ evalFM $ (,) <$> partitionFM top <*> value FM.iterations
@@ -36,8 +58,8 @@ bisection top = do
   let g i = view gates top ! i
 
   -- gate vector for each partition
-  let g1 = fromListN (size p) (g <$> elems p)
-      g2 = fromListN (size q) (g <$> elems q)
+  let g1 = set number `imap` fromListN (size p) (g <$> elems p)
+      g2 = set number `imap` fromListN (size q) (g <$> elems q)
 
   -- edge identifiers for each partition
   let e1 = Set.fromList $ snd <$> foldMap (view $ wires . to assocs) g1
@@ -68,12 +90,12 @@ bisection top = do
 
   -- super cells for each partition
   let c1 = top &~ do
-        identifier .= view identifier top <> "_1"
+        identifier .= view identifier top <> "+"
         supercell %= (pins .~ p1 <> f1)
         gates .= g1
-        nets .= rebuildEdges g2
+        nets .= rebuildEdges g1
   let c2 = top &~ do
-        identifier .= view identifier top <> "_2"
+        identifier .= view identifier top <> "-"
         supercell %= (pins .~ p2 <> f2)
         gates .= g2
         nets .= rebuildEdges g2
@@ -97,10 +119,11 @@ bisection top = do
         subcells .= fromList [(c1 ^. identifier, c1), (c2 ^. identifier, c2)]
 
   debug
-    [ "exlining finished."
-    , "\r\n", netGraphStats result
-    , "\r\n", "iterations:", show it
-    , "\r\n", "cut size:", show $ length cut
+    [ unpack (view identifier top) ++ ": exlining finished"
+    , netGraphStats result
+    , "iterations: "++ show it
+    , "cut size: "++ show (length cut)
+    , ""
     ]
 
   pure result
