@@ -25,7 +25,7 @@ netGraphStats :: NetGraph -> String
 netGraphStats top = concat
   [ unwords
     [ top ^. identifier . to unpack <> ":"
-    , unpack $ goedelIdentifier $ netGraphGoedel top, "goedel,"
+    , unpack $ goedelIdentifier $ goedel top, "goedel,"
     , top ^. subcells . to length . to show, "subcells,"
     , top ^. supercell . pins . to length . to show, "pins,"
     , top ^. gates ^. to length . to show, "gates,"
@@ -34,7 +34,7 @@ netGraphStats top = concat
   , unlines [ mempty | start ]
   , unlines
       [ netGraphStats n
-      | n <- sortBy (compare `on` netGraphGoedel) (top ^. subcells . to elems)
+      | n <- sortBy (compare `on` goedel) (top ^. subcells . to elems)
       ]
   , unlines [ "" | start ]
   , unlines [ top ^. subcells . to length . to show
