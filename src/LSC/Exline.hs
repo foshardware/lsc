@@ -23,7 +23,20 @@ import LSC.Types
 exline :: NetGraph -> LSC NetGraph
 exline top = do
 
-  result <- recursiveBisection 40 top
+  next <- recursiveBisection 16 10 top
+
+  let ls = fromList [ (x ^. identifier, x) | x <- leaves next ]
+
+  let gs = set number `imap` fromListN (length ls)
+        [ def & identifier .~ i & wires .~ w
+        | (i, x) <- assocs ls
+        , let w = fromAscList [ (y, y) | y <- x ^. supercell . pins . to keys ]
+        ]
+
+  let result = next &~ do
+        gates .= gs
+        nets .= rebuildEdges gs
+        subcells .= ls
 
   debug
     [ unpack (top ^. identifier) ++ ": final stats"
@@ -34,14 +47,14 @@ exline top = do
 
 
 
-recursiveBisection :: Int -> NetGraph -> LSC NetGraph
-recursiveBisection i top
-  | top ^. gates . to length < i = pure top
-recursiveBisection i top = do
+recursiveBisection :: Int -> Int -> NetGraph -> LSC NetGraph
+recursiveBisection d i top
+  | d <= 0 || top ^. gates . to length < i = pure top
+recursiveBisection d i top = do
   next <- bisection top
-  subs <- recursiveBisection i `mapM` view subcells next
+  subs <- recursiveBisection (pred d) i `mapM` view subcells next
   pure $ next &~ do
-    subcells .= subs
+    subcells .= filter (not . null . view gates) subs
 
 
 bisection :: NetGraph -> LSC NetGraph

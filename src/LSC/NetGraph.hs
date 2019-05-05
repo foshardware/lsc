@@ -2,9 +2,10 @@
 module LSC.NetGraph where
 
 import Control.Lens
+import Control.Monad
 import Data.Default
 import Data.Foldable
-import Data.Map (Map, assocs, singleton, fromListWith)
+import Data.Map (Map, assocs, elems, singleton, fromListWith)
 import Data.Text (unpack)
 import Data.Vector (Vector)
 
@@ -12,7 +13,7 @@ import LSC.Types
 
 
 netGraphStats :: NetGraph -> String
-netGraphStats top = unlines $
+netGraphStats top = concat
   [ unwords
     [ top ^. identifier . to unpack <> ":"
     , top ^. subcells . to length . to show, "subcells,"
@@ -20,8 +21,9 @@ netGraphStats top = unlines $
     , top ^. gates ^. to length . to show, "gates,"
     , top ^. nets ^. to length . to show, "nets"
     ]
-  ] <>
-  [ netGraphStats n | (_, n) <- top ^. subcells . to assocs ]
+  , unlines [ "" | not $ top ^. subcells . to null ]
+  , unlines [ netGraphStats n | n <- top ^. subcells . to elems ]
+  ]
 
 
 rebuildEdges :: Vector Gate -> Map Identifier Net
@@ -31,4 +33,9 @@ rebuildEdges nodes = fromListWith (<>)
     , (contact, net) <- gate ^. wires & assocs
     , let pin = def & identifier .~ contact
     ]
+
+
+leaves :: NetGraph -> [NetGraph]
+leaves top | top ^. subcells . to null = pure top
+leaves top = join $ top ^. subcells . to elems <&> leaves
 
