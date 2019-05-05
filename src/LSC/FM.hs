@@ -23,6 +23,7 @@ import Data.STRef
 import Data.Vector (Vector, freeze, thaw, (!))
 import Data.Vector.Mutable (STVector, read, modify, replicate)
 import Prelude hiding (replicate, length, read, lookup)
+import System.Random
 
 
 
@@ -69,11 +70,15 @@ partitionBalance :: Partition -> Int
 partitionBalance (P a b) = abs $ size a - size b
 
 
+type Seed s = STRef s [Int]
+
+
 data Heu s = Heu
   { _partitioning :: Partition
   , _gains        :: Gain s Int
   , _freeCells    :: IntSet
   , _moves        :: [(Move, Partition)]
+  , _seed         :: Seed s
   , _iterations   :: Int
   }
 
@@ -83,13 +88,33 @@ makeFieldsNoPrefix ''Heu
 type FM s = ReaderT (STRef s (Heu s)) (ST s)
 
 
+nonDeterministic :: FM RealWorld a -> IO a
+nonDeterministic f = do
+  s <- randoms <$> getStdGen
+  stToIO $ do
+    r <- newSTRef s
+    runFMWithSeed r f
+
+randomNumbers :: Int -> FM s [Int]
+randomNumbers n = do
+  s <- value seed
+  st $ do
+    (ns, rs) <- splitAt n <$> readSTRef s
+    ns <$ writeSTRef s rs
+
+
 evalFM :: FM s a -> ST s a
 evalFM = runFM
 
 runFM :: FM s a -> ST s a
 runFM f = do
+  s <- newSTRef mempty
+  runFMWithSeed s f
+
+runFMWithSeed :: Seed s -> FM s a -> ST s a
+runFMWithSeed s f = do
   g <- Gain <$> newSTRef mempty <*> thaw mempty <*> new
-  r <- newSTRef $ Heu mempty g mempty mempty 0
+  r <- newSTRef $ Heu mempty g mempty mempty s 0
   runReaderT f r
 
 

@@ -5,7 +5,6 @@ import Control.Arrow.Select
 import Control.Concurrent
 import Control.Lens
 import Control.Monad
-import Control.Monad.ST
 import Control.Monad.IO.Class
 import Data.Bits
 import Data.Default
@@ -33,7 +32,7 @@ fm = testGroup "FM" $
 
 fmInputRoutine :: IO ()
 fmInputRoutine = do
-  void $ stToIO $ evalFM $ fiducciaMattheyses =<< inputRoutine 5 6
+  void $ nonDeterministic $ fiducciaMattheyses =<< inputRoutine 5 6
     [ (0,3), (0,4)
     , (1,1), (1,4)
     , (2,0), (2,1), (2,2)

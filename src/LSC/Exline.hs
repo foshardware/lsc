@@ -3,7 +3,6 @@
 module LSC.Exline where
 
 import Control.Lens
-import Control.Monad.ST
 import Control.Monad.IO.Class
 import Data.Default
 import Data.Foldable
@@ -65,7 +64,7 @@ bisection top = do
     , netGraphStats top
     ]
 
-  (P p q, it) <- liftIO $ stToIO $ evalFM $ (,) <$> partitionFM top <*> value FM.iterations
+  (it, P p q) <- liftIO $ nonDeterministic $ (,) <$> value FM.iterations <*> partitionFM top
 
   -- get a gate
   let g i = view gates top ! i
