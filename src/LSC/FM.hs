@@ -111,9 +111,8 @@ prng = fst <$> ask
 --
 randomPermutation :: Int -> FM s (Vector Int)
 randomPermutation n = do
-  gen <- prng
   v <- st $ unsafeThaw $ generate n id
-  for_ [0 .. n - 2] $ \ i -> unsafeSwap v i =<< uniformR (i, n - 1) gen
+  for_ [0 .. n - 2] $ \ i -> unsafeSwap v i =<< uniformR (i, n - 1) =<< prng
   unsafeFreeze v
 
 
@@ -121,7 +120,7 @@ evalFM :: FM s a -> ST s a
 evalFM = runFM
 
 runFM :: FM s a -> ST s a
-runFM = runFMWithGen undefined
+runFM = runFMWithGen $ error "prng not initialized"
 
 runFMWithGen :: GenST s -> FM s a -> ST s a
 runFMWithGen s f = do
