@@ -31,7 +31,7 @@
 
 ### Exline a large component
 
-`lsc -b sample/fulladder.blif -l sample/osu035.lef -x -d > result.svg`  
+`lsc -b sample/picorv32.blif -l sample/osu035.lef -x -d > result.svg`  
 
 
 ### Tests
