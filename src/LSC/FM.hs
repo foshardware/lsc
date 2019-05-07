@@ -17,7 +17,7 @@ import Data.Maybe
 import Data.Monoid
 import Data.HashTable.ST.Cuckoo (HashTable)
 import Data.HashTable.ST.Cuckoo (mutate, lookup, new, newSized)
-import Data.IntSet hiding (filter, null, foldl')
+import Data.IntSet hiding (filter, null, foldl', toList)
 import qualified Data.IntSet as S
 import Data.Ratio
 import Data.STRef
@@ -43,38 +43,37 @@ data Move
   deriving Show
 
 
-type Partition = P IntSet
+data Bipartitioning = Bi !IntSet !IntSet
 
-data P a = P !a !a
 
-unP :: P a -> (a, a)
-unP (P a b) = (a, b)
+unBi :: Bipartitioning -> (IntSet, IntSet)
+unBi (Bi a b) = (a, b)
 
-instance Eq a => Eq (P a) where
-  P a _ == P b _ = a == b
+instance Eq Bipartitioning where
+  Bi a _ == Bi b _ = a == b
 
-instance Semigroup a => Semigroup (P a) where
-  P a b <> P c d = P (a <> c) (b <> d)
+instance Semigroup Bipartitioning where
+  Bi a b <> Bi c d = Bi (a <> c) (b <> d)
 
-instance Monoid a => Monoid (P a) where
-  mempty = P mempty mempty
+instance Monoid Bipartitioning where
+  mempty = Bi mempty mempty
   mappend = (<>)
 
-instance Show a => Show (P a) where
-  show (P a b) = "<"++ show a ++", "++ show b ++">"
+instance Show Bipartitioning where
+  show (Bi a b) = "<"++ show a ++", "++ show b ++">"
 
-move :: Int -> Partition -> Partition
-move c (P a b) | member c a = P (delete c a) (insert c b)
-move c (P a b) = P (insert c a) (delete c b)
+move :: Int -> Bipartitioning -> Bipartitioning
+move c (Bi a b) | member c a = Bi (delete c a) (insert c b)
+move c (Bi a b) = Bi (insert c a) (delete c b)
 
-partitionBalance :: Partition -> Int
-partitionBalance (P a b) = abs $ size a - size b
+partitionBalance :: Bipartitioning -> Int
+partitionBalance (Bi a b) = abs $ size a - size b
 
 
 data Heu s = Heu
   { _gains        :: Gain s Int
   , _freeCells    :: IntSet
-  , _moves        :: [(Move, Partition)]
+  , _moves        :: [(Move, Bipartitioning)]
   , _iterations   :: !Int
   }
 
@@ -152,24 +151,30 @@ type V = CellArray
 type E = NetArray
 
 
-multiLevel :: (V, E) -> FM s Partition
-multiLevel = fiducciaMattheyses
+
+fmPartition :: (V, E) -> Maybe Bipartitioning -> FM s Bipartitioning
+fmPartition (v, e) (Just p) = bipartition (v, e) p
+fmPartition (v, e)  Nothing = do
+  u <- randomPermutation $ length v
+  let (p, q) = splitAt (length v `div` 2) (toList u)
+  bipartition (v, e) $ Bi (fromList p) (fromList q)
 
 
-fiducciaMattheyses :: (V, E) -> FM s Partition
+
+fiducciaMattheyses :: (V, E) -> FM s Bipartitioning
 fiducciaMattheyses (v, e) = do
 
   bipartition (v, e) $
     if length v < 3000
-    then P (fromAscList [x | x <- base, even x]) (fromAscList [x | x <- base, not $ even x])
-    else P (fromAscList [x | x <- base, half x]) (fromAscList [x | x <- base, not $ half x])
+    then Bi (fromAscList [x | x <- base, even x]) (fromAscList [x | x <- base, not $ even x])
+    else Bi (fromAscList [x | x <- base, half x]) (fromAscList [x | x <- base, not $ half x])
 
   where
     base = [0 .. length v - 1]
     half i = i <= div (length v) 2
 
 
-bipartition :: (V, E) -> Partition -> FM s Partition
+bipartition :: (V, E) -> Bipartitioning -> FM s Bipartitioning
 bipartition (v, e) p = do
 
   update freeCells $ const $ fromAscList [0 .. length v - 1]
@@ -188,12 +193,12 @@ bipartition (v, e) p = do
 
 
 
-computeG :: Partition -> FM s (Int, Partition)
+computeG :: Bipartitioning -> FM s (Int, Bipartitioning)
 computeG p0 = do
   (_, g, h) <- foldl' accum (0, 0, p0) . reverse <$> value moves
   pure (g, h)
   where
-    accum :: (Int, Int, Partition) -> (Move, Partition) -> (Int, Int, Partition)
+    accum :: (Int, Int, Bipartitioning) -> (Move, Bipartitioning) -> (Int, Int, Bipartitioning)
     accum (gmax, g, _) (Move gc _, q)
       | g + gc > gmax
       = (g + gc, g + gc, q)
@@ -206,7 +211,7 @@ computeG p0 = do
 
 
 
-processCell :: (V, E) -> Partition -> FM s ()
+processCell :: (V, E) -> Bipartitioning -> FM s ()
 processCell (v, e) p = do
   ck <- selectBaseCell p
   for_ ck $ \ c -> do
@@ -222,7 +227,7 @@ lockCell c = do
   removeGain c
 
 
-moveCell :: Int -> Partition -> FM s Partition
+moveCell :: Int -> Bipartitioning -> FM s Bipartitioning
 moveCell c p = do
   Gain _ u _ <- value gains
   g <- st $ read u c
@@ -231,7 +236,7 @@ moveCell c p = do
   pure q
 
 
-selectBaseCell :: Partition -> FM s (Maybe Int)
+selectBaseCell :: Bipartitioning -> FM s (Maybe Int)
 selectBaseCell p = do
   h <- value freeCells
   bucket <- maxGain
@@ -240,7 +245,7 @@ selectBaseCell p = do
     _ -> pure Nothing
 
 
-updateGains :: Int -> (V, E) -> Partition -> FM s ()
+updateGains :: Int -> (V, E) -> Bipartitioning -> FM s ()
 updateGains c (v, e) p = do
 
   let f = fromBlock p c e
@@ -311,7 +316,7 @@ modifyGain f c = do
 
 
 
-initialGains :: (V, E) -> Partition -> FM s ()
+initialGains :: (V, E) -> Bipartitioning -> FM s ()
 initialGains (v, e) p = do
 
   let nodes = flip imap v $ \ i ns ->
@@ -332,8 +337,8 @@ initialGains (v, e) p = do
 
 
 
-balanceCriterion :: IntSet -> Partition -> Int -> Int -> Bool
-balanceCriterion h (P p q) smax c
+balanceCriterion :: IntSet -> Bipartitioning -> Int -> Int -> Bool
+balanceCriterion h (Bi p q) smax c
   = div v r - k * smax <= a && a <= div v r + k * smax
   where
     a = last (succ : [pred | member c p]) (size p)
@@ -342,11 +347,11 @@ balanceCriterion h (P p q) smax c
     r = fromIntegral $ denominator balanceFactor `div` numerator balanceFactor
 
 
-fromBlock, toBlock :: Partition -> Int -> E -> Int -> IntSet
-fromBlock (P a _) i e n | member i a = intersection a $ e ! n
-fromBlock (P _ b) _ e n = intersection b $ e ! n
-toBlock (P a b) i e n | member i a = intersection b $ e ! n
-toBlock (P a _) _ e n = intersection a $ e ! n
+fromBlock, toBlock :: Bipartitioning -> Int -> E -> Int -> IntSet
+fromBlock (Bi a _) i e n | member i a = intersection a $ e ! n
+fromBlock (Bi _ b) _ e n = intersection b $ e ! n
+toBlock (Bi a b) i e n | member i a = intersection b $ e ! n
+toBlock (Bi a _) _ e n = intersection a $ e ! n
 
 
 inputRoutine :: Foldable f => Int -> Int -> f (Int, Int) -> FM s (V, E)
