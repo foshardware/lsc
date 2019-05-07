@@ -22,7 +22,7 @@ import LSC.Types
 exline :: NetGraph -> LSC NetGraph
 exline top = do
 
-  next <- recursiveBisection 16 10 top
+  next <- recursiveBisection 10 top
 
   let ls = fromList [ (x ^. identifier, x) | x <- leaves next ]
 
@@ -46,14 +46,16 @@ exline top = do
 
 
 
-recursiveBisection :: Int -> Int -> NetGraph -> LSC NetGraph
-recursiveBisection d i top
-  | d <= 0 || top ^. gates . to length < i = pure top
-recursiveBisection d i top = do
-  next <- bisection top
-  subs <- recursiveBisection (pred d) i `mapM` view subcells next
-  pure $ next &~ do
-    subcells .= filter (not . null . view gates) subs
+
+recursiveBisection :: Int -> NetGraph -> LSC NetGraph
+recursiveBisection i top
+  | top ^. gates . to length < i
+  = pure top
+recursiveBisection i top = do
+    next <- bisection top
+    if next ^. subcells . to length < 2
+        then pure next
+        else flip (set subcells) next <$> recursiveBisection i `mapM` view subcells next
 
 
 bisection :: NetGraph -> LSC NetGraph
@@ -134,11 +136,12 @@ bisection top = do
         identifier .= view identifier c2
         wires .= w2
 
+  let pt = [(n1, c1) | size p > 0] ++ [(n2, c2) | size q > 0]
 
   let result = top &~ do
-        gates .= fromListN 2 [n1, n2]
-        nets .= rebuildEdges (fromListN 2 [n1, n2])
-        subcells .= fromList [(c1 ^. identifier, c1), (c2 ^. identifier, c2)]
+        gates .= (fst <$> fromListN 2 pt)
+        nets .= rebuildEdges (fst <$> fromListN 2 pt)
+        subcells .= fromList (fmap (\ (_, c) -> (view identifier c, c)) pt)
 
   debug
     [ unpack (view identifier top) ++ ": exlining finished"
