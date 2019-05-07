@@ -19,8 +19,20 @@
 
 ## Usage
 
+### Print usage
+
 `lsc -h`  
-`lsc -b sample/fulladder.blif -l sample/osu035.lef -c > result.svg`  
+
+
+### Place and route a small component
+
+`lsc -b sample/fulladder.blif -l sample/osu035.lef -c -d > result.svg`  
+
+
+### Exline a large component
+
+`lsc -b sample/picorv32.blif -l sample/osu035.lef -x -d > result.svg`  
+
 
 ## Tests
 
