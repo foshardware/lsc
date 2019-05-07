@@ -31,8 +31,8 @@
 
 ### LSC.FM
 
-- Fiduccia, et. al. (1982): A Linear-Time Heuristic for Improving Network Partitions [doi=10.1109/dac.1982.1585498](https://doi.org/10.1109/dac.1982.1585498)
-- Alpert, Huang, Kahng (1998): Multilevel Circuit Partitioning, [doi=10.1109/dac.1997.597204](https://doi.org/10.1109/dac.1997.597204)
+- Fiduccia, et. al. (1982): A Linear-Time Heuristic for Improving Network Partitions [10.1109/dac.1982.1585498](https://doi.org/10.1109/dac.1982.1585498)
+- Alpert, Huang, Kahng (1998): Multilevel Circuit Partitioning, [10.1109/dac.1997.597204](https://doi.org/10.1109/dac.1997.597204)
 
 ### LSC.SuffixTree
 
