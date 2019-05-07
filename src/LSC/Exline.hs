@@ -3,7 +3,6 @@
 module LSC.Exline where
 
 import Control.Lens
-import Control.Monad.ST
 import Control.Monad.IO.Class
 import Data.Default
 import Data.Foldable
@@ -65,7 +64,17 @@ bisection top = do
     , netGraphStats top
     ]
 
-  (P p q, it) <- liftIO $ stToIO $ evalFM $ (,) <$> partitionFM top <*> value FM.iterations
+  (Bi p q, it) <- liftIO $ nonDeterministic $ do
+
+      h <- inputRoutine
+        (top ^. nets . to length)
+        (top ^. gates . to length)
+        [ (n, c)
+        | (n, w) <- zip [0..] $ toList $ top ^. nets
+        , (c, _) <- w ^. contacts . to assocs
+        ]
+
+      (,) <$> fiducciaMattheyses h <*> value FM.iterations
 
   -- get a gate
   let g i = view gates top ! i
@@ -141,13 +150,4 @@ bisection top = do
 
   pure result
 
-
-partitionFM :: NetGraph -> FM s Partition
-partitionFM top = fiducciaMattheyses =<< inputRoutine
-    (top ^. nets . to length)
-    (top ^. gates . to length)
-    [ (n, c)
-    | (n, w) <- zip [0..] $ toList $ top ^. nets
-    , (c, _) <- w ^. contacts . to assocs
-    ]
 

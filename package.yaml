@@ -38,8 +38,11 @@ dependencies:
 - milp
 - mmorph
 - mtl
+- mwc-random
 - parsec
 - parsec-numbers
+- primitive
+- random
 - SafeSemaphore
 - template-haskell
 - text

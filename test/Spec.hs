@@ -5,8 +5,8 @@ import Control.Arrow.Select
 import Control.Concurrent
 import Control.Lens
 import Control.Monad
-import Control.Monad.ST
 import Control.Monad.IO.Class
+import Control.Monad.ST
 import Data.Bits
 import Data.Default
 import Prelude hiding (id, (.))
@@ -33,7 +33,7 @@ fm = testGroup "FM" $
 
 fmInputRoutine :: IO ()
 fmInputRoutine = do
-  void $ stToIO $ evalFM $ fiducciaMattheyses =<< inputRoutine 5 6
+  void $ runST $ evalFM $ fiducciaMattheyses =<< inputRoutine 5 6
     [ (0,3), (0,4)
     , (1,1), (1,4)
     , (2,0), (2,1), (2,2)
