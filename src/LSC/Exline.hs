@@ -29,7 +29,7 @@ exline top = do
   let gs = set number `imap` fromListN (length ls)
         [ def & identifier .~ i & wires .~ w
         | (i, x) <- assocs ls
-        , let w = fromAscList [ (y, y) | y <- x ^. supercell . pins . to keys ]
+        , let w = x ^. supercell . pins . to (mapWithKey const)
         ]
 
   let result = next &~ do
