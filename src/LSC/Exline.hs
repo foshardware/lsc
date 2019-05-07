@@ -124,17 +124,13 @@ bisection top = do
         gates .= g2
         nets .= rebuildEdges g2
 
-  -- wires for each new cell
-  let w1 = mapWithKey (\ i _ -> i) p1
-      w2 = mapWithKey (\ i _ -> i) p2
-
   -- new cell for each partition
   let n1 = def &~ do
         identifier .= view identifier c1
-        wires .= w1
+        wires .= mapWithKey const p1
   let n2 = def &~ do
         identifier .= view identifier c2
-        wires .= w2
+        wires .= mapWithKey const p2
 
   let pt = [(n1, c1) | size p > 0] ++ [(n2, c2) | size q > 0]
 
