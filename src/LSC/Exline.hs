@@ -5,13 +5,13 @@ module LSC.Exline where
 import Control.Lens
 import Control.Monad.IO.Class
 import Data.Default
-import Data.Foldable
+import Data.Foldable hiding (concat)
 import Data.IntSet (size, elems)
 import Data.Map hiding (size, elems, toList, null, (!))
 import qualified Data.Set as Set
 import Data.Text (unpack)
 import Data.Vector (fromListN, (!))
-import Prelude hiding (filter, lookup)
+import Prelude hiding (filter, concat, lookup)
 
 import LSC.FM as FM
 import LSC.NetGraph
@@ -20,31 +20,7 @@ import LSC.Types
 
 
 exline :: NetGraph -> LSC NetGraph
-exline top = do
-
-  next <- recursiveBisection 10 top
-
-  let ls = fromList [ (x ^. identifier, x) | x <- leaves next ]
-
-  let gs = set number `imap` fromListN (length ls)
-        [ def & identifier .~ i & wires .~ w
-        | (i, x) <- assocs ls
-        , let w = x ^. supercell . pins . to (mapWithKey const)
-        ]
-
-  let result = next &~ do
-        gates .= gs
-        nets .= rebuildEdges gs
-        subcells .= ls
-
-  debug
-    [ unpack (top ^. identifier) ++ ": final stats"
-    , netGraphStats result
-    ]
-
-  pure result
-
-
+exline = recursiveBisection 10
 
 
 recursiveBisection :: Int -> NetGraph -> LSC NetGraph
@@ -53,8 +29,8 @@ recursiveBisection i top
   = pure top
 recursiveBisection i top = do
     next <- bisection top
-    if next ^. subcells . to length < 2
-        then pure next
+    if next ^. subcells . to length <= 1
+        then pure top
         else flip (set subcells) next <$> recursiveBisection i `mapM` view subcells next
 
 
@@ -105,8 +81,8 @@ bisection top = do
 
   -- cut edges between partitions
   let fc = fromList [(e, def & identifier .~ e & dir .~ Just Out) | e <- toList cut]
-      f1 = restrictKeys fc s1 <> fmap invert (withoutKeys fc s1)
-      f2 = withoutKeys fc s1 <> fmap invert (restrictKeys fc s1)
+      f1 = mconcat [restrictKeys fc s1, invert <$> withoutKeys fc s1]
+      f2 = mconcat [withoutKeys fc s1, invert <$> restrictKeys fc s1]
 
   -- super cell pins for each partition
   let p1 = restrictKeys (top ^. supercell . pins) e1
