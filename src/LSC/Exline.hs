@@ -76,7 +76,7 @@ bisection top = do
         , (c, _) <- w ^. contacts . to assocs
         ]
 
-      (,) <$> fiducciaMattheyses h <*> value FM.iterations
+      (,) <$> fmPartition h Nothing <*> value FM.iterations
 
   -- get a gate
   let g i = view gates top ! i
