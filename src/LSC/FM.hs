@@ -195,16 +195,23 @@ coarsen (v, e) r = do
           let ws = [w | w <- elems neighbours, isJust $ f ! w]
 
           for_ ws $ \ w -> do
-              modify connectivity (\ x -> x + 1 % size (intersection (e ! w) (e ! uj))) w
-          conn <- unsafeFreeze connectivity
-          let w = maximumBy (compare `on` \ x -> conn ! x) ws
+              let d = size $ intersection (e!w) (e!uj)
+                  conn a = if d < 10 then a else a + 1 % d
+              modify connectivity conn w
 
-          unless (null ws) $ do
+          -- find maximum connectivity
+          suchaw <- newSTRef (Nothing, 0)
+          for_ ws $ \ w -> do
+              current  <- read connectivity w
+              (_, acc) <- readSTRef suchaw
+              when (current > acc)
+                $ writeSTRef suchaw $ (Just w, current)
+          (exists, _) <- readSTRef suchaw
+
+          for_ exists $ \ w -> do
               modify clustering (insert w) =<< readSTRef k
               modifySTRef' nMatch (+2)
               write u w Nothing
-
-          for_ ws $ \ w' -> write connectivity w' 0
 
           modifySTRef' k succ
 
