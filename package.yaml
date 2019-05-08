@@ -37,6 +37,7 @@ dependencies:
 - linear
 - milp
 - mmorph
+- monad-loops
 - mtl
 - mwc-random
 - parsec

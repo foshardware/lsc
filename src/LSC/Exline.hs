@@ -20,7 +20,7 @@ import LSC.Types
 
 
 exline :: NetGraph -> LSC NetGraph
-exline = recursiveBisection 10
+exline = recursiveBisection 8
 
 
 recursiveBisection :: Int -> NetGraph -> LSC NetGraph

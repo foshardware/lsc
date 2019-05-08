@@ -9,10 +9,12 @@ module LSC.FM where
 
 import Control.Lens
 import Control.Monad
+import Control.Monad.Loops
 import Control.Monad.Primitive
 import Control.Monad.Reader
 import Control.Monad.ST
 import Data.Foldable
+import Data.Function
 import Data.Maybe
 import Data.Monoid
 import Data.HashTable.ST.Cuckoo (HashTable)
@@ -21,15 +23,29 @@ import Data.IntSet hiding (filter, null, foldl', toList)
 import qualified Data.IntSet as S
 import Data.Ratio
 import Data.STRef
-import Data.Vector (Vector, unsafeFreeze, unsafeThaw, freeze, thaw, generate, (!))
-import Data.Vector.Mutable (STVector, read, modify, replicate, unsafeSwap)
-import Prelude hiding (replicate, length, read, lookup)
+import Data.Vector (Vector, unsafeFreeze, unsafeThaw, freeze, thaw, take, generate, (!))
+import Data.Vector.Mutable (STVector, read, write, modify, replicate, unsafeSwap)
+import Prelude hiding (replicate, length, read, lookup, take)
 import System.Random.MWC
 
 
 
+matchingRatio :: Rational
+matchingRatio = 1 % 3
+
+coarseningThreshold :: Int
+coarseningThreshold = 35
+
+
 balanceFactor :: Rational
 balanceFactor = 1 % 2
+
+
+type NetArray  = Vector IntSet
+type CellArray = Vector IntSet
+
+type V = CellArray
+type E = NetArray
 
 
 data Gain s a = Gain
@@ -38,13 +54,14 @@ data Gain s a = Gain
   (HashTable s Int [a]) -- nodes indexed by gain
 
 
+
 data Move
   = Move Int Int -- Move Gain Cell
   deriving Show
 
 
-data Bipartitioning = Bi !IntSet !IntSet
 
+data Bipartitioning = Bi !IntSet !IntSet
 
 unBi :: Bipartitioning -> (IntSet, IntSet)
 unBi (Bi a b) = (a, b)
@@ -70,6 +87,9 @@ partitionBalance :: Bipartitioning -> Int
 partitionBalance (Bi a b) = abs $ size a - size b
 
 
+type Clustering = Vector IntSet
+
+
 data Heu s = Heu
   { _gains        :: Gain s Int
   , _freeCells    :: IntSet
@@ -88,31 +108,6 @@ nonDeterministic f = withSystemRandom $ \ r -> stToIO $ runFMWithGen r f
 
 prng :: FM s (GenST s)
 prng = fst <$> ask
-
-
--- | This function does not reach all possible permutations for lists
---   consisting of more than 969 elements. Any PRNGs possible states
---   are bound by its possible seed values.
---   In the case of MWC8222 the period is 2^8222 which allows for
---   not more than 969! different states.
---
--- seed bits: 8222
--- maximum list length: 969
---
---   969! =~ 2^8222
---
--- Monotonicity of  n! / (2^n): 
---
--- desired seed bits: 256909
--- desired list length: 20000
---
---   20000! =~ 2^256909
---
-randomPermutation :: Int -> FM s (Vector Int)
-randomPermutation n = do
-  v <- st $ unsafeThaw $ generate n id
-  for_ [0 .. n - 2] $ \ i -> unsafeSwap v i =<< uniformR (i, n - 1) =<< prng
-  unsafeFreeze v
 
 
 evalFM :: FM s a -> ST s a
@@ -144,11 +139,90 @@ snapshot :: FM s (Heu s)
 snapshot = st . readSTRef . snd =<< ask
 
 
-type NetArray  = Vector IntSet
-type CellArray = Vector IntSet
+-- | This function does not reach all possible permutations for lists
+--   consisting of more than 969 elements. Any PRNGs possible states
+--   are bound by its possible seed values.
+--   In the case of MWC8222 the period is 2^8222 which allows for
+--   not more than 969! different states.
+--
+-- seed bits: 8222
+-- maximum list length: 969
+--
+--   969! =~ 2^8222
+--
+-- Monotonicity of  n! / (2^n): 
+--
+-- desired seed bits: 256909
+-- desired list length: 20000
+--
+--   20000! =~ 2^256909
+--
+randomPermutation :: Int -> FM s (Vector Int)
+randomPermutation n = do
+  v <- st $ unsafeThaw $ generate n id
+  for_ [0 .. n - 2] $ \ i -> unsafeSwap v i =<< uniformR (i, n - 1) =<< prng
+  unsafeFreeze v
 
-type V = CellArray
-type E = NetArray
+
+-- | a.k.a. match
+--
+coarsen :: (V, E) -> Rational -> FM s Clustering
+coarsen (v, e) r = do
+
+  p <- randomPermutation $ length v
+  u <- unsafeThaw $ Just <$> p
+
+  nMatch <- st $ newSTRef 0
+  k <- st $ newSTRef 0
+  j <- st $ newSTRef 0
+
+  clustering <- replicate (length v) mempty
+
+  connectivity <- thaw $ 0 <$ v
+
+  let continue n i = i < length v && n % fromIntegral (length v) < r
+  st $
+    whileM_ (continue <$> readSTRef nMatch <*> readSTRef j) $ do
+
+      unmatched <- read u =<< readSTRef j
+      for_ unmatched $ \ uj -> do
+
+          modify clustering (insert uj) =<< readSTRef k
+
+          let neighbours = S.foldl' (\ a n -> a <> e!n) S.empty $ v!uj
+
+          f <- unsafeFreeze u
+          let ws = [w | w <- elems neighbours, isJust $ f ! w]
+
+          for_ ws $ \ w -> do
+              modify connectivity (\ x -> x + 1 % size (intersection (e ! w) (e ! uj))) w
+          conn <- unsafeFreeze connectivity
+          let w = maximumBy (compare `on` \ x -> conn ! x) ws
+
+          unless (null ws) $ do
+              modify clustering (insert w) =<< readSTRef k
+              modifySTRef' nMatch (+2)
+              write u w Nothing
+
+          for_ ws $ \ w' -> write connectivity w' 0
+
+          modifySTRef' k succ
+
+      modifySTRef' j succ
+
+  st $
+    whileM_ ((length v >) <$> readSTRef j) $ do
+
+      unmatched <- read u =<< readSTRef j
+      for_ unmatched $ \ uj -> do
+          modify clustering (insert uj) =<< readSTRef k
+          modifySTRef' k succ
+
+      modifySTRef' j succ
+
+  st $
+    take <$> readSTRef k <*> freeze clustering
+
 
 
 
@@ -162,16 +236,14 @@ fmPartition (v, e)  Nothing = do
 
 
 fiducciaMattheyses :: (V, E) -> FM s Bipartitioning
-fiducciaMattheyses (v, e) = do
-
-  bipartition (v, e) $
-    if length v < 3000
-    then Bi (fromAscList [x | x <- base, even x]) (fromAscList [x | x <- base, not $ even x])
-    else Bi (fromAscList [x | x <- base, half x]) (fromAscList [x | x <- base, not $ half x])
-
+fiducciaMattheyses (v, e)
+  = bipartition (v, e)
+  $ Bi (fromAscList [x | x <- base, part x]) (fromAscList [x | x <- base, not $ part x])
   where
     base = [0 .. length v - 1]
-    half i = i <= div (length v) 2
+    part = if length v < 1000
+      then even
+      else (<= length v `div` 2)
 
 
 bipartition :: (V, E) -> Bipartitioning -> FM s Bipartitioning
