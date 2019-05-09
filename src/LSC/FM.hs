@@ -61,30 +61,30 @@ data Move
 
 
 
-data Bipartitioning = Bi !IntSet !IntSet
+data Bipartitioning = Bisect !IntSet !IntSet
 
-unBi :: Bipartitioning -> (IntSet, IntSet)
-unBi (Bi a b) = (a, b)
+unBisect :: Bipartitioning -> (IntSet, IntSet)
+unBisect (Bisect a b) = (a, b)
 
 instance Eq Bipartitioning where
-  Bi a _ == Bi b _ = a == b
+  Bisect a _ == Bisect b _ = a == b
 
 instance Semigroup Bipartitioning where
-  Bi a b <> Bi c d = Bi (a <> c) (b <> d)
+  Bisect a b <> Bisect c d = Bisect (a <> c) (b <> d)
 
 instance Monoid Bipartitioning where
-  mempty = Bi mempty mempty
+  mempty = Bisect mempty mempty
   mappend = (<>)
 
 instance Show Bipartitioning where
-  show (Bi a b) = "<"++ show a ++", "++ show b ++">"
+  show (Bisect a b) = "<"++ show a ++", "++ show b ++">"
 
 move :: Int -> Bipartitioning -> Bipartitioning
-move c (Bi a b) | member c a = Bi (delete c a) (insert c b)
-move c (Bi a b) = Bi (insert c a) (delete c b)
+move c (Bisect a b) | member c a = Bisect (delete c a) (insert c b)
+move c (Bisect a b) = Bisect (insert c a) (delete c b)
 
 partitionBalance :: Bipartitioning -> Int
-partitionBalance (Bi a b) = abs $ size a - size b
+partitionBalance (Bisect a b) = abs $ size a - size b
 
 
 type Clustering = Vector IntSet
@@ -169,8 +169,8 @@ randomPermutation n = do
 
 
 
-induce :: (V, E) -> Clustering -> (V, E)
-induce (v, e) _ = undefined
+induce :: (V, E) -> Clustering -> ST s (V, E)
+induce (v, e) p = undefined 
 
 
 project :: (V, E) -> Clustering -> Bipartitioning -> Bipartitioning
@@ -192,6 +192,8 @@ match (v, e) r p = do
 
   connectivity <- thaw $ 0 <$ v
 
+  let conn x y = sum [ 1 % size (e!f) | f <- elems $ intersection (v!x) (v!y), size (e!f) < 10 ]
+
   let continue n i = i < length v && n % fromIntegral (length v) < r
   whileM_ (continue <$> readSTRef nMatch <*> readSTRef j)
     $ do
@@ -205,11 +207,7 @@ match (v, e) r p = do
 
           for_ neighbours $ \ w -> do
               seen <- isNothing <$> read u w
-              unless seen $ write connectivity w $ sum
-                [ 1 % size (e!f)
-                | f <- elems $ intersection (v!w) (v!uj)
-                -- , size (e!f) < 10
-                ]
+              unless seen $ write connectivity w $ conn w uj
 
           -- find maximum connectivity
           suchaw <- newSTRef (0, Nothing)
@@ -252,14 +250,14 @@ fmPartition (v, e) (Just p) = bipartition (v, e) p
 fmPartition (v, e)  Nothing = do
   u <- randomPermutation $ length v
   let (p, q) = splitAt (length v `div` 2) (toList u)
-  bipartition (v, e) $ Bi (fromList p) (fromList q)
+  bipartition (v, e) $ Bisect (fromList p) (fromList q)
 
 
 
 fiducciaMattheyses :: (V, E) -> FM s Bipartitioning
 fiducciaMattheyses (v, e)
   = bipartition (v, e)
-  $ Bi (fromAscList [x | x <- base, part x]) (fromAscList [x | x <- base, not $ part x])
+  $ Bisect (fromAscList [x | x <- base, part x]) (fromAscList [x | x <- base, not $ part x])
   where
     base = [0 .. length v - 1]
     part = if length v < 1000
@@ -431,7 +429,7 @@ initialGains (v, e) p = do
 
 
 balanceCriterion :: IntSet -> Bipartitioning -> Int -> Int -> Bool
-balanceCriterion h (Bi p q) smax c
+balanceCriterion h (Bisect p q) smax c
   = div v r - k * smax <= a && a <= div v r + k * smax
   where
     a = last (succ : [pred | member c p]) (size p)
@@ -441,14 +439,14 @@ balanceCriterion h (Bi p q) smax c
 
 
 fromBlock, toBlock :: Bipartitioning -> Int -> E -> Int -> IntSet
-fromBlock (Bi a _) i e n | member i a = intersection a $ e ! n
-fromBlock (Bi _ b) _ e n = intersection b $ e ! n
-toBlock (Bi a b) i e n | member i a = intersection b $ e ! n
-toBlock (Bi a _) _ e n = intersection a $ e ! n
+fromBlock (Bisect a _) i e n | member i a = intersection a $ e ! n
+fromBlock (Bisect _ b) _ e n = intersection b $ e ! n
+toBlock (Bisect a b) i e n | member i a = intersection b $ e ! n
+toBlock (Bisect a _) _ e n = intersection a $ e ! n
 
 
-inputRoutine :: Foldable f => Int -> Int -> f (Int, Int) -> FM s (V, E)
-inputRoutine n c xs = st $ do
+inputRoutine :: Foldable f => Int -> Int -> f (Int, Int) -> ST s (V, E)
+inputRoutine n c xs = do
   ns <- replicate n mempty
   cs <- replicate c mempty
   for_ xs $ \ (x, y) -> do

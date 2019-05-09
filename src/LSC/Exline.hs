@@ -42,9 +42,9 @@ bisection top = do
     , netGraphStats top
     ]
 
-  (Bi p q, it) <- liftIO $ nonDeterministic $ do
+  (Bisect p q, it) <- liftIO $ nonDeterministic $ do
 
-      h <- inputRoutine
+      h <- st $ inputRoutine
         (top ^. nets . to length)
         (top ^. gates . to length)
         [ (n, c)
