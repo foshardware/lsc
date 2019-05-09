@@ -7,7 +7,7 @@
 
 module LSC.FM where
 
-import Control.Lens
+import Control.Lens hiding (indexed)
 import Control.Monad
 import Control.Monad.Loops
 import Control.Monad.Primitive
@@ -23,7 +23,13 @@ import Data.IntSet hiding (filter, null, foldl', toList)
 import qualified Data.IntSet as S
 import Data.Ratio
 import Data.STRef
-import Data.Vector (Vector, unsafeFreeze, unsafeThaw, freeze, thaw, take, generate, (!))
+import Data.Vector
+  ( Vector
+  , unsafeFreeze, unsafeThaw
+  , freeze, thaw
+  , take, generate
+  , (!), indexed
+  )
 import Data.Vector.Mutable (STVector, read, write, modify, replicate, unsafeSwap)
 import Prelude hiding (replicate, length, read, lookup, take)
 import System.Random.MWC
@@ -169,12 +175,65 @@ randomPermutation n = do
 
 
 
+fmMultiLevel :: (V, E) -> Int -> Rational -> FM s Bipartitioning
+fmMultiLevel (v, e) t r = do
+
+    i <- st $ newSTRef 0
+
+    hypergraphs  <- replicate 64 mempty
+    clustering   <- replicate 64 mempty
+    partitioning <- replicate 64 mempty
+
+    write hypergraphs 0 (v, e)
+
+    let continue = pure . (t < ) . length . fst =<< read hypergraphs =<< readSTRef i
+    whileM_ (st continue) $ do
+
+      u <- randomPermutation $ length v
+
+      st $ do
+
+        hi <- read hypergraphs =<< readSTRef i
+
+        -- interim clustering
+        pk <- match hi r u
+
+        -- interim hypergraph
+        hs <- induce hi pk
+
+        modifySTRef' i succ
+
+        j <- readSTRef i
+        write clustering  j pk
+        write hypergraphs j hs
+
+    -- number of levels
+    m <- st $ readSTRef i
+
+    hi <- read hypergraphs m
+    write partitioning m =<< fmPartition hi Nothing
+
+    for_ (reverse [0 .. m - 1]) $ \ j -> do
+        p <- project <$> read clustering (succ j) <*> read partitioning (succ j)
+        h <- read hypergraphs j
+        write partitioning j =<< fmPartition h (Just p)
+
+    read partitioning 0
+
+
+
 induce :: (V, E) -> Clustering -> ST s (V, E)
-induce (v, e) p = undefined 
+induce (v, e) pk = inputRoutine (length e) (length pk)
+    [ (j, k)
+    | (k, cluster) <- toList $ indexed pk
+    , i <- elems cluster, j <- elems $ v!i
+    ]
 
 
-project :: (V, E) -> Clustering -> Bipartitioning -> Bipartitioning
-project _ _ _ = undefined
+project :: Clustering -> Bipartitioning -> Bipartitioning
+project pk (Bisect p q) = Bisect
+    (foldMap (pk!) $ elems p)
+    (foldMap (pk!) $ elems q)
 
 
 
@@ -191,8 +250,6 @@ match (v, e) r p = do
   clustering <- replicate (length v) mempty
 
   connectivity <- thaw $ 0 <$ v
-
-  let conn x y = sum [ 1 % size (e!f) | f <- elems $ intersection (v!x) (v!y), size (e!f) < 10 ]
 
   let continue n i = i < length v && n % fromIntegral (length v) < r
   whileM_ (continue <$> readSTRef nMatch <*> readSTRef j)
@@ -214,7 +271,7 @@ match (v, e) r p = do
           for_ neighbours $ \ w -> do
               next <- read connectivity w
               (cmax, _) <- readSTRef suchaw
-              when (next > cmax) $ writeSTRef suchaw (cmax, pure w)
+              when (next > cmax) $ writeSTRef suchaw (next, pure w)
 
           exists <- snd <$> readSTRef suchaw
 
@@ -241,6 +298,10 @@ match (v, e) r p = do
       modifySTRef' j succ
 
   take <$> readSTRef k <*> unsafeFreeze clustering
+
+  where
+
+      conn x y = sum [ 1 % size (e!f) | f <- elems $ intersection (v!x) (v!y), size (e!f) < 10 ]
 
 
 
