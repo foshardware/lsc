@@ -90,6 +90,10 @@ partitionBalance (Bi a b) = abs $ size a - size b
 type Clustering = Vector IntSet
 
 
+type Permutation = Vector Int
+
+
+
 data Heu s = Heu
   { _gains        :: Gain s Int
   , _freeCells    :: IntSet
@@ -157,68 +161,68 @@ snapshot = st . readSTRef . snd =<< ask
 --
 --   20000! =~ 2^256909
 --
-randomPermutation :: Int -> FM s (Vector Int)
+randomPermutation :: Int -> FM s Permutation
 randomPermutation n = do
   v <- st $ unsafeThaw $ generate n id
   for_ [0 .. n - 2] $ \ i -> unsafeSwap v i =<< uniformR (i, n - 1) =<< prng
   unsafeFreeze v
 
 
--- | a.k.a. match
---
-coarsen :: (V, E) -> Rational -> FM s Clustering
-coarsen (v, e) r = do
 
-  p <- randomPermutation $ length v
+match :: (V, E) -> Rational -> Permutation -> ST s Clustering
+match (v, e) r p = do
+
+  -- p <- randomPermutation $ length v
   u <- unsafeThaw $ Just <$> p
 
-  nMatch <- st $ newSTRef 0
-  k <- st $ newSTRef 0
-  j <- st $ newSTRef 0
+  nMatch <- newSTRef 0
+  k <- newSTRef 0
+  j <- newSTRef 0
 
   clustering <- replicate (length v) mempty
 
   connectivity <- thaw $ 0 <$ v
 
   let continue n i = i < length v && n % fromIntegral (length v) < r
-  st $
-    whileM_ (continue <$> readSTRef nMatch <*> readSTRef j) $ do
+  whileM_ (continue <$> readSTRef nMatch <*> readSTRef j)
+    $ do
 
       unmatched <- read u =<< readSTRef j
       for_ unmatched $ \ uj -> do
 
           modify clustering (insert uj) =<< readSTRef k
 
-          let neighbours = S.foldl' (\ a n -> a <> e!n) S.empty $ v!uj
+          let neighbours = elems $ foldMap (e!) (elems $ v!uj)
 
-          f <- unsafeFreeze u
-          let ws = [w | w <- elems neighbours, isJust $ f ! w]
-
-          for_ ws $ \ w -> do
+          for_ neighbours $ \ w -> do
               let d = size $ intersection (e!w) (e!uj)
-                  conn a = if d < 10 then a else a + 1 % d
-              modify connectivity conn w
+                  conn = if d < 20 then id else (+ 1 % d)
+              seen <- isNothing <$> read u w
+              unless seen $ modify connectivity conn w
 
           -- find maximum connectivity
-          suchaw <- newSTRef (Nothing, 0)
-          for_ ws $ \ w -> do
-              current  <- read connectivity w
-              (_, acc) <- readSTRef suchaw
-              when (current > acc)
-                $ writeSTRef suchaw $ (Just w, current)
-          (exists, _) <- readSTRef suchaw
+          suchaw <- newSTRef (0, Nothing)
+          for_ neighbours $ \ w -> do
+              next <- read connectivity w
+              (cmax, _) <- readSTRef suchaw
+              when (next > cmax) $ writeSTRef suchaw (cmax, pure w)
+
+          exists <- snd <$> readSTRef suchaw
 
           for_ exists $ \ w -> do
               modify clustering (insert w) =<< readSTRef k
               modifySTRef' nMatch (+2)
               write u w Nothing
 
+          -- reset connectivity
+          for_ neighbours $ flip (write connectivity) 0
+
           modifySTRef' k succ
 
       modifySTRef' j succ
 
-  st $
-    whileM_ ((length v >) <$> readSTRef j) $ do
+  whileM_ ((<) <$> readSTRef j <*> pure (length v))
+    $ do
 
       unmatched <- read u =<< readSTRef j
       for_ unmatched $ \ uj -> do
@@ -227,8 +231,7 @@ coarsen (v, e) r = do
 
       modifySTRef' j succ
 
-  st $
-    take <$> readSTRef k <*> freeze clustering
+  take <$> readSTRef k <*> freeze clustering
 
 
 
