@@ -33,7 +33,7 @@ fm = testGroup "FM" $
 
 fmInputRoutine :: IO ()
 fmInputRoutine = do
-  void $ runST $ evalFM $ fiducciaMattheyses =<< inputRoutine 5 6
+  void $ stToIO $ inputRoutine 5 6
     [ (0,3), (0,4)
     , (1,1), (1,4)
     , (2,0), (2,1), (2,2)

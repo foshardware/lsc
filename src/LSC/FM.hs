@@ -187,13 +187,15 @@ fmMultiLevel (v, e) t r = do
     write hypergraphs 0 (v, e)
 
     let continue = pure . (t < ) . length . fst =<< read hypergraphs =<< readSTRef i
+    -- let continue = pure False
     whileM_ (st continue) $ do
 
-      u <- randomPermutation $ length v
+      hi <- st $ read hypergraphs =<< readSTRef i
+      u <- randomPermutation $ length $ fst hi
 
       st $ do
 
-        hi <- read hypergraphs =<< readSTRef i
+        modifySTRef' i succ
 
         -- interim clustering
         pk <- match hi r u
@@ -201,11 +203,10 @@ fmMultiLevel (v, e) t r = do
         -- interim hypergraph
         hs <- induce hi pk
 
-        modifySTRef' i succ
-
         j <- readSTRef i
-        write clustering  j pk
+        write clustering (pred j) pk
         write hypergraphs j hs
+
 
     -- number of levels
     m <- st $ readSTRef i
@@ -214,7 +215,7 @@ fmMultiLevel (v, e) t r = do
     write partitioning m =<< fmPartition hi Nothing
 
     for_ (reverse [0 .. m - 1]) $ \ j -> do
-        p <- project <$> read clustering (succ j) <*> read partitioning (succ j)
+        p <- project <$> read clustering j <*> read partitioning (succ j)
         h <- read hypergraphs j
         write partitioning j =<< fmPartition h (Just p)
 
