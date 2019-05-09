@@ -169,6 +169,15 @@ randomPermutation n = do
 
 
 
+induce :: (V, E) -> Clustering -> (V, E)
+induce (v, e) _ = undefined
+
+
+project :: (V, E) -> Clustering -> Bipartitioning -> Bipartitioning
+project _ _ _ = undefined
+
+
+
 match :: (V, E) -> Rational -> Permutation -> ST s Clustering
 match (v, e) r p = do
 
@@ -195,10 +204,12 @@ match (v, e) r p = do
           let neighbours = elems $ foldMap (e!) (elems $ v!uj)
 
           for_ neighbours $ \ w -> do
-              let d = size $ intersection (e!w) (e!uj)
-                  conn = if d < 20 then id else (+ 1 % d)
               seen <- isNothing <$> read u w
-              unless seen $ modify connectivity conn w
+              unless seen $ write connectivity w $ sum
+                [ 1 % size (e!f)
+                | f <- elems $ intersection (v!w) (v!uj)
+                -- , size (e!f) < 10
+                ]
 
           -- find maximum connectivity
           suchaw <- newSTRef (0, Nothing)
@@ -231,7 +242,7 @@ match (v, e) r p = do
 
       modifySTRef' j succ
 
-  take <$> readSTRef k <*> freeze clustering
+  take <$> readSTRef k <*> unsafeFreeze clustering
 
 
 
