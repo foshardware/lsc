@@ -31,7 +31,7 @@ import Data.Vector
   , take, generate
   , (!), indexed
   )
-import Data.Vector.Mutable (STVector, read, write, modify, replicate, unsafeSwap)
+import Data.Vector.Mutable (STVector, read, write, modify, replicate, unsafeSwap, slice)
 import Prelude hiding (replicate, length, read, lookup, take, drop)
 import System.Random.MWC
 
@@ -90,8 +90,8 @@ move :: Int -> Bipartitioning -> Bipartitioning
 move c (Bisect a b) | member c a = Bisect (delete c a) (insert c b)
 move c (Bisect a b) = Bisect (insert c a) (delete c b)
 
-partitionBalance :: Bipartitioning -> Int
-partitionBalance (Bisect a b) = abs $ size a - size b
+bisectBalance :: Bipartitioning -> Int
+bisectBalance (Bisect a b) = abs $ size a - size b
 
 
 cutSize :: (V, E) -> Bipartitioning -> Int
@@ -193,9 +193,13 @@ fmMultiLevel (v, e) t r = do
 
     write hypergraphs 0 (v, e)
 
-    let continue = fmap ((t < ) . length . fst) . read hypergraphs =<< readSTRef i
-    -- let continue = pure False
-    whileM_ (st continue) $ do
+    let continue = st $ do
+            j <- readSTRef i
+            l <- length . fst <$> read hypergraphs j
+            s <- freeze $ slice (max 0 $ j-8) (min 8 $ 64-j) hypergraphs
+            pure $ j < 12 && t < l
+                && any (l /=) (length . fst <$> s)
+    whileM_ continue $ do
 
       hi <- st $ read hypergraphs =<< readSTRef i
       u <- randomPermutation $ length $ fst hi
@@ -367,7 +371,7 @@ computeG p0 = do
       = (g + gc, g + gc, q)
     accum (gmax, g, p) (Move gc _, q)
       | g + gc == gmax
-      , partitionBalance p > partitionBalance q
+      , bisectBalance p > bisectBalance q
       = (gmax, g + gc, q)
     accum (gmax, g, p) (Move gc _, _)
       = (gmax, g + gc, p)

@@ -14,6 +14,7 @@ import Data.FileEmbed
 import Data.Foldable
 import Data.IntSet (fromDistinctAscList, size)
 import Data.Map (assocs)
+import Data.Ratio
 import Data.Text (Text)
 import Data.Text.Encoding
 import qualified Data.Vector as V
@@ -49,7 +50,36 @@ fmML :: TestTree
 fmML = testGroup "FM Multi Level"
   [ testCase "Random permutation" fmRandomPermutation
   , testCase "Match" fmMatch
+  , testCase "Induce and Project" fmInduceAndProject
+  , fmRealWorld
   ] 
+
+fmRealWorld :: TestTree
+fmRealWorld = testGroup "Real World Instances"
+  [ testCase "queue_1.blif"   $ fmMulti (7, 7) =<< stToIO queue_1Hypergraph
+  , testCase "picorv32.blif"  $ fmMulti (1000, 2000) =<< stToIO picorv32Hypergraph
+  ]
+
+
+
+fmMulti :: (Int, Int) -> (V, E) -> IO ()
+fmMulti (x, y) h = do
+  p <- nonDeterministic $ fmMultiLevel h 35 (1%3)
+  let c = cutSize h p
+  let it = "cut size in between " ++ show x ++ " and " ++ show y ++ ": " ++ show c
+  assertBool it $ x <= c && c <= y
+
+
+
+fmInduceAndProject :: IO ()
+fmInduceAndProject = do
+  (v, e) <- arbitraryHypergraph 10000 10000
+  nonDeterministic $ do
+      u <- randomPermutation $ length v
+      c <- st $ match (v, e) matchingRatio u
+      h <- st $ induce (v, e) c
+      pure ()
+
 
 
 fmRandomPermutation :: IO ()
@@ -57,9 +87,9 @@ fmRandomPermutation = do
   n <- generate $ choose (1000, 10000)
   v <- pure $ V.generate n id
   u <- nonDeterministic $ randomPermutation n
-  t <- V.thaw u
-  V.sort t
-  w <- V.freeze t
+  a <- V.thaw u
+  V.sort a
+  w <- V.freeze a
 
   assertBool "permutation" $ u /= v
   assertBool "sorted"      $ w == v
