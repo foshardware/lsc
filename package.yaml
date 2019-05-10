@@ -84,5 +84,6 @@ tests:
     - lsc
     - tasty
     - tasty-hunit
+    - tasty-quickcheck
     - lens
     - data-default

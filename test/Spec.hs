@@ -1,3 +1,4 @@
+{-# LANGUAGE TemplateHaskell #-}
 
 import Control.Category
 import Control.Arrow
@@ -9,12 +10,19 @@ import Control.Monad.IO.Class
 import Control.Monad.ST
 import Data.Bits
 import Data.Default
+import Data.FileEmbed
+import Data.Foldable
+import Data.Map (assocs)
+import Data.Text (Text)
+import Data.Text.Encoding
 import Prelude hiding (id, (.))
 
 import Test.Tasty
 import Test.Tasty.HUnit
+import Test.Tasty.QuickCheck
 
 import LSC
+import LSC.BLIF
 import LSC.Types
 import LSC.FM
 
@@ -28,18 +36,76 @@ main = defaultMain $ testGroup "LSC"
 
 fm :: TestTree
 fm = testGroup "FM" $
-  [ testCase "inputRoutine" $ fmInputRoutine
+  [ testCase "Input routine" $ fmInputRoutine
+  , testCase "Deterministic FM" $ fmDeterministic
+  , fmML
   ]
 
+
+fmML :: TestTree
+fmML = testGroup "Multi Level FM"
+  [ testCase "Match" fmMatch
+  ] 
+
+
+fmMatch :: IO ()
+fmMatch = do
+  (v, e) <- arbitraryHypergraph
+  clustering <- nonDeterministic $ do
+      u <- randomPermutation $ length v
+      let r = matchingRatio
+      st $ match (v, e) r u
+  assertBool "clustering" $ length clustering <= length v
+
+
+
 fmInputRoutine :: IO ()
-fmInputRoutine = do
-  void $ stToIO $ inputRoutine 5 6
-    [ (0,3), (0,4)
-    , (1,1), (1,4)
-    , (2,0), (2,1), (2,2)
-    , (3,1), (3,5)
-    , (4,1), (4,2), (4,3)
-    ]
+fmInputRoutine = void arbitraryHypergraph
+
+
+fmDeterministic :: IO ()
+fmDeterministic = do
+
+  h <- stToIO queue_1Hypergraph
+  p <- stToIO $ evalFM $ fiducciaMattheyses h
+
+  assertEqual "cut size" 12 $ cutSize h p
+
+
+
+blifHypergraph :: BLIF -> ST s (V, E)
+blifHypergraph netlist = inputRoutine
+    (top ^. nets . to length)
+    (top ^. gates . to length)
+    [ (n, c)
+    | (n, w) <- zip [0..] $ toList $ top ^. nets
+    , (c, _) <- w ^. contacts . to assocs
+    ] where top = fromBLIF netlist
+
+
+
+arbitraryHypergraph :: IO (V, E)
+arbitraryHypergraph = do
+  (n, c) <- generate $ (,) <$> choose (1, 10000) <*> choose (1, 10000)
+  config <- generate $ vectorOf 10000 $ (,) <$> choose (0, pred n) <*> choose (0, pred c)
+  stToIO $ inputRoutine n c config
+
+
+queue_1Hypergraph :: ST s (V, E)
+queue_1Hypergraph = either (fail . show) blifHypergraph $ parseBLIF queue_1Blif
+
+picorv32Hypergraph :: ST s (V, E)
+picorv32Hypergraph = either (fail . show) blifHypergraph $ parseBLIF picorv32Blif
+
+
+picorv32Blif :: Text
+picorv32Blif = decodeUtf8 $(embedFile "sample/picorv32.blif")
+
+queue_1Blif :: Text
+queue_1Blif = decodeUtf8 $(embedFile "sample/queue_1.blif")
+
+
+
 
 
 concurrency :: TestTree

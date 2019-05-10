@@ -93,6 +93,12 @@ partitionBalance :: Bipartitioning -> Int
 partitionBalance (Bisect a b) = abs $ size a - size b
 
 
+cutSize :: (V, E) -> Bipartitioning -> Int
+cutSize (v, _) (Bisect p q) = size $ intersection
+    (foldMap (v!) $ elems p)
+    (foldMap (v!) $ elems q)
+
+
 type Clustering = Vector IntSet
 
 
@@ -204,7 +210,7 @@ fmMultiLevel (v, e) t r = do
         hs <- induce hi pk
 
         j <- readSTRef i
-        write clustering (pred j) pk
+        write clustering  j pk
         write hypergraphs j hs
 
 
@@ -215,7 +221,7 @@ fmMultiLevel (v, e) t r = do
     write partitioning m =<< fmPartition hi Nothing
 
     for_ (reverse [0 .. m - 1]) $ \ j -> do
-        p <- project <$> read clustering j <*> read partitioning (succ j)
+        p <- project <$> read clustering (succ j) <*> read partitioning (succ j)
         h <- read hypergraphs j
         write partitioning j =<< fmPartition h (Just p)
 
@@ -241,7 +247,6 @@ project pk (Bisect p q) = Bisect
 match :: (V, E) -> Rational -> Permutation -> ST s Clustering
 match (v, e) r p = do
 
-  -- p <- randomPermutation $ length v
   u <- unsafeThaw $ Just <$> p
 
   nMatch <- newSTRef 0
