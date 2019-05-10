@@ -12,6 +12,7 @@ import Data.Bits
 import Data.Default
 import Data.FileEmbed
 import Data.Foldable
+import Data.IntSet (fromDistinctAscList, size)
 import Data.Map (assocs)
 import Data.Text (Text)
 import Data.Text.Encoding
@@ -55,6 +56,9 @@ fmMatch = do
       u <- randomPermutation $ length v
       let r = matchingRatio
       st $ match (v, e) r u
+
+  assertEqual "length does not match" (sum $ size <$> clustering) (length v)
+  assertBool "elements do not match" $ foldMap id clustering == fromDistinctAscList [0 .. length v - 1]
   assertBool "clustering" $ length clustering <= length v
 
 
