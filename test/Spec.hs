@@ -16,6 +16,9 @@ import Data.IntSet (fromDistinctAscList, size)
 import Data.Map (assocs)
 import Data.Text (Text)
 import Data.Text.Encoding
+import Data.Vector (fromListN)
+import qualified Data.Vector as V
+import qualified Data.Vector.Algorithms.Intro as V
 import Prelude hiding (id, (.))
 
 import Test.Tasty
@@ -44,9 +47,24 @@ fm = testGroup "FM" $
 
 
 fmML :: TestTree
-fmML = testGroup "Multi Level FM"
-  [ testCase "Match" fmMatch
+fmML = testGroup "FM Multi Level"
+  [ testCase "Random permutation" fmRandomPermutation
+  , testCase "Match" fmMatch
   ] 
+
+
+fmRandomPermutation :: IO ()
+fmRandomPermutation = do
+  n <- generate $ choose (1000, 10000)
+  v <- pure $ V.generate n id
+  u <- nonDeterministic $ randomPermutation n
+  t <- V.thaw u
+  V.sort t
+  w <- V.freeze t
+
+  assertBool "permutation" $ u /= v
+  assertBool "sorted"      $ w == v
+
 
 
 fmMatch :: IO ()
@@ -54,8 +72,7 @@ fmMatch = do
   (v, e) <- arbitraryHypergraph
   clustering <- nonDeterministic $ do
       u <- randomPermutation $ length v
-      let r = matchingRatio
-      st $ match (v, e) r u
+      st $ match (v, e) matchingRatio u
 
   assertEqual "length does not match" (sum $ size <$> clustering) (length v)
   assertBool "elements do not match" $ foldMap id clustering == fromDistinctAscList [0 .. length v - 1]
