@@ -24,6 +24,7 @@ dependencies:
 - cereal
 - concurrent-output
 - containers
+- cond
 - data-default
 - data-default-class
 - file-embed

@@ -16,7 +16,6 @@ import Data.IntSet (fromDistinctAscList, size)
 import Data.Map (assocs)
 import Data.Text (Text)
 import Data.Text.Encoding
-import Data.Vector (fromListN)
 import qualified Data.Vector as V
 import qualified Data.Vector.Algorithms.Intro as V
 import Prelude hiding (id, (.))
@@ -69,19 +68,19 @@ fmRandomPermutation = do
 
 fmMatch :: IO ()
 fmMatch = do
-  (v, e) <- arbitraryHypergraph
+  (v, e) <- arbitraryHypergraph 10000 10000
   clustering <- nonDeterministic $ do
       u <- randomPermutation $ length v
       st $ match (v, e) matchingRatio u
 
-  assertEqual "length does not match" (sum $ size <$> clustering) (length v)
+  assertEqual "length does not match" (length v) (sum $ size <$> clustering)
   assertBool "elements do not match" $ foldMap id clustering == fromDistinctAscList [0 .. length v - 1]
   assertBool "clustering" $ length clustering <= length v
 
 
 
 fmInputRoutine :: IO ()
-fmInputRoutine = void arbitraryHypergraph
+fmInputRoutine = void $ arbitraryHypergraph 10000 10000
 
 
 fmDeterministic :: IO ()
@@ -105,10 +104,10 @@ blifHypergraph netlist = inputRoutine
 
 
 
-arbitraryHypergraph :: IO (V, E)
-arbitraryHypergraph = do
-  (n, c) <- generate $ (,) <$> choose (1, 10000) <*> choose (1, 10000)
-  config <- generate $ vectorOf 10000 $ (,) <$> choose (0, pred n) <*> choose (0, pred c)
+arbitraryHypergraph :: Int -> Int -> IO (V, E)
+arbitraryHypergraph n' c' = do
+  (n, c) <- generate $ (,) <$> choose (1, n') <*> choose (1, c')
+  config <- generate $ vectorOf (n'+ c') $ (,) <$> choose (0, pred n) <*> choose (0, pred c)
   stToIO $ inputRoutine n c config
 
 

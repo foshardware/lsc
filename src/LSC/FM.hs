@@ -7,6 +7,7 @@
 
 module LSC.FM where
 
+import Control.Conditional (whenM)
 import Control.Lens hiding (indexed)
 import Control.Monad
 import Control.Monad.Loops
@@ -31,7 +32,7 @@ import Data.Vector
   , (!), indexed
   )
 import Data.Vector.Mutable (STVector, read, write, modify, replicate, unsafeSwap)
-import Prelude hiding (replicate, length, read, lookup, take)
+import Prelude hiding (replicate, length, read, lookup, take, drop)
 import System.Random.MWC
 
 
@@ -192,7 +193,7 @@ fmMultiLevel (v, e) t r = do
 
     write hypergraphs 0 (v, e)
 
-    let continue = pure . (t < ) . length . fst =<< read hypergraphs =<< readSTRef i
+    let continue = fmap ((t < ) . length . fst) . read hypergraphs =<< readSTRef i
     -- let continue = pure False
     whileM_ (st continue) $ do
 
@@ -245,49 +246,52 @@ project pk (Bisect p q) = Bisect
 
 
 match :: (V, E) -> Rational -> Permutation -> ST s Clustering
-match (v, e) r p = do
+match (v, e) r u = do
 
-  u <- unsafeThaw $ Just <$> p
+  clustering <- replicate (length v) mempty
 
   nMatch <- newSTRef 0
   k <- newSTRef 0
   j <- newSTRef 0
 
-  clustering <- replicate (length v) mempty
 
-  connectivity <- thaw $ 0 <$ v
+  connectivity <- replicate (length v) 0
+  sights <- replicate (length v) False
+
+  let yet n = not <$> read sights n 
+      matched n = write sights n True
 
   let continue n i = i < length v && n % fromIntegral (length v) < r
   whileM_ (continue <$> readSTRef nMatch <*> readSTRef j)
     $ do
 
-      unmatched <- read u =<< readSTRef j
-      for_ unmatched $ \ uj -> do
+      uj <- (u!) <$> readSTRef j
+      whenM (yet uj) $ do
 
           modify clustering (insert uj) =<< readSTRef k
+          write sights uj True
 
           let neighbours = elems $ foldMap (e!) (elems $ v!uj)
 
           for_ neighbours $ \ w -> do
-              seen <- isNothing <$> read u w
-              unless seen $ write connectivity w $ conn w uj
+              whenM (yet w) $ write connectivity w $ conn w uj
 
           -- find maximum connectivity
           suchaw <- newSTRef (0, Nothing)
           for_ neighbours $ \ w -> do
+              cmax <- fst <$> readSTRef suchaw
               next <- read connectivity w
-              (cmax, _) <- readSTRef suchaw
               when (next > cmax) $ writeSTRef suchaw (next, pure w)
 
           exists <- snd <$> readSTRef suchaw
 
           for_ exists $ \ w -> do
               modify clustering (insert w) =<< readSTRef k
+              matched w
               modifySTRef' nMatch (+2)
-              write u w Nothing
 
           -- reset connectivity
-          for_ neighbours $ flip (write connectivity) 0
+          for_ neighbours $ modify connectivity (const 0)
 
           modifySTRef' k succ
 
@@ -296,9 +300,10 @@ match (v, e) r p = do
   whileM_ ((<) <$> readSTRef j <*> pure (length v))
     $ do
 
-      unmatched <- read u =<< readSTRef j
-      for_ unmatched $ \ uj -> do
+      uj <- (u!) <$> readSTRef j
+      whenM (yet uj) $ do
           modify clustering (insert uj) =<< readSTRef k
+          matched uj
           modifySTRef' k succ
 
       modifySTRef' j succ
