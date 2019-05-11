@@ -34,7 +34,7 @@ import LSC.FM
 main :: IO ()
 main = defaultMain $ testGroup "LSC"
   [ fm
---  , concurrency
+  , concurrency
   ]
 
 
@@ -57,7 +57,7 @@ fmML = testGroup "FM Multi Level"
 fmRealWorld :: TestTree
 fmRealWorld = testGroup "Real World Instances"
   [ testCase "queue_1.blif"   $ fmMulti (7, 7) =<< stToIO queue_1Hypergraph
-  , testCase "picorv32.blif"  $ fmMulti (500, 1000) =<< stToIO picorv32Hypergraph
+  , testCase "picorv32.blif"  $ fmMulti (-1,-1) =<< stToIO picorv32Hypergraph
   ]
 
 

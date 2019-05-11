@@ -20,7 +20,7 @@ import Data.Maybe
 import Data.Monoid
 import Data.HashTable.ST.Cuckoo (HashTable)
 import Data.HashTable.ST.Cuckoo (mutate, lookup, new, newSized)
-import Data.IntSet hiding (filter, null, foldl', toList)
+import Data.IntSet hiding (filter, null, foldr, foldl', toList)
 import qualified Data.IntSet as S
 import Data.Ratio
 import Data.STRef
@@ -38,10 +38,10 @@ import System.Random.MWC
 
 
 matchingRatio :: Rational
-matchingRatio = 1 % 3
+matchingRatio = 1 % 2
 
 coarseningThreshold :: Int
-coarseningThreshold = 35
+coarseningThreshold = 8
 
 
 balanceFactor :: Rational
@@ -176,7 +176,7 @@ snapshot = st . readSTRef . snd =<< ask
 --
 randomPermutation :: Int -> FM s Permutation
 randomPermutation n = do
-  v <- st $ unsafeThaw $ generate n id
+  v <- unsafeThaw $ generate n id
   for_ [0 .. n - 2] $ \ i -> unsafeSwap v i =<< uniformR (i, n - 1) =<< prng
   unsafeFreeze v
 
@@ -187,7 +187,7 @@ fmMultiLevel (v, e) t r = do
 
     i <- st $ newSTRef 0
 
-    let it = 256
+    let it = 16
 
     hypergraphs  <- replicate it mempty
     clusterings  <- replicate it mempty
@@ -199,7 +199,7 @@ fmMultiLevel (v, e) t r = do
             j <- readSTRef i
             l <- length . fst <$> read hypergraphs j
             s <- freeze $ slice (max 0 $ j-8) (min 8 $ it-j) hypergraphs
-            pure $ j < pred it && t < l
+            pure $ j < pred it && t <= l
                 && any (l /=) (length . fst <$> s)
     whileM_ continue $ do
 
@@ -228,9 +228,11 @@ fmMultiLevel (v, e) t r = do
     write partitioning m =<< fmPartition hi Nothing
 
     for_ (reverse [0 .. m - 1]) $ \ j -> do
-        p <- project <$> read clusterings (succ j) <*> read partitioning (succ j)
+        pk <- read clusterings  $ succ j
+        p' <- read partitioning $ succ j
+        q <- project pk p'
         h <- read hypergraphs j
-        write partitioning j =<< fmPartition h (Just p)
+        write partitioning j =<< fmPartition h (Just q)
 
     read partitioning 0
 
@@ -244,8 +246,8 @@ induce (v, e) pk = inputRoutine (length e) (length pk)
     ]
 
 
-project :: Clustering -> Bipartitioning -> Bipartitioning
-project pk (Bisect p q) = Bisect
+project :: Clustering -> Bipartitioning -> FM s Bipartitioning
+project pk (Bisect p q) = pure $ Bisect 
     (foldMap (pk!) $ elems p)
     (foldMap (pk!) $ elems q)
 
@@ -260,10 +262,9 @@ match (v, e) r u = do
   k <- newSTRef 0
   j <- newSTRef 0
 
-
   connectivity <- replicate (length v) 0
-  sights <- replicate (length v) False
 
+  sights <- replicate (length v) False
   let yet n = not <$> read sights n 
       matched n = write sights n True
 
@@ -409,7 +410,7 @@ selectBaseCell :: V -> Bipartitioning -> FM s (Maybe Int)
 selectBaseCell v p = do
   bucket <- maxGain
   case bucket of
-    Just (_, xs) -> pure $ balanceCriterion v p `find` xs
+    Just (_, xs) -> pure $ balanceCriterion (length v) p `find` xs
     _ -> pure Nothing
 
 
@@ -505,10 +506,10 @@ initialGains (v, e) p = do
 
 
 
-balanceCriterion :: V -> Bipartitioning -> Int -> Bool
+balanceCriterion :: Int -> Bipartitioning -> Int -> Bool
 balanceCriterion v (Bisect p q) c
-   = (fromIntegral (length v) * (1 - r)) / 2 <= fromIntegral a
-  && (fromIntegral (length v) * (1 + r)) / 2 >= fromIntegral b
+   = (fromIntegral v * (1 - r)) / 2 <= fromIntegral a
+  && (fromIntegral v * (1 + r)) / 2 >= fromIntegral b
   where
     a = last (succ : [pred | member c p]) (size p)
     b = last (succ : [pred | member c q]) (size q)
