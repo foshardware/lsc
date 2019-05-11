@@ -29,10 +29,11 @@ import Data.Vector
   , unsafeFreeze, unsafeThaw
   , freeze, thaw
   , take, drop, generate
+  , head
   , (!), indexed
   )
 import Data.Vector.Mutable (STVector, read, write, modify, replicate, unsafeSwap, slice)
-import Prelude hiding (replicate, length, read, lookup, take, drop)
+import Prelude hiding (replicate, length, read, lookup, take, drop, head)
 import System.Random.MWC
 import System.IO.Unsafe
 
@@ -123,18 +124,17 @@ makeFieldsNoPrefix ''Heu
 type FM s = ReaderT (GenST s, STRef s (Heu s)) (ST s)
 
 
+nonDeterministic :: FM RealWorld a -> IO a
+nonDeterministic f = head <$> solutionVectorOf 1 f 
 
-solutionVector :: Int -> FM RealWorld a -> IO (Vector a)
-solutionVector n f = do
+
+solutionVectorOf :: Int -> FM RealWorld a -> IO (Vector a)
+solutionVectorOf n f = do
     v <- entropyVector32 $ 258 * n
     g <- sequence $ generate n $ \ i -> initialize $ take (258 * i) $ drop (258 * i) $ v
     sequence $ generate n $ \ i -> unsafeInterleaveIO $ stToIO $ runFMWithGen (g!i) f
 
-
-nonDeterministic :: FM RealWorld a -> IO a
-nonDeterministic f = withSystemRandom $ \ r -> stToIO $ runFMWithGen r f
-
-prng :: FM s (GenST s)
+prng :: FM s (Gen s)
 prng = fst <$> ask
 
 
@@ -198,7 +198,7 @@ fmMultiLevel (v, e) t r = do
 
     i <- st $ newSTRef 0
 
-    let it = 32
+    let it = 24
 
     hypergraphs  <- replicate it mempty
     clusterings  <- replicate it mempty

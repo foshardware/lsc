@@ -44,7 +44,7 @@ bisection top = do
     , netGraphStats top
     ]
 
-  solutions <- liftIO $ solutionVector 16 $ do
+  solutions <- liftIO $ solutionVectorOf 16 $ do
       h <- st $ inputRoutine
           (top ^. nets . to length)
           (top ^. gates . to length)
@@ -54,7 +54,8 @@ bisection top = do
           ]
       (h, ) <$> fmMultiLevel h coarseningThreshold matchingRatio
 
-  let (_, Bisect p q) = minimumBy (compare `on` \ (h, x) -> bisectBalance x + 2 * cutSize h x) solutions
+  let criterion (h, x) = bisectBalance x + 2 * cutSize h x
+      Bisect p q = snd $ minimumBy (compare `on` criterion) solutions
 
   -- get a gate
   let g i = view gates top ! i
