@@ -1,4 +1,5 @@
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE TupleSections #-}
 
 module LSC.Exline where
 
@@ -6,6 +7,7 @@ import Control.Lens
 import Control.Monad.IO.Class
 import Data.Default
 import Data.Foldable hiding (concat)
+import Data.Function
 import Data.IntSet (size, elems)
 import Data.Map hiding (size, elems, toList, null, (!))
 import qualified Data.Set as Set
@@ -42,17 +44,17 @@ bisection top = do
     , netGraphStats top
     ]
 
-  (Bisect p q, it) <- liftIO $ nonDeterministic $ do
-
+  solutions <- liftIO $ solutionVector 64 $ do
       h <- st $ inputRoutine
-        (top ^. nets . to length)
-        (top ^. gates . to length)
-        [ (n, c)
-        | (n, w) <- zip [0..] $ toList $ top ^. nets
-        , (c, _) <- w ^. contacts . to assocs
-        ]
+          (top ^. nets . to length)
+          (top ^. gates . to length)
+          [ (n, c)
+          | (n, w) <- zip [0..] $ toList $ top ^. nets
+          , (c, _) <- w ^. contacts . to assocs
+          ]
+      (h, ) <$> fmMultiLevel h coarseningThreshold matchingRatio
 
-      (,) <$> fmPartition h Nothing <*> value FM.iterations
+  let (_, Bisect p q) = minimumBy (compare `on` \ (h, x) -> bisectBalance x + cutSize h x) solutions
 
   -- get a gate
   let g i = view gates top ! i
@@ -118,7 +120,7 @@ bisection top = do
   debug
     [ unpack (view identifier top) ++ ": exlining finished"
     , netGraphStats result
-    , "iterations: "++ show it
+    -- , "iterations: "++ show it
     , "cut size: "++ show (length cut)
     , ""
     ]

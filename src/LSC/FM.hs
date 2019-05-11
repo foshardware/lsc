@@ -34,6 +34,7 @@ import Data.Vector
 import Data.Vector.Mutable (STVector, read, write, modify, replicate, unsafeSwap, slice)
 import Prelude hiding (replicate, length, read, lookup, take, drop)
 import System.Random.MWC
+import System.IO.Unsafe
 
 
 
@@ -120,6 +121,10 @@ makeFieldsNoPrefix ''Heu
 type FM s = ReaderT (GenST s, STRef s (Heu s)) (ST s)
 
 
+
+solutionVector :: Int -> FM RealWorld a -> IO (Vector a)
+solutionVector n = sequence . generate n . const . unsafeInterleaveIO . nonDeterministic
+
 nonDeterministic :: FM RealWorld a -> IO a
 nonDeterministic f = withSystemRandom $ \ r -> stToIO $ runFMWithGen r f
 
@@ -133,7 +138,7 @@ evalFM = runFM
 runFM :: FM s a -> ST s a
 runFM = runFMWithGen $ error "prng not initialized"
 
-runFMWithGen :: GenST s -> FM s a -> ST s a
+runFMWithGen :: Gen s -> FM s a -> ST s a
 runFMWithGen s f = do
   g <- Gain <$> newSTRef mempty <*> thaw mempty <*> new
   r <- newSTRef $ Heu g mempty mempty 0
