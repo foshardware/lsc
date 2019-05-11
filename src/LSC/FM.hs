@@ -74,9 +74,6 @@ data Move
 
 data Bipartitioning = Bisect !IntSet !IntSet
 
-unBisect :: Bipartitioning -> (IntSet, IntSet)
-unBisect (Bisect a b) = (a, b)
-
 instance Eq Bipartitioning where
   Bisect a _ == Bisect b _ = a == b
 
