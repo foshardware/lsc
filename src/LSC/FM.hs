@@ -7,35 +7,64 @@
 
 module LSC.FM where
 
-import Control.Lens
+import Control.Conditional (whenM)
+import Control.Lens hiding (indexed)
 import Control.Monad
+import Control.Monad.Loops
 import Control.Monad.Primitive
 import Control.Monad.Reader
 import Control.Monad.ST
 import Data.Foldable
+import Data.Function
 import Data.Maybe
 import Data.Monoid
 import Data.HashTable.ST.Cuckoo (HashTable)
 import Data.HashTable.ST.Cuckoo (mutate, lookup, new, newSized)
-import Data.IntSet hiding (filter, null, foldl', toList)
+import Data.IntSet hiding (filter, null, foldr, foldl', toList)
 import qualified Data.IntSet as S
 import Data.Ratio
 import Data.STRef
-import Data.Vector (Vector, unsafeFreeze, unsafeThaw, freeze, thaw, generate, (!))
-import Data.Vector.Mutable (STVector, read, modify, replicate, unsafeSwap)
-import Prelude hiding (replicate, length, read, lookup)
+import Data.Vector
+  ( Vector
+  , unsafeFreeze, unsafeThaw
+  , unsafeSlice
+  , freeze, thaw
+  , take, drop, generate
+  , head
+  , (!), indexed
+  )
+import Data.Vector.Mutable (MVector, read, write, modify, replicate, unsafeSwap, slice)
+import Prelude hiding (replicate, length, read, lookup, take, drop, head)
 import System.Random.MWC
+import System.IO.Unsafe
 
+import LSC.Entropy
+
+
+
+matchingRatio :: Rational
+matchingRatio = 1 % 3
+
+coarseningThreshold :: Int
+coarseningThreshold = 8
 
 
 balanceFactor :: Rational
-balanceFactor = 1 % 2
+balanceFactor = 1 % 10
+
+
+type NetArray  = Vector IntSet
+type CellArray = Vector IntSet
+
+type V = CellArray
+type E = NetArray
 
 
 data Gain s a = Gain
   (STRef s IntSet)      -- track existing gains
-  (STVector s Int)      -- gains indexed by node
+  (MVector s Int)       -- gains indexed by node
   (HashTable s Int [a]) -- nodes indexed by gain
+
 
 
 data Move
@@ -43,31 +72,44 @@ data Move
   deriving Show
 
 
-data Bipartitioning = Bi !IntSet !IntSet
 
+data Bipartitioning = Bisect !IntSet !IntSet
 
-unBi :: Bipartitioning -> (IntSet, IntSet)
-unBi (Bi a b) = (a, b)
+unBisect :: Bipartitioning -> (IntSet, IntSet)
+unBisect (Bisect a b) = (a, b)
 
 instance Eq Bipartitioning where
-  Bi a _ == Bi b _ = a == b
+  Bisect a _ == Bisect b _ = a == b
 
 instance Semigroup Bipartitioning where
-  Bi a b <> Bi c d = Bi (a <> c) (b <> d)
+  Bisect a b <> Bisect c d = Bisect (a <> c) (b <> d)
 
 instance Monoid Bipartitioning where
-  mempty = Bi mempty mempty
+  mempty = Bisect mempty mempty
   mappend = (<>)
 
 instance Show Bipartitioning where
-  show (Bi a b) = "<"++ show a ++", "++ show b ++">"
+  show (Bisect a b) = "<"++ show a ++", "++ show b ++">"
 
 move :: Int -> Bipartitioning -> Bipartitioning
-move c (Bi a b) | member c a = Bi (delete c a) (insert c b)
-move c (Bi a b) = Bi (insert c a) (delete c b)
+move c (Bisect a b) | member c a = Bisect (delete c a) (insert c b)
+move c (Bisect a b) = Bisect (insert c a) (delete c b)
 
-partitionBalance :: Bipartitioning -> Int
-partitionBalance (Bi a b) = abs $ size a - size b
+bisectBalance :: Bipartitioning -> Int
+bisectBalance (Bisect a b) = abs $ size a - size b
+
+
+cutSize :: (V, E) -> Bipartitioning -> Int
+cutSize (v, _) (Bisect p q) = size $ intersection
+    (foldMap (v!) $ elems p)
+    (foldMap (v!) $ elems q)
+
+
+type Clustering = Vector IntSet
+
+
+type Permutation = Vector Int
+
 
 
 data Heu s = Heu
@@ -80,39 +122,23 @@ data Heu s = Heu
 makeFieldsNoPrefix ''Heu
 
 
-type FM s = ReaderT (GenST s, STRef s (Heu s)) (ST s)
+type FM s = ReaderT (Gen s, STRef s (Heu s)) (ST s)
 
 
 nonDeterministic :: FM RealWorld a -> IO a
-nonDeterministic f = withSystemRandom $ \ r -> stToIO $ runFMWithGen r f
+nonDeterministic f = head <$> solutionVectorOf 1 f 
 
-prng :: FM s (GenST s)
+
+solutionVectorOf :: Int -> FM RealWorld a -> IO (Vector a)
+solutionVectorOf n f = do
+  v <- entropyVector32 $ 258 * n
+  sequence $ generate n $ \ i -> unsafeInterleaveIO $ stToIO $ do
+      g <- initialize $ unsafeSlice (258 * i) 258 v
+      runFMWithGen g f
+
+
+prng :: FM s (Gen s)
 prng = fst <$> ask
-
-
--- | This function does not reach all possible permutations for lists
---   consisting of more than 969 elements. Any PRNGs possible states
---   are bound by its possible seed values.
---   In the case of MWC8222 the period is 2^8222 which allows for
---   not more than 969! different states.
---
--- seed bits: 8222
--- maximum list length: 969
---
---   969! =~ 2^8222
---
--- Monotonicity of  n! / (2^n): 
---
--- desired seed bits: 256909
--- desired list length: 20000
---
---   20000! =~ 2^256909
---
-randomPermutation :: Int -> FM s (Vector Int)
-randomPermutation n = do
-  v <- st $ unsafeThaw $ generate n id
-  for_ [0 .. n - 2] $ \ i -> unsafeSwap v i =<< uniformR (i, n - 1) =<< prng
-  unsafeFreeze v
 
 
 evalFM :: FM s a -> ST s a
@@ -121,7 +147,7 @@ evalFM = runFM
 runFM :: FM s a -> ST s a
 runFM = runFMWithGen $ error "prng not initialized"
 
-runFMWithGen :: GenST s -> FM s a -> ST s a
+runFMWithGen :: Gen s -> FM s a -> ST s a
 runFMWithGen s f = do
   g <- Gain <$> newSTRef mempty <*> thaw mempty <*> new
   r <- newSTRef $ Heu g mempty mempty 0
@@ -144,11 +170,172 @@ snapshot :: FM s (Heu s)
 snapshot = st . readSTRef . snd =<< ask
 
 
-type NetArray  = Vector IntSet
-type CellArray = Vector IntSet
+-- | This function does not reach all possible permutations for lists
+--   consisting of more than 969 elements. Any PRNGs possible states
+--   are bound by its possible seed values.
+--   In the case of MWC8222 the period is 2^8222 which allows for
+--   not more than 969! different states.
+--
+-- seed bits: 8222
+-- maximum list length: 969
+--
+--   969! =~ 2^8222
+--
+-- Monotonicity of  n! / (2^n): 
+--
+-- desired seed bits: 256909
+-- desired list length: 20000
+--
+--   20000! =~ 2^256909
+--
+randomPermutation :: Int -> FM s Permutation
+randomPermutation n = do
+  v <- unsafeThaw $ generate n id
+  for_ [0 .. n - 2] $ \ i -> unsafeSwap v i =<< uniformR (i, n - 1) =<< prng
+  unsafeFreeze v
 
-type V = CellArray
-type E = NetArray
+
+
+fmMultiLevel :: (V, E) -> Int -> Rational -> FM s Bipartitioning
+fmMultiLevel (v, e) t r = do
+
+    i <- st $ newSTRef 0
+
+    let it = 24
+
+    hypergraphs  <- replicate it mempty
+    clusterings  <- replicate it mempty
+    partitioning <- replicate it mempty
+
+    write hypergraphs 0 (v, e)
+
+    let continue = st $ do
+            j <- readSTRef i
+            l <- length . fst <$> read hypergraphs j
+            s <- freeze $ slice (max 0 $ j-8) (min 8 $ it-j) hypergraphs
+            pure $ j < pred it && t <= l
+                && any (l /=) (length . fst <$> s)
+    whileM_ continue $ do
+
+      hi <- st $ read hypergraphs =<< readSTRef i
+      u <- randomPermutation $ length $ fst hi
+
+      st $ do
+
+        modifySTRef' i succ
+
+        -- interim clustering
+        pk <- match hi r u
+
+        -- interim hypergraph
+        hs <- induce hi pk
+
+        j <- readSTRef i
+        write clusterings j pk
+        write hypergraphs j hs
+
+
+    -- number of levels
+    m <- st $ readSTRef i
+
+    hi <- read hypergraphs m
+    write partitioning m =<< fmPartition hi Nothing
+
+    for_ (reverse [0 .. m - 1]) $ \ j -> do
+        pk <- read clusterings  $ succ j
+        p' <- read partitioning $ succ j
+        q <- project pk p'
+        h <- read hypergraphs j
+        write partitioning j =<< fmPartition h (Just q)
+
+    read partitioning 0
+
+
+
+induce :: (V, E) -> Clustering -> ST s (V, E)
+induce (v, e) pk = inputRoutine (length e) (length pk)
+    [ (j, k)
+    | (k, cluster) <- toList $ indexed pk
+    , i <- elems cluster, j <- elems $ v!i
+    ]
+
+
+project :: Clustering -> Bipartitioning -> FM s Bipartitioning
+project pk (Bisect p q) = pure $ Bisect 
+    (foldMap (pk!) $ elems p)
+    (foldMap (pk!) $ elems q)
+
+
+
+match :: (V, E) -> Rational -> Permutation -> ST s Clustering
+match (v, e) r u = do
+
+  clustering <- replicate (length v) mempty
+
+  nMatch <- newSTRef 0
+  k <- newSTRef 0
+  j <- newSTRef 0
+
+  connectivity <- replicate (length v) 0
+
+  sights <- replicate (length v) False
+  let yet n = not <$> read sights n 
+      matched n = write sights n True
+
+  let continue n i = i < length v && n % fromIntegral (length v) < r
+  whileM_ (continue <$> readSTRef nMatch <*> readSTRef j)
+    $ do
+
+      uj <- (u!) <$> readSTRef j
+      whenM (yet uj) $ do
+
+          modify clustering (insert uj) =<< readSTRef k
+          write sights uj True
+
+          let neighbours = elems $ foldMap (e!) (elems $ v!uj)
+
+          for_ neighbours $ \ w -> do
+              whenM (yet w) $ write connectivity w $ conn w uj
+
+          -- find maximum connectivity
+          suchaw <- newSTRef (0, Nothing)
+          for_ neighbours $ \ w -> do
+              cmax <- fst <$> readSTRef suchaw
+              next <- read connectivity w
+              when (next > cmax) $ writeSTRef suchaw (next, pure w)
+
+          exists <- snd <$> readSTRef suchaw
+
+          for_ exists $ \ w -> do
+              modify clustering (insert w) =<< readSTRef k
+              matched w
+              modifySTRef' nMatch (+2)
+
+          -- reset connectivity
+          for_ neighbours $ modify connectivity (const 0)
+
+          modifySTRef' k succ
+
+      modifySTRef' j succ
+
+  whileM_ ((<) <$> readSTRef j <*> pure (length v))
+    $ do
+
+      uj <- (u!) <$> readSTRef j
+      whenM (yet uj) $ do
+          modify clustering (insert uj) =<< readSTRef k
+          matched uj
+          modifySTRef' k succ
+
+      modifySTRef' j succ
+
+  take <$> readSTRef k <*> unsafeFreeze clustering
+
+  where
+
+      -- cost centre!
+      conn x y = sum [ 1 % size (e!f) | f <- elems $ intersection (v!x) (v!y), size (e!f) < 10 ]
+
 
 
 
@@ -157,21 +344,19 @@ fmPartition (v, e) (Just p) = bipartition (v, e) p
 fmPartition (v, e)  Nothing = do
   u <- randomPermutation $ length v
   let (p, q) = splitAt (length v `div` 2) (toList u)
-  bipartition (v, e) $ Bi (fromList p) (fromList q)
+  bipartition (v, e) $ Bisect (fromList p) (fromList q)
 
 
 
 fiducciaMattheyses :: (V, E) -> FM s Bipartitioning
-fiducciaMattheyses (v, e) = do
-
-  bipartition (v, e) $
-    if length v < 3000
-    then Bi (fromAscList [x | x <- base, even x]) (fromAscList [x | x <- base, not $ even x])
-    else Bi (fromAscList [x | x <- base, half x]) (fromAscList [x | x <- base, not $ half x])
-
+fiducciaMattheyses (v, e)
+  = bipartition (v, e)
+  $ Bisect (fromAscList [x | x <- base, part x]) (fromAscList [x | x <- base, not $ part x])
   where
     base = [0 .. length v - 1]
-    half i = i <= div (length v) 2
+    part = if length v < 1000
+      then even
+      else (<= length v `div` 2)
 
 
 bipartition :: (V, E) -> Bipartitioning -> FM s Bipartitioning
@@ -204,7 +389,7 @@ computeG p0 = do
       = (g + gc, g + gc, q)
     accum (gmax, g, p) (Move gc _, q)
       | g + gc == gmax
-      , partitionBalance p > partitionBalance q
+      , bisectBalance p > bisectBalance q
       = (gmax, g + gc, q)
     accum (gmax, g, p) (Move gc _, _)
       = (gmax, g + gc, p)
@@ -213,7 +398,7 @@ computeG p0 = do
 
 processCell :: (V, E) -> Bipartitioning -> FM s ()
 processCell (v, e) p = do
-  ck <- selectBaseCell p
+  ck <- selectBaseCell v p
   for_ ck $ \ c -> do
     lockCell c
     q <- moveCell c p
@@ -236,12 +421,11 @@ moveCell c p = do
   pure q
 
 
-selectBaseCell :: Bipartitioning -> FM s (Maybe Int)
-selectBaseCell p = do
-  h <- value freeCells
+selectBaseCell :: V -> Bipartitioning -> FM s (Maybe Int)
+selectBaseCell v p = do
   bucket <- maxGain
   case bucket of
-    Just (i, xs) -> pure $ balanceCriterion h p i `find` xs
+    Just (_, xs) -> pure $ balanceCriterion (length v) p `find` xs
     _ -> pure Nothing
 
 
@@ -328,7 +512,7 @@ initialGains (v, e) p = do
   let gmax = foldMap singleton nodes
 
   initial <- st $ do
-      gain <- newSized $ size gmax
+      gain <- newSized $ 2 * size gmax + 1
       flip imapM_ nodes $ \ k x ->
           mutate gain x $ (, ()) . pure . maybe [k] (k:)
       Gain <$> newSTRef gmax <*> thaw nodes <*> pure gain
@@ -337,25 +521,25 @@ initialGains (v, e) p = do
 
 
 
-balanceCriterion :: IntSet -> Bipartitioning -> Int -> Int -> Bool
-balanceCriterion h (Bi p q) smax c
-  = div v r - k * smax <= a && a <= div v r + k * smax
+balanceCriterion :: Int -> Bipartitioning -> Int -> Bool
+balanceCriterion v (Bisect p q) c
+   = (fromIntegral v * (1 - r)) / 2 <= fromIntegral a
+  && (fromIntegral v * (1 + r)) / 2 >= fromIntegral b
   where
     a = last (succ : [pred | member c p]) (size p)
-    v = size p + size q
-    k = size h
-    r = fromIntegral $ denominator balanceFactor `div` numerator balanceFactor
+    b = last (succ : [pred | member c q]) (size q)
+    r = balanceFactor
 
 
 fromBlock, toBlock :: Bipartitioning -> Int -> E -> Int -> IntSet
-fromBlock (Bi a _) i e n | member i a = intersection a $ e ! n
-fromBlock (Bi _ b) _ e n = intersection b $ e ! n
-toBlock (Bi a b) i e n | member i a = intersection b $ e ! n
-toBlock (Bi a _) _ e n = intersection a $ e ! n
+fromBlock (Bisect a _) i e n | member i a = intersection a $ e ! n
+fromBlock (Bisect _ b) _ e n = intersection b $ e ! n
+toBlock (Bisect a b) i e n | member i a = intersection b $ e ! n
+toBlock (Bisect a _) _ e n = intersection a $ e ! n
 
 
-inputRoutine :: Foldable f => Int -> Int -> f (Int, Int) -> FM s (V, E)
-inputRoutine n c xs = st $ do
+inputRoutine :: Foldable f => Int -> Int -> f (Int, Int) -> ST s (V, E)
+inputRoutine n c xs = do
   ns <- replicate n mempty
   cs <- replicate c mempty
   for_ xs $ \ (x, y) -> do

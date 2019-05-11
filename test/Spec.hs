@@ -1,3 +1,4 @@
+{-# LANGUAGE TemplateHaskell #-}
 
 import Control.Category
 import Control.Arrow
@@ -9,12 +10,24 @@ import Control.Monad.IO.Class
 import Control.Monad.ST
 import Data.Bits
 import Data.Default
+import Data.FileEmbed
+import Data.Foldable
+import Data.Function (on)
+import Data.IntSet (fromAscList, size)
+import Data.Map (assocs)
+import Data.Ratio
+import Data.Text (Text)
+import Data.Text.Encoding
+import qualified Data.Vector as V
+import qualified Data.Vector.Algorithms.Intro as V
 import Prelude hiding (id, (.))
 
 import Test.Tasty
 import Test.Tasty.HUnit
+import Test.Tasty.QuickCheck
 
 import LSC
+import LSC.BLIF
 import LSC.Types
 import LSC.FM
 
@@ -28,18 +41,127 @@ main = defaultMain $ testGroup "LSC"
 
 fm :: TestTree
 fm = testGroup "FM" $
-  [ testCase "inputRoutine" $ fmInputRoutine
+  [ testCase "Input routine" $ fmInputRoutine
+  , testCase "Deterministic FM" $ fmDeterministic
+  , fmML
   ]
 
+
+fmML :: TestTree
+fmML = testGroup "FM Multi Level"
+  [ testCase "Random permutation" fmRandomPermutation
+  , testCase "Match" fmMatch
+  , testCase "Induce and Project" fmInduceAndProject
+  , fmRealWorld
+  ] 
+
+fmRealWorld :: TestTree
+fmRealWorld = testGroup "Real World Instances"
+  [ testCase "queue_1.blif"   $ fmMulti (7, 7) =<< stToIO queue_1Hypergraph
+  , testCase "picorv32.blif"  $ fmMulti (300, 600) =<< stToIO picorv32Hypergraph
+  ]
+
+
+
+fmMulti :: (Int, Int) -> (V, E) -> IO ()
+fmMulti (x, y) h = do
+  solution <- solutionVectorOf 16 $ fmMultiLevel h coarseningThreshold matchingRatio
+  let d@(Bisect p q) = minimumBy (compare `on` \ x -> bisectBalance x + 2 * cutSize h x) solution 
+  let c = cutSize h d
+  let it = unlines
+        [ "cut size in between " ++ show x ++ " and " ++ show y ++ ": " ++ show c
+        , show (size p) ++ " | " ++ show (size q)
+        ]
+  assertBool it $ x <= c && c <= y
+
+
+
+fmInduceAndProject :: IO ()
+fmInduceAndProject = do
+  (v, e) <- arbitraryHypergraph 10000
+  nonDeterministic $ do
+      u <- randomPermutation $ length v
+      c <- st $ match (v, e) matchingRatio u
+      h <- st $ induce (v, e) c
+      pure ()
+
+
+
+fmRandomPermutation :: IO ()
+fmRandomPermutation = do
+  n <- generate $ choose (1000, 10000)
+  v <- pure $ V.generate n id
+  u <- nonDeterministic $ randomPermutation n
+  a <- V.thaw u
+  V.sort a
+  w <- V.freeze a
+
+  assertBool "permutation" $ u /= v
+  assertBool "sorted"      $ w == v
+
+
+
+fmMatch :: IO ()
+fmMatch = do
+  (v, e) <- arbitraryHypergraph 10000
+  clustering <- nonDeterministic $ do
+      u <- randomPermutation $ length v
+      st $ match (v, e) matchingRatio u
+
+  assertEqual "length does not match" (length v) (sum $ size <$> clustering)
+  assertBool "elements do not match" $ foldMap id clustering == fromAscList [0 .. length v - 1]
+  assertBool "clustering" $ length clustering <= length v
+
+
+
 fmInputRoutine :: IO ()
-fmInputRoutine = do
-  void $ runST $ evalFM $ fiducciaMattheyses =<< inputRoutine 5 6
-    [ (0,3), (0,4)
-    , (1,1), (1,4)
-    , (2,0), (2,1), (2,2)
-    , (3,1), (3,5)
-    , (4,1), (4,2), (4,3)
-    ]
+fmInputRoutine = void $ arbitraryHypergraph 10000
+
+
+fmDeterministic :: IO ()
+fmDeterministic = do
+
+  h <- stToIO queue_1Hypergraph
+  p <- stToIO $ evalFM $ fiducciaMattheyses h
+
+  assertEqual "cut size" 11 $ cutSize h p
+
+
+
+blifHypergraph :: BLIF -> ST s (V, E)
+blifHypergraph netlist = inputRoutine
+    (top ^. nets . to length)
+    (top ^. gates . to length)
+    [ (n, c)
+    | (n, w) <- zip [0..] $ toList $ top ^. nets
+    , (c, _) <- w ^. contacts . to assocs
+    ] where top = fromBLIF netlist
+
+
+
+arbitraryHypergraph :: Int -> IO (V, E)
+arbitraryHypergraph n = do
+  k <- generate $ choose (1, n)
+  y <- generate $ choose (k, k+n)
+  config <- generate $ vectorOf (4 * k) $ (,) <$> choose (0, pred y) <*> choose (0, pred k)
+  stToIO $ inputRoutine y k config
+
+
+queue_1Hypergraph :: ST s (V, E)
+queue_1Hypergraph = either (fail . show) blifHypergraph $ parseBLIF queue_1Blif
+
+picorv32Hypergraph :: ST s (V, E)
+picorv32Hypergraph = either (fail . show) blifHypergraph $ parseBLIF picorv32Blif
+
+
+picorv32Blif :: Text
+picorv32Blif = decodeUtf8 $(embedFile "sample/picorv32.blif")
+
+queue_1Blif :: Text
+queue_1Blif = decodeUtf8 $(embedFile "sample/queue_1.blif")
+
+
+
 
 
 concurrency :: TestTree
