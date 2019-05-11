@@ -26,12 +26,12 @@
 
 ### Place and route a small component
 
-`lsc -b sample/fulladder.blif -l sample/osu035.lef -c -d > result.svg`  
+`lsc -b sample/fulladder.blif -l sample/osu035.lef -c -d > result.blif`  
 
 
 ### Exline a large component
 
-`lsc -b sample/picorv32.blif -l sample/osu035.lef -x -d > result.svg`  
+`lsc -b sample/picorv32.blif -l sample/osu035.lef -x -d > result.blif`  
 
 
 ## Tests
