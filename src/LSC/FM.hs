@@ -45,7 +45,7 @@ coarseningThreshold = 35
 
 
 balanceFactor :: Rational
-balanceFactor = 1 % 2
+balanceFactor = 1 % 10
 
 
 type NetArray  = Vector IntSet
@@ -187,17 +187,19 @@ fmMultiLevel (v, e) t r = do
 
     i <- st $ newSTRef 0
 
-    hypergraphs  <- replicate 64 mempty
-    clustering   <- replicate 64 mempty
-    partitioning <- replicate 64 mempty
+    let it = 256
+
+    hypergraphs  <- replicate it mempty
+    clusterings  <- replicate it mempty
+    partitioning <- replicate it mempty
 
     write hypergraphs 0 (v, e)
 
     let continue = st $ do
             j <- readSTRef i
             l <- length . fst <$> read hypergraphs j
-            s <- freeze $ slice (max 0 $ j-8) (min 8 $ 64-j) hypergraphs
-            pure $ j < 12 && t < l
+            s <- freeze $ slice (max 0 $ j-8) (min 8 $ it-j) hypergraphs
+            pure $ j < pred it && t < l
                 && any (l /=) (length . fst <$> s)
     whileM_ continue $ do
 
@@ -215,7 +217,7 @@ fmMultiLevel (v, e) t r = do
         hs <- induce hi pk
 
         j <- readSTRef i
-        write clustering  j pk
+        write clusterings j pk
         write hypergraphs j hs
 
 
@@ -226,7 +228,7 @@ fmMultiLevel (v, e) t r = do
     write partitioning m =<< fmPartition hi Nothing
 
     for_ (reverse [0 .. m - 1]) $ \ j -> do
-        p <- project <$> read clustering (succ j) <*> read partitioning (succ j)
+        p <- project <$> read clusterings (succ j) <*> read partitioning (succ j)
         h <- read hypergraphs j
         write partitioning j =<< fmPartition h (Just p)
 
@@ -380,7 +382,7 @@ computeG p0 = do
 
 processCell :: (V, E) -> Bipartitioning -> FM s ()
 processCell (v, e) p = do
-  ck <- selectBaseCell p
+  ck <- selectBaseCell v p
   for_ ck $ \ c -> do
     lockCell c
     q <- moveCell c p
@@ -403,12 +405,11 @@ moveCell c p = do
   pure q
 
 
-selectBaseCell :: Bipartitioning -> FM s (Maybe Int)
-selectBaseCell p = do
-  h <- value freeCells
+selectBaseCell :: V -> Bipartitioning -> FM s (Maybe Int)
+selectBaseCell v p = do
   bucket <- maxGain
   case bucket of
-    Just (i, xs) -> pure $ balanceCriterion h p i `find` xs
+    Just (_, xs) -> pure $ balanceCriterion v p `find` xs
     _ -> pure Nothing
 
 
@@ -495,7 +496,7 @@ initialGains (v, e) p = do
   let gmax = foldMap singleton nodes
 
   initial <- st $ do
-      gain <- newSized $ size gmax
+      gain <- newSized $ 2 * size gmax + 1
       flip imapM_ nodes $ \ k x ->
           mutate gain x $ (, ()) . pure . maybe [k] (k:)
       Gain <$> newSTRef gmax <*> thaw nodes <*> pure gain
@@ -504,14 +505,14 @@ initialGains (v, e) p = do
 
 
 
-balanceCriterion :: IntSet -> Bipartitioning -> Int -> Int -> Bool
-balanceCriterion h (Bisect p q) smax c
-  = div v r - k * smax <= a && a <= div v r + k * smax
+balanceCriterion :: V -> Bipartitioning -> Int -> Bool
+balanceCriterion v (Bisect p q) c
+   = (fromIntegral (length v) * (1 - r)) / 2 <= fromIntegral a
+  && (fromIntegral (length v) * (1 + r)) / 2 >= fromIntegral b
   where
     a = last (succ : [pred | member c p]) (size p)
-    v = size p + size q
-    k = size h
-    r = fromIntegral $ denominator balanceFactor `div` numerator balanceFactor
+    b = last (succ : [pred | member c q]) (size q)
+    r = balanceFactor
 
 
 fromBlock, toBlock :: Bipartitioning -> Int -> E -> Int -> IntSet

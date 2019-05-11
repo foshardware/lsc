@@ -12,7 +12,7 @@ import Data.Bits
 import Data.Default
 import Data.FileEmbed
 import Data.Foldable
-import Data.IntSet (fromDistinctAscList, size)
+import Data.IntSet (fromAscList, size)
 import Data.Map (assocs)
 import Data.Ratio
 import Data.Text (Text)
@@ -34,7 +34,7 @@ import LSC.FM
 main :: IO ()
 main = defaultMain $ testGroup "LSC"
   [ fm
-  , concurrency
+--  , concurrency
   ]
 
 
@@ -57,23 +57,26 @@ fmML = testGroup "FM Multi Level"
 fmRealWorld :: TestTree
 fmRealWorld = testGroup "Real World Instances"
   [ testCase "queue_1.blif"   $ fmMulti (7, 7) =<< stToIO queue_1Hypergraph
-  , testCase "picorv32.blif"  $ fmMulti (1000, 2000) =<< stToIO picorv32Hypergraph
+  , testCase "picorv32.blif"  $ fmMulti (500, 1000) =<< stToIO picorv32Hypergraph
   ]
 
 
 
 fmMulti :: (Int, Int) -> (V, E) -> IO ()
 fmMulti (x, y) h = do
-  p <- nonDeterministic $ fmMultiLevel h 35 (1%3)
-  let c = cutSize h p
-  let it = "cut size in between " ++ show x ++ " and " ++ show y ++ ": " ++ show c
+  d@(Bisect p q) <- nonDeterministic $ fmMultiLevel h 35 (1%4)
+  let c = cutSize h d
+  let it = unlines
+        [ "cut size in between " ++ show x ++ " and " ++ show y ++ ": " ++ show c
+        , show (size p) ++ " | " ++ show (size q)
+        ]
   assertBool it $ x <= c && c <= y
 
 
 
 fmInduceAndProject :: IO ()
 fmInduceAndProject = do
-  (v, e) <- arbitraryHypergraph 10000 10000
+  (v, e) <- arbitraryHypergraph 10000
   nonDeterministic $ do
       u <- randomPermutation $ length v
       c <- st $ match (v, e) matchingRatio u
@@ -98,19 +101,19 @@ fmRandomPermutation = do
 
 fmMatch :: IO ()
 fmMatch = do
-  (v, e) <- arbitraryHypergraph 10000 10000
+  (v, e) <- arbitraryHypergraph 10000
   clustering <- nonDeterministic $ do
       u <- randomPermutation $ length v
       st $ match (v, e) matchingRatio u
 
   assertEqual "length does not match" (length v) (sum $ size <$> clustering)
-  assertBool "elements do not match" $ foldMap id clustering == fromDistinctAscList [0 .. length v - 1]
+  assertBool "elements do not match" $ foldMap id clustering == fromAscList [0 .. length v - 1]
   assertBool "clustering" $ length clustering <= length v
 
 
 
 fmInputRoutine :: IO ()
-fmInputRoutine = void $ arbitraryHypergraph 10000 10000
+fmInputRoutine = void $ arbitraryHypergraph 10000
 
 
 fmDeterministic :: IO ()
@@ -119,7 +122,7 @@ fmDeterministic = do
   h <- stToIO queue_1Hypergraph
   p <- stToIO $ evalFM $ fiducciaMattheyses h
 
-  assertEqual "cut size" 12 $ cutSize h p
+  assertEqual "cut size" 11 $ cutSize h p
 
 
 
@@ -134,11 +137,12 @@ blifHypergraph netlist = inputRoutine
 
 
 
-arbitraryHypergraph :: Int -> Int -> IO (V, E)
-arbitraryHypergraph n' c' = do
-  (n, c) <- generate $ (,) <$> choose (1, n') <*> choose (1, c')
-  config <- generate $ vectorOf (n'+ c') $ (,) <$> choose (0, pred n) <*> choose (0, pred c)
-  stToIO $ inputRoutine n c config
+arbitraryHypergraph :: Int -> IO (V, E)
+arbitraryHypergraph n = do
+  k <- generate $ choose (1, n)
+  y <- generate $ choose (k, k+n)
+  config <- generate $ vectorOf (4 * k) $ (,) <$> choose (0, pred y) <*> choose (0, pred k)
+  stToIO $ inputRoutine y k config
 
 
 queue_1Hypergraph :: ST s (V, E)
