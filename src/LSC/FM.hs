@@ -27,12 +27,13 @@ import Data.STRef
 import Data.Vector
   ( Vector
   , unsafeFreeze, unsafeThaw
+  , unsafeSlice
   , freeze, thaw
   , take, drop, generate
   , head
   , (!), indexed
   )
-import Data.Vector.Mutable (STVector, read, write, modify, replicate, unsafeSwap, slice)
+import Data.Vector.Mutable (MVector, read, write, modify, replicate, unsafeSwap, slice)
 import Prelude hiding (replicate, length, read, lookup, take, drop, head)
 import System.Random.MWC
 import System.IO.Unsafe
@@ -61,7 +62,7 @@ type E = NetArray
 
 data Gain s a = Gain
   (STRef s IntSet)      -- track existing gains
-  (STVector s Int)      -- gains indexed by node
+  (MVector s Int)       -- gains indexed by node
   (HashTable s Int [a]) -- nodes indexed by gain
 
 
@@ -121,7 +122,7 @@ data Heu s = Heu
 makeFieldsNoPrefix ''Heu
 
 
-type FM s = ReaderT (GenST s, STRef s (Heu s)) (ST s)
+type FM s = ReaderT (Gen s, STRef s (Heu s)) (ST s)
 
 
 nonDeterministic :: FM RealWorld a -> IO a
@@ -130,9 +131,11 @@ nonDeterministic f = head <$> solutionVectorOf 1 f
 
 solutionVectorOf :: Int -> FM RealWorld a -> IO (Vector a)
 solutionVectorOf n f = do
-    v <- entropyVector32 $ 258 * n
-    g <- sequence $ generate n $ \ i -> initialize $ take (258 * i) $ drop (258 * i) $ v
-    sequence $ generate n $ \ i -> unsafeInterleaveIO $ stToIO $ runFMWithGen (g!i) f
+  v <- entropyVector32 $ 258 * n
+  sequence $ generate n $ \ i -> unsafeInterleaveIO $ stToIO $ do
+      g <- initialize $ unsafeSlice (258 * i) 258 v
+      runFMWithGen g f
+
 
 prng :: FM s (Gen s)
 prng = fst <$> ask
@@ -330,6 +333,7 @@ match (v, e) r u = do
 
   where
 
+      -- cost centre!
       conn x y = sum [ 1 % size (e!f) | f <- elems $ intersection (v!x) (v!y), size (e!f) < 10 ]
 
 

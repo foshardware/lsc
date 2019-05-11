@@ -12,6 +12,7 @@ import Data.Bits
 import Data.Default
 import Data.FileEmbed
 import Data.Foldable
+import Data.Function (on)
 import Data.IntSet (fromAscList, size)
 import Data.Map (assocs)
 import Data.Ratio
@@ -57,14 +58,15 @@ fmML = testGroup "FM Multi Level"
 fmRealWorld :: TestTree
 fmRealWorld = testGroup "Real World Instances"
   [ testCase "queue_1.blif"   $ fmMulti (7, 7) =<< stToIO queue_1Hypergraph
-  , testCase "picorv32.blif"  $ fmMulti (-1,-1) =<< stToIO picorv32Hypergraph
+  , testCase "picorv32.blif"  $ fmMulti (300, 600) =<< stToIO picorv32Hypergraph
   ]
 
 
 
 fmMulti :: (Int, Int) -> (V, E) -> IO ()
 fmMulti (x, y) h = do
-  d@(Bisect p q) <- nonDeterministic $ fmMultiLevel h 35 (1%4)
+  solution <- solutionVectorOf 16 $ fmMultiLevel h coarseningThreshold matchingRatio
+  let d@(Bisect p q) = minimumBy (compare `on` \ x -> bisectBalance x + 2 * cutSize h x) solution 
   let c = cutSize h d
   let it = unlines
         [ "cut size in between " ++ show x ++ " and " ++ show y ++ ": " ++ show c
