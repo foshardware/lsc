@@ -15,7 +15,6 @@ import Data.Foldable
 import Data.Function (on)
 import Data.IntSet (fromAscList, size)
 import Data.Map (assocs)
-import Data.Ratio
 import Data.Text (Text)
 import Data.Text.Encoding
 import qualified Data.Vector as V
@@ -66,7 +65,7 @@ fmRealWorld = testGroup "Real World Instances"
 fmMulti :: (Int, Int) -> (V, E) -> IO ()
 fmMulti (x, y) h = do
   solution <- solutionVectorOf 16 $ fmMultiLevel h coarseningThreshold matchingRatio
-  let d@(Bisect p q) = minimumBy (compare `on` \ x -> bisectBalance x + 2 * cutSize h x) solution 
+  let d@(Bisect p q) = minimumBy (compare `on` \ p -> bisectBalance p + 2 * cutSize h p) solution
   let c = cutSize h d
   let it = unlines
         [ "cut size in between " ++ show x ++ " and " ++ show y ++ ": " ++ show c

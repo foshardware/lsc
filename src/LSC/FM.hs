@@ -29,9 +29,8 @@ import Data.Vector
   , unsafeFreeze, unsafeThaw
   , unsafeSlice
   , freeze, thaw
-  , take, drop, generate
-  , head
-  , (!), indexed
+  , take, generate
+  , head, (!), indexed
   )
 import Data.Vector.Mutable (MVector, read, write, modify, replicate, unsafeSwap, slice)
 import Prelude hiding (replicate, length, read, lookup, take, drop, head)
