@@ -22,7 +22,7 @@ import LSC.Types
 
 
 exline :: NetGraph -> LSC NetGraph
-exline = recursiveBisection 8
+exline = recursiveBisection 4
 
 
 recursiveBisection :: Int -> NetGraph -> LSC NetGraph
@@ -44,7 +44,7 @@ bisection top = do
     , netGraphStats top
     ]
 
-  solutions <- liftIO $ solutionVector 64 $ do
+  solutions <- liftIO $ solutionVector 16 $ do
       h <- st $ inputRoutine
           (top ^. nets . to length)
           (top ^. gates . to length)
@@ -54,7 +54,7 @@ bisection top = do
           ]
       (h, ) <$> fmMultiLevel h coarseningThreshold matchingRatio
 
-  let (_, Bisect p q) = minimumBy (compare `on` \ (h, x) -> bisectBalance x + cutSize h x) solutions
+  let (_, Bisect p q) = minimumBy (compare `on` \ (h, x) -> bisectBalance x + 2 * cutSize h x) solutions
 
   -- get a gate
   let g i = view gates top ! i

@@ -28,7 +28,7 @@ import Data.Vector
   ( Vector
   , unsafeFreeze, unsafeThaw
   , freeze, thaw
-  , take, generate
+  , take, drop, generate
   , (!), indexed
   )
 import Data.Vector.Mutable (STVector, read, write, modify, replicate, unsafeSwap, slice)
@@ -36,10 +36,12 @@ import Prelude hiding (replicate, length, read, lookup, take, drop)
 import System.Random.MWC
 import System.IO.Unsafe
 
+import LSC.Entropy
+
 
 
 matchingRatio :: Rational
-matchingRatio = 1 % 2
+matchingRatio = 1 % 3
 
 coarseningThreshold :: Int
 coarseningThreshold = 8
@@ -123,7 +125,11 @@ type FM s = ReaderT (GenST s, STRef s (Heu s)) (ST s)
 
 
 solutionVector :: Int -> FM RealWorld a -> IO (Vector a)
-solutionVector n = sequence . generate n . const . unsafeInterleaveIO . nonDeterministic
+solutionVector n f = do
+    v <- entropyVector32 $ 258 * n
+    g <- sequence $ generate n $ \ i -> initialize $ take (258 * i) $ drop (258 * i) $ v
+    sequence $ generate n $ \ i -> unsafeInterleaveIO $ stToIO $ runFMWithGen (g!i) f
+
 
 nonDeterministic :: FM RealWorld a -> IO a
 nonDeterministic f = withSystemRandom $ \ r -> stToIO $ runFMWithGen r f
@@ -192,7 +198,7 @@ fmMultiLevel (v, e) t r = do
 
     i <- st $ newSTRef 0
 
-    let it = 16
+    let it = 32
 
     hypergraphs  <- replicate it mempty
     clusterings  <- replicate it mempty
