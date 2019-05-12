@@ -25,7 +25,6 @@ import LSC.Force
 import LSC.Integer
 import LSC.Types
 import LSC.Version
-import LSC.Web
 
 
 stage1 :: Compiler' NetGraph
@@ -40,7 +39,7 @@ animatePlacement = zeroArrow
 
 layoutEstimation :: Compiler' NetGraph
 layoutEstimation = zeroArrow
-  <+> local exline >>> local placeEasy
+  <+> dag netGraph (local placeEasy)
 
 
 

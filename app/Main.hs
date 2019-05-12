@@ -25,6 +25,7 @@ import LSC.Verilog (parseVerilog)
 import LSC
 import LSC.BLIF
 import LSC.D3
+import LSC.Easy
 import LSC.Exline
 import LSC.FIR
 import LSC.SVG
@@ -101,6 +102,12 @@ program = do
           liftIO $ printBLIF $ toBLIF new
           exit
 
+      when (arg LayoutEstimation)
+        $ do
+          circuit2d <- liftIO $ evalLSC opts tech $ compiler layoutEstimation netlist
+          liftIO $ plotStdout circuit2d
+          exit
+
       when (arg Compile)
         $ do
           circuit2d <- lift $ evalLSC opts tech $ compiler stage1 netlist
@@ -137,6 +144,7 @@ data FlagKey
   | Blif
   | Lef
   | Exline
+  | LayoutEstimation
   | Compile
   | Visuals
   | Iterations
@@ -160,6 +168,7 @@ args =
     , Option ['l']      ["lef"]        (ReqArg (Lef,  ) "FILE")     "LEF file"
     , Option ['d']      ["debug"]      (NoArg  (Debug, mempty))     "print some debug info"
     , Option ['g']      ["visuals"]    (NoArg  (Visuals, mempty))   "show visuals"
+    , Option [ ]        ["estimate-layout"] (NoArg (LayoutEstimation, mempty)) "estimate area"
 
     , Option ['i']      ["iterations"]
         (OptArg  ((Iterations, ) . maybe "4" id) "n")               "iterations"

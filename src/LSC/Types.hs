@@ -346,12 +346,19 @@ width, height :: Num a => Component l a -> a
 width  p = p ^. r - p ^. l
 height p = p ^. t - p ^. b
 
+
 integrate :: [l] -> Component k a -> Component l a
 integrate    [] (Layered x1 y1 x2 y2 _) = Rect    x1 y1 x2 y2
 integrate    [] (Rect    x1 y1 x2 y2)   = Rect    x1 y1 x2 y2
 integrate layer (Layered x1 y1 x2 y2 _) = Layered x1 y1 x2 y2 layer
 integrate layer (Rect    x1 y1 x2 y2)   = Layered x1 y1 x2 y2 layer
 integrate layer (Via     x1 y1 x2 y2 _) = Via     x1 y1 x2 y2 layer
+
+
+rotateLeft :: Component l a -> Component l a
+rotateLeft p = p &~ do
+    r .= p ^. t
+    t .= p ^. r
 
 
 instance Default a => Default (Component l a) where
@@ -381,11 +388,11 @@ instance Default NetGraph where
 
 
 treeStructure :: NetGraph -> NetGraph
-treeStructure netlist = netlist & subcells .~ foldr collect mempty (netlist ^. gates)
+treeStructure top = top & subcells .~ foldr collect mempty (top ^. gates)
   where
-    scope = fromList [ (x ^. identifier, x) | x <- flatten subcells netlist ]
+    scope = fromList [ (x ^. identifier, x) | x <- flatten subcells top ]
     collect g a = maybe a (descend a) $ lookup (g ^. identifier) scope
-    descend a n = insert (n ^. identifier) (treeStructure n) a
+    descend a n = insert (n ^. identifier) (n & subcells .~ foldr collect mempty (n ^. gates)) a
 
 
 flatten :: Foldable f => Getter a (f a) -> a -> [a]

@@ -10,7 +10,7 @@ extra-deps:
 - git: https://github.com/foshardware/firrtl
   commit: f9f4ed5cc1b46ea23a346e4f9c2c591a0d585a8b
 - git: https://github.com/foshardware/blif
-  commit: 93431ea59b0235045a8af87fa33017be8c392309
+  commit: 1ed16defa366af690147086a7cd929531c59a802
 - git: https://github.com/foshardware/lef
   commit: a4dadcd820a6331c0ec3372e7039da55535163db
 - arrows-0.4.4.2@sha256:a260222b766da922657e302aa7c0409451913e1e503798a47a213a61ba382460
