@@ -45,7 +45,7 @@ matchingRatio :: Rational
 matchingRatio = 1 % 3
 
 coarseningThreshold :: Int
-coarseningThreshold = 8
+coarseningThreshold = 16
 
 
 balanceFactor :: Rational
@@ -239,8 +239,10 @@ fmMultiLevel (v, e) t r = do
     for_ (reverse [0 .. m - 1]) $ \ j -> do
         pk <- read clusterings  $ succ j
         p' <- read partitioning $ succ j
+
         q <- project pk p'
         h <- read hypergraphs j
+
         write partitioning j =<< fmPartition h (Just q)
 
     read partitioning 0
@@ -329,7 +331,7 @@ match (v, e) r u = do
   where
 
       -- cost centre!
-      conn x y = sum [ 1 % size (e!f) | f <- elems $ intersection (v!x) (v!y) ] -- , size (e!f) < 10 ]
+      conn x y = sum [ 1 % size (e!f) | f <- elems $ intersection (v!x) (v!y) ]
 
 
 

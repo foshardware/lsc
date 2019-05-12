@@ -20,6 +20,7 @@ import Prelude hiding ((.), id)
 
 import LSC.Synthesis
 import LSC.Easy
+import LSC.Exline
 import LSC.Force
 import LSC.Integer
 import LSC.Types
@@ -29,14 +30,17 @@ import LSC.Web
 
 stage1 :: Compiler' NetGraph
 stage1 = zeroArrow
-  <+> remote routeWeb
-  <+> local placeEasy >>> local placeForce
   <+> dag netGraph (env_ rowSize 21000 route <+> route)
 
 
 animatePlacement :: Compiler' NetGraph
 animatePlacement = zeroArrow
   <+> local placeEasy >>> local placeForce
+
+
+layoutEstimation :: Compiler' NetGraph
+layoutEstimation = zeroArrow
+  <+> local exline >>> local placeEasy
 
 
 
