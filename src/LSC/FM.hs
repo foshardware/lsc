@@ -112,7 +112,6 @@ data Heu s = Heu
   { _gains        :: Gain s Int
   , _freeCells    :: IntSet
   , _moves        :: [(Move, Bipartitioning)]
-  , _iterations   :: !Int
   }
 
 makeFieldsNoPrefix ''Heu
@@ -146,7 +145,7 @@ runFM = runFMWithGen $ error "prng not initialized"
 runFMWithGen :: Gen s -> FM s a -> ST s a
 runFMWithGen s f = do
   g <- Gain <$> newSTRef mempty <*> thaw mempty <*> new
-  r <- newSTRef $ Heu g mempty mempty 0
+  r <- newSTRef $ Heu g mempty mempty
   runReaderT f (s, r)
 
 
@@ -330,7 +329,7 @@ match (v, e) r u = do
   where
 
       -- cost centre!
-      conn x y = sum [ 1 % size (e!f) | f <- elems $ intersection (v!x) (v!y), size (e!f) < 10 ]
+      conn x y = sum [ 1 % size (e!f) | f <- elems $ intersection (v!x) (v!y) ] -- , size (e!f) < 10 ]
 
 
 
@@ -365,8 +364,6 @@ bipartition (v, e) p = do
   processCell (v, e) p
 
   (g, q) <- computeG p
-
-  update iterations succ
 
   if g <= 0
     then pure p

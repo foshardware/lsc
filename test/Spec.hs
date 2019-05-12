@@ -50,39 +50,27 @@ fmML :: TestTree
 fmML = testGroup "FM Multi Level"
   [ testCase "Random permutation" fmRandomPermutation
   , testCase "Match" fmMatch
-  , testCase "Induce and Project" fmInduceAndProject
   , fmRealWorld
   ] 
 
 fmRealWorld :: TestTree
 fmRealWorld = testGroup "Real World Instances"
   [ testCase "queue_1.blif"   $ fmMulti (7, 7) =<< stToIO queue_1Hypergraph
-  , testCase "picorv32.blif"  $ fmMulti (300, 600) =<< stToIO picorv32Hypergraph
+  , testCase "picorv32.blif"  $ fmMulti (-1, -1) =<< stToIO picorv32Hypergraph
   ]
 
 
 
 fmMulti :: (Int, Int) -> (V, E) -> IO ()
 fmMulti (x, y) h = do
-  solution <- solutionVectorOf 16 $ fmMultiLevel h coarseningThreshold matchingRatio
-  let d@(Bisect p q) = minimumBy (compare `on` \ p -> bisectBalance p + 2 * cutSize h p) solution
-  let c = cutSize h d
+  solution <- solutionVectorOf 4 $ fmMultiLevel h coarseningThreshold matchingRatio
+  let Bisect p q = minimumBy (compare `on` \ o -> bisectBalance o + 2 * cutSize h o) solution
+  let c = cutSize h (Bisect p q)
   let it = unlines
         [ "cut size in between " ++ show x ++ " and " ++ show y ++ ": " ++ show c
         , show (size p) ++ " | " ++ show (size q)
         ]
   assertBool it $ x <= c && c <= y
-
-
-
-fmInduceAndProject :: IO ()
-fmInduceAndProject = do
-  (v, e) <- arbitraryHypergraph 10000
-  nonDeterministic $ do
-      u <- randomPermutation $ length v
-      c <- st $ match (v, e) matchingRatio u
-      h <- st $ induce (v, e) c
-      pure ()
 
 
 
@@ -119,10 +107,8 @@ fmInputRoutine = void $ arbitraryHypergraph 10000
 
 fmDeterministic :: IO ()
 fmDeterministic = do
-
   h <- stToIO queue_1Hypergraph
   p <- stToIO $ evalFM $ fiducciaMattheyses h
-
   assertEqual "cut size" 11 $ cutSize h p
 
 

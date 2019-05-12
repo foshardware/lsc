@@ -27,7 +27,7 @@ exline = recursiveBisection 4
 
 recursiveBisection :: Int -> NetGraph -> LSC NetGraph
 recursiveBisection i top
-  | top ^. gates . to length < i
+  | top ^. gates . to length <= i
   = pure top
 recursiveBisection i top = do
     next <- bisection top
@@ -44,7 +44,9 @@ bisection top = do
     , netGraphStats top
     ]
 
-  solution <- liftIO $ solutionVectorOf 16 $ do
+  it <- view iterations <$> environment
+
+  solution <- liftIO $ solutionVectorOf it $ do
       h <- st $ inputRoutine
           (top ^. nets . to length)
           (top ^. gates . to length)
@@ -121,7 +123,7 @@ bisection top = do
   debug
     [ unpack (view identifier top) ++ ": exlining finished"
     , netGraphStats result
-    -- , "iterations: "++ show it
+    , "iterations: "++ show it
     , "cut size: "++ show (length cut)
     , ""
     ]
