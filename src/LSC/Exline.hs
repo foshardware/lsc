@@ -46,7 +46,7 @@ bisection top = do
 
   it <- view iterations <$> environment
 
-  solution <- liftIO $ solutionVectorOf it $ do
+  solution <- liftIO $ nonDeterministic $ sequence $ replicate it $ do
       h <- st $ inputRoutine
           (top ^. nets . to length)
           (top ^. gates . to length)

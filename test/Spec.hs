@@ -7,12 +7,12 @@ import Control.Concurrent
 import Control.Lens
 import Control.Monad
 import Control.Monad.IO.Class
+import Control.Monad.Loops
 import Control.Monad.ST
 import Data.Bits
 import Data.Default
 import Data.FileEmbed
 import Data.Foldable
-import Data.Function (on)
 import Data.IntSet (fromAscList, size)
 import Data.Map (assocs)
 import Data.Text (Text)
@@ -42,6 +42,7 @@ fm :: TestTree
 fm = testGroup "FM" $
   [ testCase "Input routine" $ fmInputRoutine
   , testCase "Deterministic FM" $ fmDeterministic
+  , testCase "Balance criterion" $ fmBalanceCriterion
   , fmML
   ]
 
@@ -55,22 +56,18 @@ fmML = testGroup "FM Multi Level"
 
 fmRealWorld :: TestTree
 fmRealWorld = testGroup "Real World Instances"
-  [ testCase "queue_1.blif"   $ fmMulti (7, 7) =<< stToIO queue_1Hypergraph
-  , testCase "picorv32.blif"  $ fmMulti (-1, -1) =<< stToIO picorv32Hypergraph
+  [ testCase "queue_1.blif"   $ fmMulti 7 =<< stToIO queue_1Hypergraph
+  , testCase "picorv32.blif"  $ fmMulti 200 =<< stToIO picorv32Hypergraph
   ]
 
 
 
-fmMulti :: (Int, Int) -> (V, E) -> IO ()
-fmMulti (x, y) h = do
-  solution <- solutionVectorOf 4 $ fmMultiLevel h coarseningThreshold matchingRatio
-  let Bisect p q = minimumBy (compare `on` \ o -> bisectBalance o + 2 * cutSize h o) solution
-  let c = cutSize h (Bisect p q)
-  let it = unlines
-        [ "cut size in between " ++ show x ++ " and " ++ show y ++ ": " ++ show c
-        , show (size p) ++ " | " ++ show (size q)
-        ]
-  assertBool it $ x <= c && c <= y
+fmMulti :: Int -> (V, E) -> IO ()
+fmMulti cut h = do
+  let predicate p = bisectBalance p < div (length $ fst h) 10 && cutSize h p <= cut
+  p <- nonDeterministic $ iterateUntil predicate $ fmMultiLevel h coarseningThreshold matchingRatio
+  let Bisect x y = p in putStrLn $ show (cutSize h p, size x, size y)
+  assertBool "unexpected cut size" $ cutSize h p <= cut
 
 
 
@@ -103,6 +100,25 @@ fmMatch = do
 
 fmInputRoutine :: IO ()
 fmInputRoutine = void $ arbitraryHypergraph 10000
+
+
+
+fmBalanceCriterion :: IO ()
+fmBalanceCriterion = do
+
+  assertBool "t1" $ balanced 420 0 $ bisect [1 .. 210] [211 .. 420]
+  assertBool "t2" $ not $ balanced 420 0 $ bisect [1 .. 105] [106 .. 420]
+  assertBool "t3" $ not $ balanced 420 0 $ bisect [1 .. 319] [320 .. 420]
+
+  assertBool "t4" $ balanced 42 0 $ bisect [1 .. 20] [21 .. 42]
+  assertBool "t5" $ not $ balanced 42 0 $ bisect [1 .. 10] [11 .. 42]
+  assertBool "t6" $ not $ balanced 42 0 $ bisect [1 .. 31] [32 .. 42]
+
+  where
+
+    balanced v = flip $ balanceCriterion v
+    bisect p q = Bisect (fromAscList p) (fromAscList q)
+
 
 
 fmDeterministic :: IO ()

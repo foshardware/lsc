@@ -27,15 +27,13 @@ import Data.STRef
 import Data.Vector
   ( Vector
   , unsafeFreeze, unsafeThaw
-  , unsafeSlice
   , freeze, thaw
   , take, generate
-  , head, (!), indexed
+  , (!), indexed
   )
 import Data.Vector.Mutable (MVector, read, write, modify, replicate, unsafeSwap, slice)
 import Prelude hiding (replicate, length, read, lookup, take, drop, head)
 import System.Random.MWC
-import System.IO.Unsafe
 
 import LSC.Entropy
 
@@ -120,15 +118,12 @@ makeFieldsNoPrefix ''Heu
 type FM s = ReaderT (Gen s, STRef s (Heu s)) (ST s)
 
 
+
 nonDeterministic :: FM RealWorld a -> IO a
-nonDeterministic f = head <$> solutionVectorOf 1 f 
-
-
-solutionVectorOf :: Int -> FM RealWorld a -> IO (Vector a)
-solutionVectorOf n f = do
-  v <- entropyVector32 $ 258 * n
-  sequence $ generate n $ \ i -> unsafeInterleaveIO $ stToIO $ do
-      g <- initialize $ unsafeSlice (258 * i) 258 v
+nonDeterministic f = do
+  v <- entropyVector32 258
+  stToIO $ do
+      g <- initialize v
       runFMWithGen g f
 
 
@@ -240,12 +235,34 @@ fmMultiLevel (v, e) t r = do
         pk <- read clusterings  $ succ j
         p' <- read partitioning $ succ j
 
-        q <- project pk p'
+        q <- rebalance =<< project pk p'
         h <- read hypergraphs j
 
         write partitioning j =<< fmPartition h (Just q)
 
     read partitioning 0
+
+
+
+rebalance :: Bipartitioning -> FM s Bipartitioning
+rebalance (Bisect p q)
+  | size p < size q
+  = rebalance (Bisect q p)
+rebalance (Bisect p q)
+  | balanceCriterion (size p + size q) (Bisect p q) minBound
+  = pure (Bisect p q)
+rebalance (Bisect p q) = do
+  u <- randomPermutation $ size p + size q
+  st $ do
+    b <- newSTRef (Bisect p q)
+    i <- newSTRef 0
+    let imba x j = balanceCriterion (size p + size q) x (u!j)
+    whileM_ (imba <$> readSTRef b <*> readSTRef i)
+      $ do
+        j <- (u!) <$> readSTRef i
+        when (member j p) $ modifySTRef b $ move j
+        modifySTRef' i succ
+    readSTRef b
 
 
 
@@ -518,8 +535,11 @@ initialGains (v, e) p = do
 
 balanceCriterion :: Int -> Bipartitioning -> Int -> Bool
 balanceCriterion v (Bisect p q) c
-   = (fromIntegral v * (1 - r)) / 2 <= fromIntegral a
-  && (fromIntegral v * (1 + r)) / 2 >= fromIntegral b
+    | size p > size q
+    = balanceCriterion v (Bisect q p) c
+balanceCriterion v (Bisect p q) c
+    =  (fromIntegral v * (1 - r)) / 2 <= fromIntegral a
+    && (fromIntegral v * (1 + r)) / 2 >= fromIntegral b
   where
     a = last (succ : [pred | member c p]) (size p)
     b = last (succ : [pred | member c q]) (size q)

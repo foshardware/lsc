@@ -29,8 +29,8 @@ placeEasy netlist = do
     (sequence $ netlist ^. gates <&> sections abstractCells)
     (offset, offset, replicate pivot =<< alternate rows)
 
-  let x = maximum $ view r . head . view geometry <$> nodes
-      y = maximum $ view t . head . view geometry <$> nodes
+  let x = maximum $ maybe 0 (view r) . listToMaybe . view geometry <$> nodes
+      y = maximum $ maybe 0 (view t) . listToMaybe . view geometry <$> nodes
 
   debug [ unpack (view identifier netlist) ++ " layout area: " ++ show (x + offset, y + offset) ]
 
@@ -51,12 +51,12 @@ alternate _ = []
 sections
   :: Map Identifier (Integer, Integer)
   -> Gate
-  -> StateT (Integer, Integer, [Either Integer Integer]) LSC Gate
+  -> StateT (Integer, Integer, [Either a a]) LSC Gate
 sections subs gate = do
 
   offset <- (4 *) . fst . view standardPin <$> lift technology
 
-  let rotate (x, y) = if x > 2 * y then (y, x) else (x, y)
+  let rotate (x, y) = if x > y then (y, x) else (x, y)
 
   tech <- lift technology
   let (w, h) = maybe (0, 0) rotate $ lookup (view identifier gate) subs <|> lookupDims gate tech

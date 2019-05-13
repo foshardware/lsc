@@ -355,8 +355,8 @@ integrate layer (Rect    x1 y1 x2 y2)   = Layered x1 y1 x2 y2 layer
 integrate layer (Via     x1 y1 x2 y2 _) = Via     x1 y1 x2 y2 layer
 
 
-rotateLeft :: Component l a -> Component l a
-rotateLeft p = p &~ do
+flipComponent :: Component l a -> Component l a
+flipComponent p = p &~ do
     r .= p ^. t
     t .= p ^. r
 
