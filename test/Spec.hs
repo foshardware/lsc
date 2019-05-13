@@ -69,7 +69,7 @@ fmRealWorld = testGroup "Real World Instances"
 fmMulti :: Int -> (V, E) -> IO ()
 fmMulti cut h = do
   let predicate p = cutSize h p <= cut
-  p <- nonDeterministic $ iterateUntil predicate $ fmMultiLevel h coarseningThreshold matchingRatio
+  p <- iterateUntil predicate $ nonDeterministic $ fmMultiLevel h coarseningThreshold matchingRatio
   assertBool "unexpected cut size" $ cutSize h p <= cut
 
 

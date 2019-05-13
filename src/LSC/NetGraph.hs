@@ -1,3 +1,4 @@
+{-# LANGUAGE RankNTypes #-}
 
 module LSC.NetGraph where
 
@@ -11,7 +12,7 @@ import Data.Function
 import Data.Hashable
 import qualified Data.IntSet as S
 import Data.List (sortBy)
-import Data.Map hiding (null, toList, foldl')
+import Data.Map hiding (null, toList, foldl', foldr)
 import Data.Serialize.Put
 import Data.Text (unpack)
 import Data.Text.Encoding
@@ -19,6 +20,22 @@ import Data.Vector (Vector)
 import Prelude hiding (lookup)
 
 import LSC.Types
+
+
+treeStructure :: NetGraph -> NetGraph
+treeStructure top = top & subcells .~ foldr collect mempty (top ^. gates)
+  where
+    scope = fromList [ (x ^. identifier, x) | x <- flatten subcells top ]
+    collect g a = maybe a (descend a) $ lookup (g ^. identifier) scope
+    descend a n = insert (n ^. identifier) (n & subcells .~ foldr collect mempty (n ^. gates)) a
+
+
+
+flatten :: Foldable f => Getter a (f a) -> a -> [a]
+flatten descend netlist
+  = netlist
+  : join [ flatten descend model | model <- toList $ netlist ^. descend ]
+
 
 
 netGraphStats :: NetGraph -> String

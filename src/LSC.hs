@@ -22,19 +22,29 @@ import LSC.Synthesis
 import LSC.Easy
 import LSC.Exline
 import LSC.Force
+import LSC.NetGraph
 import LSC.Integer
 import LSC.Types
 import LSC.Version
 
 
+
 stage1 :: Compiler' NetGraph
 stage1 = zeroArrow
+  <+> local (exline 4) >>> func treeStructure
+
+
+
+stage2 :: Compiler' NetGraph
+stage2 = zeroArrow
   <+> dag netGraph (env_ rowSize 21000 route <+> route)
+
 
 
 animatePlacement :: Compiler' NetGraph
 animatePlacement = zeroArrow
   <+> local placeEasy >>> local placeForce
+
 
 
 layoutEstimation :: Compiler' NetGraph

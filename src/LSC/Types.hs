@@ -22,7 +22,7 @@ import Control.Exception
 import Data.Default
 import Data.Foldable
 import Data.Function (on)
-import Data.Map (Map, fromList, insert, unionWith, lookup)
+import Data.Map (Map, unionWith, lookup)
 import Data.Semigroup
 import Data.Hashable
 import Data.Text (Text)
@@ -387,19 +387,6 @@ makeFieldsNoPrefix ''NetGraph
 instance Default NetGraph where
   def = NetGraph mempty def mempty mempty mempty
 
-
-treeStructure :: NetGraph -> NetGraph
-treeStructure top = top & subcells .~ foldr collect mempty (top ^. gates)
-  where
-    scope = fromList [ (x ^. identifier, x) | x <- flatten subcells top ]
-    collect g a = maybe a (descend a) $ lookup (g ^. identifier) scope
-    descend a n = insert (n ^. identifier) (n & subcells .~ foldr collect mempty (n ^. gates)) a
-
-
-flatten :: Foldable f => Getter a (f a) -> a -> [a]
-flatten descend netlist
-  = netlist
-  : join [ flatten descend model | model <- toList $ netlist ^. descend ]
 
 
 makeFieldsNoPrefix ''AbstractCell

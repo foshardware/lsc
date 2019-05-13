@@ -10,7 +10,6 @@ import Control.Monad.Trans.Maybe
 import Control.Concurrent
 import Data.Default
 import Data.Either
-import qualified Data.ByteString.Lazy.Char8 as Bytes
 import qualified Data.Text.IO as Text
 import System.Console.GetOpt
 import System.Environment
@@ -20,13 +19,9 @@ import Text.ParserCombinators.Parsec.Number (decimal)
 
 import LSC.BLIF    (parseBLIF, toBLIF)
 import LSC.LEF     (parseLEF, fromLEF)
-import LSC.Verilog (parseVerilog)
 
 import LSC
 import LSC.BLIF
-import LSC.D3
-import LSC.Easy
-import LSC.Exline
 import LSC.FIR
 import LSC.SVG
 import LSC.Types
@@ -67,20 +62,6 @@ program = do
         (parseFIR fir_)
       exit
 
-  -- generate registers
-  when (arg Register && arg Lef)
-    $ do
-      lef_ <- liftIO $ Text.readFile $ str Lef
-      liftIO $ hPutStrLn stderr $ show $ parseLEF lef_
-      exit
-
-  -- json report
-  when (arg Json && arg Verilog)
-    $ do
-      verilog_ <- liftIO $ Text.readFile $ str Verilog
-      liftIO $ Bytes.putStrLn $ encodeVerilog $ parseVerilog verilog_
-      exit
-
    -- svg output
   when (arg Lef && arg Blif)
     $ do
@@ -98,7 +79,7 @@ program = do
 
       when (arg Exline)
         $ do
-          new <- liftIO $ evalLSC opts tech $ exline netlist
+          new <- liftIO $ evalLSC opts tech $ compiler stage1 netlist
           liftIO $ printBLIF $ toBLIF new
           exit
 
@@ -110,7 +91,7 @@ program = do
 
       when (arg Compile)
         $ do
-          circuit2d <- lift $ evalLSC opts tech $ compiler stage1 netlist
+          circuit2d <- lift $ evalLSC opts tech $ compiler stage2 netlist
           liftIO $ plotStdout circuit2d
           exit
 
@@ -123,15 +104,6 @@ program = do
   when (arg Exline && not (arg Lef))
     $ do
       liftIO $ hPutStrLn stderr "exline: no tech given"
-      exit
-
-  when (arg Json && arg Blif)
-    $ do
-      blif_ <- liftIO $ Text.readFile $ str Blif
-      liftIO $ either
-        (ioError . userError . show)
-        (Bytes.putStrLn . encodeBLIF)
-        (parseBLIF blif_)
       exit
 
 

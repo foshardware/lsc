@@ -4,17 +4,18 @@
 module LSC.Exline where
 
 import Control.Lens
+import Control.Monad
 import Control.Monad.Loops
 import Control.Monad.IO.Class
 import Data.Default
 import Data.Foldable hiding (concat)
 import Data.Function
 import Data.IntSet (size, elems)
-import Data.Map hiding (size, elems, toList, null, (!))
+import Data.Map hiding (size, elems, toList, null, (!), filter)
+import qualified Data.Map as Map
 import qualified Data.Set as Set
-import Data.Ratio
 import Data.Text (unpack)
-import Data.Vector (fromListN, (!))
+import Data.Vector (filter, fromListN, (!))
 import Prelude hiding (filter, concat, lookup)
 
 import LSC.FM as FM
@@ -23,14 +24,29 @@ import LSC.Types
 
 
 
-exline :: NetGraph -> LSC NetGraph
-exline = recursiveBisection 4
+exline :: Int -> NetGraph -> LSC NetGraph
+exline n top = recursiveBisection n top
+
+
+
+inline :: Int -> NetGraph -> NetGraph
+inline n top
+  | top ^. gates . to length < n
+  , subs <- Map.filter predicate $ top ^. subcells
+  , not $ null subs
+  , sub <- maximumBy (compare `on` length . view pins . view supercell) subs
+  = top &~ do
+      gates  %= filter (\ x -> x ^. identifier /= sub ^. identifier)
+      gates <>= sub ^. gates
+    where predicate g = length (view gates g) + length (view gates top) <= succ n
+inline _ top = top
+
 
 
 recursiveBisection :: Int -> NetGraph -> LSC NetGraph
 recursiveBisection i top
-  | top ^. gates . to length <= i
-  = pure top
+    | top ^. gates . to length <= i
+    = pure top
 recursiveBisection i top = do
     next <- bisection top
     if next ^. subcells . to length <= 1
@@ -47,7 +63,8 @@ bisection top = do
     ]
 
   it <- view cutRatio <$> environment
-  let predicate (h, p) = cutSize h p % 1 <= length (view gates top) % max 1 it
+  let estimate = sqrt $ fromIntegral $ length $ view gates top :: Float
+  let predicate (h, p) = fromIntegral (cutSize h p) <= fromIntegral it * estimate
 
   (_, Bisect p q) <- liftIO $ iterateUntil predicate $ nonDeterministic $ do
       h <- st $ inputRoutine
@@ -123,7 +140,7 @@ bisection top = do
   debug
     [ unpack (view identifier top) ++ ": exlining finished"
     , netGraphStats result
-    , "nodes / cut ratio: "++ show (length (view gates top) % max 1 it)
+    , "max cut size: "++ show (floor $ fromIntegral it * estimate :: Int)
     , "cut size: "++ show (length cut)
     , ""
     ]

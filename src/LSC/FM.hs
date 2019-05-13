@@ -135,7 +135,9 @@ evalFM :: FM s a -> ST s a
 evalFM = runFM
 
 runFM :: FM s a -> ST s a
-runFM = runFMWithGen $ error "prng not initialized"
+runFM f = do
+    gen <- create
+    runFMWithGen gen f
 
 runFMWithGen :: Gen s -> FM s a -> ST s a
 runFMWithGen s f = do
