@@ -1,4 +1,5 @@
 {-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE TupleSections #-}
 
 import Control.Category
 import Control.Arrow
@@ -13,10 +14,12 @@ import Data.Bits
 import Data.Default
 import Data.FileEmbed
 import Data.Foldable
-import Data.IntSet (fromAscList, size)
+import Data.IntSet (fromList, fromAscList, size)
 import Data.Map (assocs)
+import Data.Ratio
 import Data.Text (Text)
 import Data.Text.Encoding
+import Data.Vector ((!))
 import qualified Data.Vector as V
 import qualified Data.Vector.Algorithms.Intro as V
 import Prelude hiding (id, (.))
@@ -51,22 +54,22 @@ fmML :: TestTree
 fmML = testGroup "FM Multi Level"
   [ testCase "Random permutation" fmRandomPermutation
   , testCase "Match" fmMatch
+  , testCase "Rebalance" fmRebalance
   , fmRealWorld
   ] 
 
 fmRealWorld :: TestTree
 fmRealWorld = testGroup "Real World Instances"
   [ testCase "queue_1.blif"   $ fmMulti 7 =<< stToIO queue_1Hypergraph
-  , testCase "picorv32.blif"  $ fmMulti 200 =<< stToIO picorv32Hypergraph
+  , testCase "picorv32.blif"  $ fmMulti 1000 =<< stToIO picorv32Hypergraph
   ]
 
 
 
 fmMulti :: Int -> (V, E) -> IO ()
 fmMulti cut h = do
-  let predicate p = bisectBalance p < div (length $ fst h) 10 && cutSize h p <= cut
+  let predicate p = cutSize h p <= cut
   p <- nonDeterministic $ iterateUntil predicate $ fmMultiLevel h coarseningThreshold matchingRatio
-  let Bisect x y = p in putStrLn $ show (cutSize h p, size x, size y)
   assertBool "unexpected cut size" $ cutSize h p <= cut
 
 
@@ -95,6 +98,19 @@ fmMatch = do
   assertEqual "length does not match" (length v) (sum $ size <$> clustering)
   assertBool "elements do not match" $ foldMap id clustering == fromAscList [0 .. length v - 1]
   assertBool "clustering" $ length clustering <= length v
+
+
+
+fmRebalance :: IO ()
+fmRebalance = do
+  let v = 10000
+  pivot <- generate $ choose (0, v)
+  (p, q) <- nonDeterministic $ do
+      u <- randomPermutation v
+      let p = Bisect (fromList [u!i | i <- [0 .. pivot-1]]) (fromList [u!i | i <- [pivot .. v-1]])
+      (p, ) <$> rebalance p
+  let it = show (bisectBalance p, bisectBalance q)
+  assertBool it $ bisectBalance q % v < 5%8
 
 
 

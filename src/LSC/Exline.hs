@@ -4,6 +4,7 @@
 module LSC.Exline where
 
 import Control.Lens
+import Control.Monad.Loops
 import Control.Monad.IO.Class
 import Data.Default
 import Data.Foldable hiding (concat)
@@ -11,6 +12,7 @@ import Data.Function
 import Data.IntSet (size, elems)
 import Data.Map hiding (size, elems, toList, null, (!))
 import qualified Data.Set as Set
+import Data.Ratio
 import Data.Text (unpack)
 import Data.Vector (fromListN, (!))
 import Prelude hiding (filter, concat, lookup)
@@ -44,9 +46,10 @@ bisection top = do
     , netGraphStats top
     ]
 
-  it <- view iterations <$> environment
+  it <- view cutRatio <$> environment
+  let predicate (h, p) = cutSize h p % 1 <= length (view gates top) % max 1 it
 
-  solution <- liftIO $ nonDeterministic $ sequence $ replicate it $ do
+  (_, Bisect p q) <- liftIO $ iterateUntil predicate $ nonDeterministic $ do
       h <- st $ inputRoutine
           (top ^. nets . to length)
           (top ^. gates . to length)
@@ -55,9 +58,6 @@ bisection top = do
           , (c, _) <- w ^. contacts . to assocs
           ]
       (h, ) <$> fmMultiLevel h coarseningThreshold matchingRatio
-
-  let criterion (h, x) = bisectBalance x + 2 * cutSize h x
-      Bisect p q = snd $ minimumBy (compare `on` criterion) solution
 
   -- get a gate
   let g i = view gates top ! i
@@ -123,7 +123,7 @@ bisection top = do
   debug
     [ unpack (view identifier top) ++ ": exlining finished"
     , netGraphStats result
-    , "iterations: "++ show it
+    , "nodes / cut ratio: "++ show (length (view gates top) % max 1 it)
     , "cut size: "++ show (length cut)
     , ""
     ]

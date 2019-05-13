@@ -43,7 +43,7 @@ matchingRatio :: Rational
 matchingRatio = 1 % 3
 
 coarseningThreshold :: Int
-coarseningThreshold = 16
+coarseningThreshold = 8
 
 
 balanceFactor :: Rational
@@ -191,7 +191,7 @@ fmMultiLevel (v, e) t r = do
 
     i <- st $ newSTRef 0
 
-    let it = 24
+    let it = 64
 
     hypergraphs  <- replicate it mempty
     clusterings  <- replicate it mempty
@@ -233,9 +233,9 @@ fmMultiLevel (v, e) t r = do
 
     for_ (reverse [0 .. m - 1]) $ \ j -> do
         pk <- read clusterings  $ succ j
-        p' <- read partitioning $ succ j
+        p  <- read partitioning $ succ j
 
-        q <- rebalance =<< project pk p'
+        q <- rebalance =<< project pk p
         h <- read hypergraphs j
 
         write partitioning j =<< fmPartition h (Just q)
@@ -254,9 +254,9 @@ rebalance (Bisect p q)
 rebalance (Bisect p q) = do
   u <- randomPermutation $ size p + size q
   st $ do
-    b <- newSTRef (Bisect p q)
+    b <- newSTRef $ Bisect p q
     i <- newSTRef 0
-    let imba x j = balanceCriterion (size p + size q) x (u!j)
+    let imba x j = j < size p + size q && (not $ balanceCriterion (size p + size q) x (u!j))
     whileM_ (imba <$> readSTRef b <*> readSTRef i)
       $ do
         j <- (u!) <$> readSTRef i

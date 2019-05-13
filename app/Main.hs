@@ -148,6 +148,7 @@ data FlagKey
   | Compile
   | Visuals
   | Iterations
+  | CutRatio
   | Smt
   | Cores
   | Debug
@@ -165,19 +166,22 @@ args =
     [ Option ['v']      ["verbose"]    (NoArg  (Verbose, mempty))   "chatty output on stderr"
     , Option ['V', '?'] ["version"]    (NoArg  (Version, mempty))   "show version number"
     , Option ['b']      ["blif"]       (ReqArg (Blif, ) "FILE")     "BLIF file"
+
     , Option ['l']      ["lef"]        (ReqArg (Lef,  ) "FILE")     "LEF file"
+    , Option [ ]        ["estimate-layout"] (NoArg (LayoutEstimation, mempty)) "estimate area"
+
     , Option ['d']      ["debug"]      (NoArg  (Debug, mempty))     "print some debug info"
     , Option ['g']      ["visuals"]    (NoArg  (Visuals, mempty))   "show visuals"
-    , Option [ ]        ["estimate-layout"] (NoArg (LayoutEstimation, mempty)) "estimate area"
+    , Option ['x']      ["exline"]
+        (OptArg ((Exline, ) . maybe "top" id)   "component")        "just exline and exit"
+    , Option [ ]        ["cut-ratio"]
+        (OptArg  ((CutRatio, ) . maybe "40" id) "n")                "max bound cut sizes"
 
     , Option ['i']      ["iterations"]
         (OptArg  ((Iterations, ) . maybe "4" id) "n")               "iterations"
 
     , Option ['c']      ["compile"]
         (OptArg ((Compile,  ) . maybe "svg" id) "svg,magic")        "output format"
-
-    , Option ['x']      ["exline"]
-        (OptArg ((Exline, ) . maybe "top" id)   "component")        "just exline and exit"
 
     , Option ['s']      ["smt"]        (ReqArg (Smt, ) "yices,z3")  "specify smt backend"
     , Option ['j']      ["cores"]      (ReqArg (Cores,  ) "count")  "limit number of cores"
@@ -197,10 +201,13 @@ compilerOpts xs = do
 
   let i = last $ 4 : rights [ parse decimal "-i" v | (k, v) <- xs, k == Iterations ]
 
+  let c = last $ 40 : rights [ parse decimal "--cut-ratio" v | (k, v) <- xs, k == CutRatio ]
+
   pure $ def
     & enableDebug .~ elem Debug (fst <$> xs)
     & enableVisuals .~ elem Visuals (fst <$> xs)
     & iterations .~ i
+    & cutRatio .~ c
     & workers .~ ws
 
 
