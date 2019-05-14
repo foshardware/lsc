@@ -470,9 +470,7 @@ maxGain = do
   case mg of
     Just (g, _) -> do
       mb <- st $ lookup m g
-      if maybe True null mb
-        then fail $ "maxGain: empty bucket for gain " <> show g
-        else pure $ (g, ) <$> mb
+      pure $ (g, ) <$> mb
     _ -> pure Nothing
 
 
