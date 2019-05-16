@@ -47,14 +47,17 @@ coarseningThreshold = 8
 
 
 balanceFactor :: Rational
-balanceFactor = 1 % 10
+balanceFactor = 1 % 20
 
 
 type NetArray  = Vector IntSet
 type CellArray = Vector IntSet
 
+type Area = Vector Int
+
 type V = CellArray
 type E = NetArray
+type A = Area
 
 
 data Gain s a = Gain

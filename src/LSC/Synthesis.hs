@@ -1,4 +1,4 @@
-
+{-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE FlexibleContexts #-}
 
 module LSC.Synthesis where
@@ -40,9 +40,9 @@ contactGeometry netlist = do
       , (contact, net) <- assocs $ gate ^. wires
       , let key = gate ^. identifier
       , let scope = lookup contact
-      , pin <- maybeToList $ join
-            $ view (pins . to scope) <$> lookup key (tech ^. stdCells)
-          <|> view (supercell . pins . to scope) <$> lookup key (netlist ^. subcells)
+      , pin <- toList
+            $ join (tech ^. stdCells ^? ix key . pins . to scope)
+          <|> join (netlist ^. subcells ^? ix key . supercell . pins . to scope)
       ]
 
 

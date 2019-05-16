@@ -42,8 +42,7 @@ stage4 = zeroArrow
 
 globalPlacement :: Compiler' NetGraph
 globalPlacement = proc top -> do
-  let n = top ^. gates . to length . to (`div` 40)
-  legalization <<< local (columns n) -<< top
+  legalization <<< local (columns 64) -<< top
 
 
 

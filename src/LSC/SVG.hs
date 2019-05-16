@@ -3,9 +3,11 @@
 module LSC.SVG where
 
 import Control.Lens
+import Control.Monad
 import Data.Foldable
 import Data.String
 import Data.Map (assocs, lookup)
+import Data.Maybe
 import Data.Text hiding (take)
 import Data.Vector (indexM)
 import qualified Data.Text as Text
@@ -19,16 +21,21 @@ import Text.Blaze.Svg.Renderer.Text (renderSvg)
 
 import Prelude hiding (lookup)
 
+import LSC.NetGraph
 import LSC.Types
 
 
-type Circuit = Circuit2D Path
+
+type Marker = Line Integer
+
+type Circuit = (Circuit2D Path, [Marker])
 
 type Svg = S.Svg
 
 type Arg = S.AttributeValue
 
 type Args = (Arg, Arg)
+
 
 m_, l_:: Integer -> Integer -> S.Path
 z_ :: S.Path
@@ -46,13 +53,28 @@ plot = renderSvg . svgDoc . scaleDown 100 . svgPaths
 
 
 svgDoc :: Circuit -> Svg
-svgDoc (Circuit2D nodes edges) = S.docTypeSvg
+svgDoc (Circuit2D nodes edges, markers) = S.docTypeSvg
   ! A.version "1.1"
   ! A.width "100000"
   ! A.height "100000"
   $ do
     place `mapM_` nodes
     route `mapM_` edges
+    drawL `mapM_` markers
+
+
+drawL :: Marker -> Svg
+drawL (Line (x1, y1) (x2, y2)) = do
+  S.path
+    ! A.d (mkPath pen)
+    ! A.stroke "blue"
+    ! A.fill "blue"
+    ! A.strokeWidth "1"
+  where
+    pen = do
+      m_ x1 y1
+      l_ x2 y2
+      z_
 
 
 place :: (Gate, Path) -> Svg
@@ -65,7 +87,6 @@ place (g, path@(p : _)) = do
     ! A.y (S.toValue $ y + 24)
     ! A.fontSize "24"
     ! A.fontFamily "monospace"
---    ! A.transform (fromString $ "rotate(90 "++ show (x + 8) ++","++ show (y + 24)  ++")")
     $ renderText $ g ^. identifier
 
   follow path
@@ -118,7 +139,7 @@ fill _ = "transparent"
 
 
 svgPaths :: NetGraph -> Circuit
-svgPaths netlist = Circuit2D gs ns
+svgPaths netlist = (Circuit2D gs ns, mempty)
 
   where
 
@@ -131,13 +152,6 @@ svgPaths netlist = Circuit2D gs ns
     gs =
       [ (gate, gate ^. geometry)
       | gate <- toList $ netlist ^. gates
-      ] ++
-      [ (innerGate, [q & b +~ view b p & l +~ view l p & t +~ view b p & r +~ view l p])
-      | outerGate <- toList $ netlist ^. gates
-      , sub <- toList $ lookup (outerGate ^. identifier) (netlist ^. subcells)
-      , innerGate <- toList $ sub ^. gates
-      , p <- take 1 $ view geometry outerGate
-      , q <- take 1 $ view geometry innerGate
       ]
 
     outerPins :: Net -> Path
@@ -150,15 +164,15 @@ svgPaths netlist = Circuit2D gs ns
 
     inducePins :: (Number, [Pin]) -> Path
     inducePins (i, ps) =
-      [ Rect (q ^. l + p ^. l) (q ^. b + p ^. b) (q ^. r + p ^. l) (q ^. t + p ^. b)
+      [ q & l +~ p^.l & b +~ p^.b & r +~ p^.l & t +~ p^.b & integrate mempty
       | pin <- ps
-      , p <- take 1 . view geometry =<< indexM (netlist ^. gates) i
+      , p <- toList $ join $ netlist ^. gates ^? ix i . geometry . to listToMaybe
       , q <- take 1 $ pin ^. ports
       ]
 
 
 scaleDown :: Integer -> Circuit -> Circuit
-scaleDown n (Circuit2D nodes edges) = Circuit2D
+scaleDown n (Circuit2D nodes edges, markers) = (Circuit2D
 
   [ (gate, f (`div` n) path)
   | (gate, path) <- nodes
@@ -169,6 +183,8 @@ scaleDown n (Circuit2D nodes edges) = Circuit2D
   | (net, ps, path) <- edges
   , let f = fmap . fmap
   ]
+
+  , fmap (`div` n) <$> markers)
 
 
 renderText :: Text -> Svg

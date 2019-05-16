@@ -25,8 +25,8 @@ import LSC.Types
 
 
 columns :: Int -> NetGraph -> LSC NetGraph
-columns n top = do
-  next <- exline n top
+columns k top = do
+  next <- kWayPartitioning k top
   let cs = [ (s ^. identifier, s) | s <- leaves next ]
       ss = Map.fromList cs
       gs = fromListN (length ss)
@@ -38,6 +38,11 @@ columns n top = do
   pure $ next &~ do
       gates .= gs
       subcells .= ss
+
+
+
+kWayPartitioning :: Int -> NetGraph -> LSC NetGraph
+kWayPartitioning k = recursiveBisection $ ceiling $ logBase (2 :: Float) (fromIntegral k)
 
 
 
@@ -61,14 +66,13 @@ inline _ top = top
 
 
 recursiveBisection :: Int -> NetGraph -> LSC NetGraph
-recursiveBisection i top
-    | top ^. gates . to length <= i
+recursiveBisection 0 top
     = pure top
 recursiveBisection i top = do
     next <- bisection top
     if next ^. subcells . to length <= 1
         then pure top
-        else flip (set subcells) next <$> recursiveBisection i `mapM` view subcells next
+        else flip (set subcells) next <$> recursiveBisection (pred i) `mapM` view subcells next
 
 
 bisection :: NetGraph -> LSC NetGraph
@@ -89,6 +93,7 @@ bisection top = do
           (top ^. gates . to length)
           [ (n, c)
           | (n, w) <- zip [0..] $ toList $ top ^. nets
+          , w ^. identifier /= "clk"
           , (c, _) <- w ^. contacts . to assocs
           ]
       (h, ) <$> fmMultiLevel h coarseningThreshold matchingRatio
