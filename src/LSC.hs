@@ -40,19 +40,14 @@ stage4 = zeroArrow
 
 
 globalPlacement :: Compiler' NetGraph
-globalPlacement = id
-  >>> arr sizeEstimation &&& id
-  >>> local (uncurry columns)
-  >>> layoutEstimation
-  where
-      sizeEstimation top = top ^. gates . to length . to (`div` 40)
+globalPlacement = proc top -> do
+  let n = top ^. gates . to length . to (`div` 40)
+  legalization <<< local (columns n) -<< top
 
 
 
-layoutEstimation :: Compiler' NetGraph
-layoutEstimation = id
-  >>> dag netGraph (remote placeColumn)
-  >>> remote placeRows
+legalization :: Compiler' NetGraph
+legalization = dag netGraph (remote placeColumn) >>> remote placeRows
 
 
 
@@ -228,6 +223,11 @@ instance Arrow ls => Arrow (LSR ls) where
   second (LSR f) = LSR (second f)
 
   LSR f *** LSR g = LSR (f *** g)
+
+
+instance ArrowApply ls => ArrowApply (LSR ls) where
+  app = LSR $ Lift $ arr (\ (f, x) -> (reduce f, x)) >>> app
+
 
 instance ArrowSelect ls => ArrowSelect (LSR ls) where
   select (LSR f) = LSR (select (mapReduce f))
