@@ -26,16 +26,36 @@ import LSC.Types
 
 
 
-inlineGeometry :: NetGraph -> NetGraph
-inlineGeometry top = top & gates .~ V.concat
-
-    [ s ^. gates <&> project p
-    | g <- toList $ top ^. gates
-    , s <- toList $ lookup (g ^. identifier) (top ^. subcells)
-    , p <- take 1 $ g ^. geometry
+markEdges :: NetGraph -> [Line Integer]
+markEdges top =
+    [ Line (p^.l + po^.l, p^.b + po^.b) (q^.l + qo^.l, q^.b + qo^.b)
+    | (_, net) <- top ^. nets . to assocs
+    , (i, src) <- net ^. contacts . to assocs
+    , any (\c -> c ^. dir == Just Out) src
+    , (j, snk) <- net ^. contacts . to assocs
+    , i /= j
+    , p <- join $ toList $ top ^. gates ^? ix i . geometry . to (take 1)
+    , q <- join $ toList $ top ^. gates ^? ix j . geometry . to (take 1)
+    , po <- join $ take 1 src <&> view ports
+    , qo <- join $ take 1 snk <&> view ports
     ]
 
+
+
+inlineGeometry :: NetGraph -> NetGraph
+inlineGeometry top = top &~ do
+
+    gates .= gs
+    nets .= rebuildEdges gs
+
     where
+
+      gs = V.concat
+        [ s ^. gates <&> project p
+        | g <- toList $ top ^. gates
+        , s <- toList $ lookup (g ^. identifier) (top ^. subcells)
+        , p <- take 1 $ g ^. geometry
+        ]
 
       project :: Component Layer Integer -> Gate -> Gate
       project p = geometry %~ fmap (\x -> x & l +~ p^.l & b +~ p^.b & t +~ p^.b & r +~ p^.l)

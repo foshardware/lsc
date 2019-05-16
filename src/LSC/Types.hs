@@ -329,6 +329,7 @@ type IEdges = Map Identifier (Net, IPath)
 type IPins = Map Identifier (Pin, IComponent)
 
 
+
 data Component l a
   = Rect    { _l :: a, _b :: a, _r :: a, _t :: a }
   | Via     { _l :: a, _b :: a, _r :: a, _t :: a, _z :: [l] }
@@ -340,8 +341,21 @@ instance (FromJSON l, FromJSON a) => FromJSON (Component l a)
 
 instance (Hashable l, Hashable a) => Hashable (Component l a)
 
-
 makeFieldsNoPrefix ''Component
+
+
+
+data Line a = Line (a, a) (a, a)
+  deriving (Eq, Functor, Foldable, Traversable, Generic, Show)
+
+instance ToJSON a => ToJSON (Line a)
+instance FromJSON a => FromJSON (Line a)
+
+instance Hashable a => Hashable (Line a)
+
+makeFieldsNoPrefix ''Line
+
+
 
 width, height :: Num a => Component l a -> a
 width  p = p ^. r - p ^. l

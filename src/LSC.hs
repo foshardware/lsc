@@ -52,6 +52,7 @@ legalization = id
   >>> dag netGraph (remote placeColumn)
   >>> remote placeRows
   >>> arr inlineGeometry
+  >>> remote contactGeometry
 
 
 
