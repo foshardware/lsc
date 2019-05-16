@@ -23,6 +23,7 @@ import LSC.Easy
 import LSC.Exline
 import LSC.Force
 import LSC.Integer
+import LSC.NetGraph
 import LSC.Types
 import LSC.Version
 
@@ -47,7 +48,10 @@ globalPlacement = proc top -> do
 
 
 legalization :: Compiler' NetGraph
-legalization = dag netGraph (remote placeColumn) >>> remote placeRows
+legalization = id
+  >>> dag netGraph (remote placeColumn)
+  >>> remote placeRows
+  >>> arr inlineGeometry
 
 
 
@@ -86,8 +90,8 @@ compiler :: Compiler a b -> a -> LSC b
 compiler = unLS . reduce
 
 
-func :: (a -> b) -> Compiler a b
-func f = local $ pure . f
+expensive :: (a -> b) -> Compiler a b
+expensive f = local $ pure . f
 
 remote_ :: LSC b -> Compiler' b
 remote_ f = remote (<$ f)

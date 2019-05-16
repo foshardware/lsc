@@ -1,4 +1,5 @@
 {-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE FlexibleContexts #-}
 
 module LSC.NetGraph where
 
@@ -12,14 +13,33 @@ import Data.Function
 import Data.Hashable
 import qualified Data.IntSet as S
 import Data.List (sortBy)
-import Data.Map hiding (null, toList, foldl', foldr)
+import Data.Map hiding (null, toList, foldl', foldr, take)
+import Data.Maybe
 import Data.Serialize.Put
 import Data.Text (unpack)
 import Data.Text.Encoding
 import Data.Vector (Vector)
+import qualified Data.Vector as V
 import Prelude hiding (lookup)
 
 import LSC.Types
+
+
+
+inlineGeometry :: NetGraph -> NetGraph
+inlineGeometry top = top & gates .~ V.concat
+
+    [ s ^. gates <&> project p
+    | g <- toList $ top ^. gates
+    , s <- toList $ lookup (g ^. identifier) (top ^. subcells)
+    , p <- take 1 $ g ^. geometry
+    ]
+
+    where
+
+      project :: Component Layer Integer -> Gate -> Gate
+      project p = geometry %~ fmap (\x -> x & l +~ p^.l & b +~ p^.b & t +~ p^.b & r +~ p^.l)
+
 
 
 treeStructure :: NetGraph -> NetGraph

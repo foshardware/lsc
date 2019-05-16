@@ -175,12 +175,12 @@ compilerOpts xs = do
 
   let c = last $ 40 : rights [ parse decimal "--cut-ratio" v | (k, v) <- xs, k == CutRatio ]
 
-  pure $ def
-    & enableDebug .~ elem Debug (fst <$> xs)
-    & enableVisuals .~ elem Visuals (fst <$> xs)
-    & iterations .~ i
-    & cutRatio .~ c
-    & workers .~ ws
+  pure $ def &~ do
+      enableDebug .= elem Debug (fst <$> xs)
+      enableVisuals .= elem Visuals (fst <$> xs)
+      iterations .= i
+      cutRatio .= c
+      workers .= ws
 
 
 compilerFlags :: [String] -> IO ([Flag], [String])
