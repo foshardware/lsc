@@ -14,6 +14,53 @@ import Prelude hiding (lookup)
 import LSC.Types
 
 
+
+placeRows :: NetGraph -> LSC NetGraph
+placeRows top = do
+ 
+  (gs, (x, y)) <- runStateT (sequence $ top ^. gates <&> afterRow top) (0, 0)
+
+  debug [ unpack (view identifier top) ++ " layout area: " ++ show (x, y) ]
+
+  pure $ top &~ do
+    gates .= gs
+    supercell %= (geometry .~ [Rect 0 0 y x])
+
+
+afterRow :: NetGraph -> Gate -> StateT (Integer, Integer) LSC Gate
+afterRow top g
+  | Just sub <- lookup (g ^. identifier) (top ^. subcells)
+  , Rect 0 0 h w : _ <- sub ^. supercell . geometry
+  = do
+    (x, y) <- get
+    channel <- view rowSize <$> lift technology
+    put (max w x, y + h + channel)
+    pure $ g & geometry .~ [Layered y 0 (y + h) w [Metal2, Metal3]]
+afterRow _ g = pure g
+
+
+
+placeColumn :: NetGraph -> LSC NetGraph
+placeColumn netlist = do
+
+  (gs, (x, y)) <- runStateT (sequence $ netlist ^. gates <&> afterColumn) (0, 0)
+
+  pure $ netlist &~ do
+    gates .= gs 
+    supercell %= (geometry .~ [Rect 0 0 y x])
+
+
+afterColumn :: Gate -> StateT (Integer, Integer) LSC Gate
+afterColumn g = do
+    (x, y) <- get
+    ds <- lookupDims g <$> lift technology
+    case ds of
+      Just (w, h) -> do
+        put (x + w + 2000, max y h)
+        pure $ g & geometry .~ [Layered 0 x h (x + w) [Metal2, Metal3]]
+      _ -> pure g
+
+
 placeEasy :: NetGraph -> LSC NetGraph
 placeEasy netlist = do
 

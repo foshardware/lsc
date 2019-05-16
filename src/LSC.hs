@@ -22,7 +22,6 @@ import LSC.Synthesis
 import LSC.Easy
 import LSC.Exline
 import LSC.Force
-import LSC.NetGraph
 import LSC.Integer
 import LSC.Types
 import LSC.Version
@@ -30,26 +29,36 @@ import LSC.Version
 
 
 stage1 :: Compiler' NetGraph
-stage1 = zeroArrow
-  <+> local (exline 4) >>> func treeStructure
+stage1 = globalPlacement
 
 
 
-stage2 :: Compiler' NetGraph
-stage2 = zeroArrow
+stage4 :: Compiler' NetGraph
+stage4 = zeroArrow
   <+> dag netGraph (env_ rowSize 21000 route <+> route)
+
+
+
+globalPlacement :: Compiler' NetGraph
+globalPlacement = id
+  >>> arr sizeEstimation &&& id
+  >>> local (uncurry columns)
+  >>> layoutEstimation
+  where
+      sizeEstimation top = top ^. gates . to length . to (`div` 40)
+
+
+
+layoutEstimation :: Compiler' NetGraph
+layoutEstimation = id
+  >>> dag netGraph (remote placeColumn)
+  >>> remote placeRows
 
 
 
 animatePlacement :: Compiler' NetGraph
 animatePlacement = zeroArrow
   <+> local placeEasy >>> local placeForce
-
-
-
-layoutEstimation :: Compiler' NetGraph
-layoutEstimation = zeroArrow
-  <+> dag netGraph (local placeEasy)
 
 
 

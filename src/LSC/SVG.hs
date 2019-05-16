@@ -5,7 +5,7 @@ module LSC.SVG where
 import Control.Lens
 import Data.Foldable
 import Data.String
-import Data.Map (assocs)
+import Data.Map (assocs, lookup)
 import Data.Text hiding (take)
 import Data.Vector (indexM)
 import qualified Data.Text as Text
@@ -16,6 +16,8 @@ import Text.Blaze.Svg11 ((!), mkPath)
 import qualified Text.Blaze.Svg11 as S
 import qualified Text.Blaze.Svg11.Attributes as A
 import Text.Blaze.Svg.Renderer.Text (renderSvg)
+
+import Prelude hiding (lookup)
 
 import LSC.Types
 
@@ -63,7 +65,7 @@ place (g, path@(p : _)) = do
     ! A.y (S.toValue $ y + 24)
     ! A.fontSize "24"
     ! A.fontFamily "monospace"
-    ! A.transform (fromString $ "rotate(90 "++ show (x + 8) ++","++ show (y + 24)  ++")")
+--    ! A.transform (fromString $ "rotate(90 "++ show (x + 8) ++","++ show (y + 24)  ++")")
     $ renderText $ g ^. identifier
 
   follow path
@@ -116,18 +118,27 @@ fill _ = "transparent"
 
 
 svgPaths :: NetGraph -> Circuit
-svgPaths netlist = Circuit2D
-
-  [ (gate, gate ^. geometry)
-  | gate <- toList $ netlist ^. gates
-  ]
-
-  [ (net, outerPins net ++ (inducePins =<< assocs (net ^. contacts)), net ^. geometry)
-  | net <- set geometry (netlist ^. supercell . mappend (vdd . ports) (gnd . ports)) mempty
-  : toList (netlist ^. nets)
-  ]
+svgPaths netlist = Circuit2D gs ns
 
   where
+
+    ns =
+      [ (net, outerPins net ++ (inducePins =<< assocs (net ^. contacts)), net ^. geometry)
+      | net <- set geometry (netlist ^. supercell . mappend (vdd . ports) (gnd . ports)) mempty
+      : toList (netlist ^. nets)
+      ]
+
+    gs =
+      [ (gate, gate ^. geometry)
+      | gate <- toList $ netlist ^. gates
+      ] ++
+      [ (innerGate, [q & b +~ view b p & l +~ view l p & t +~ view b p & r +~ view l p])
+      | outerGate <- toList $ netlist ^. gates
+      , sub <- toList $ lookup (outerGate ^. identifier) (netlist ^. subcells)
+      , innerGate <- toList $ sub ^. gates
+      , p <- take 1 $ view geometry outerGate
+      , q <- take 1 $ view geometry innerGate
+      ]
 
     outerPins :: Net -> Path
     outerPins net =

@@ -85,13 +85,13 @@ program = do
 
       when (arg LayoutEstimation)
         $ do
-          circuit2d <- liftIO $ evalLSC opts tech $ compiler layoutEstimation netlist
+          circuit2d <- liftIO $ evalLSC opts tech $ compiler stage1 netlist
           liftIO $ plotStdout circuit2d
           exit
 
       when (arg Compile)
         $ do
-          circuit2d <- lift $ evalLSC opts tech $ compiler stage2 netlist
+          circuit2d <- lift $ evalLSC opts tech $ compiler stage4 netlist
           liftIO $ plotStdout circuit2d
           exit
 

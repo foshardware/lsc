@@ -24,8 +24,25 @@ import LSC.Types
 
 
 
+columns :: Int -> NetGraph -> LSC NetGraph
+columns n top = do
+  next <- exline n top
+  let cs = [ (s ^. identifier, s) | s <- leaves next ]
+      ss = Map.fromList cs
+      gs = fromListN (length ss)
+        [ def &~ do
+            identifier .= i
+            wires .= mapWithKey const (c ^. supercell . pins)
+        | (i, c) <- assocs ss
+        ]
+  pure $ next &~ do
+      gates .= gs
+      subcells .= ss
+
+
+
 exline :: Int -> NetGraph -> LSC NetGraph
-exline n top = recursiveBisection n top
+exline = recursiveBisection
 
 
 

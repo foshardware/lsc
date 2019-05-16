@@ -482,7 +482,7 @@ debug msg = do
 makeFieldsNoPrefix ''Technology
 
 instance Default Technology where
-  def = Technology 1000 1 mempty (1000, 1000) 30000
+  def = Technology 1000 1 mempty (1000, 1000) 18000
 
 
 lookupDims :: Gate -> Technology -> Maybe (Integer, Integer)
