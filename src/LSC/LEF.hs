@@ -66,10 +66,10 @@ portLayer "metal3" = Metal3
 portLayer _ = AnyLayer
 
 portRectangles tech ident (MacroPinPortRect x1 y1 x2 y2 : rest) = Layered
-  (ceiling $ y1 * g)
   (ceiling $ x1 * g)
-  (ceiling $ y2 * g)
+  (ceiling $ y1 * g)
   (ceiling $ x2 * g)
+  (ceiling $ y2 * g)
   (pure $ portLayer ident)
   : portRectangles tech ident rest
   where g = scale tech
