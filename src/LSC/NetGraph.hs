@@ -1,8 +1,10 @@
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE TypeFamilies #-}
 
 module LSC.NetGraph where
 
+import Control.Applicative
 import Control.Lens hiding (imap)
 import Control.Monad
 import Data.Bits
@@ -26,6 +28,26 @@ import LSC.Types
 
 
 
+boundingBox :: [Component l Integer] -> Component l Integer
+boundingBox xs = Rect
+    (minimum $ view l <$> xs)
+    (minimum $ view b <$> xs)
+    (maximum $ view r <$> xs)
+    (maximum $ view t <$> xs)
+
+
+
+hpwl :: Vector Gate -> Net -> Integer
+hpwl gs n = width p + height p
+  where
+    p = boundingBox nodes
+    nodes = catMaybes
+      [ join $ gs ^? ix i . geometry . to listToMaybe
+      | (i, _) <- n ^. contacts . to assocs
+      ]
+
+
+
 markEdges :: NetGraph -> [Line Integer]
 markEdges top =
     [ Line (p^.l + po^.l, p^.b + po^.b) (q^.l + qo^.l, q^.b + qo^.b)
@@ -42,13 +64,31 @@ markEdges top =
 
 
 
-inlineGeometry :: NetGraph -> NetGraph
-inlineGeometry top = top &~ do
+estimations :: NetGraph -> LSC NetGraph
+estimations top = do
+ 
+  let gs = top ^. gates
+      ns = top ^. nets
+ 
+  let box = boundingBox [ p | g <- toList gs, p <- take 1 $ g ^. geometry ]
+  debug
+    [ unpack (view identifier top) ++ " layout area: " ++ show (width box, height box)
+    , unpack (view identifier top) ++ " sum of HPWL: " ++ show (sum $ hpwl gs <$> ns)
+    ]
 
+  pure top
+
+
+
+inlineGeometry :: NetGraph -> LSC NetGraph
+inlineGeometry top = pure $ top &~ do
+ 
     gates .= gs
-    nets .= rebuildEdges gs
+    nets .= ns
 
     where
+
+      ns = rebuildEdges gs
 
       gs = set number `imap` V.concat
         [ s ^. gates <&> project p
@@ -59,6 +99,39 @@ inlineGeometry top = top &~ do
 
       project :: Component Layer Integer -> Gate -> Gate
       project p = geometry %~ fmap (\x -> x & l +~ p^.l & b +~ p^.b & t +~ p^.b & r +~ p^.l)
+
+
+
+contactGeometry :: NetGraph -> LSC NetGraph
+contactGeometry netlist = do
+
+  tech <- technology
+
+  netlist
+    & gates %~ fmap (vddGnd tech)
+    & nets  .~ createNets tech
+    & pure
+
+  where
+
+    vddGnd tech g
+      | Just sc <- view identifier g `lookup` view stdCells tech
+      = g & vdd .~ view vdd sc & gnd .~ view gnd sc  
+    vddGnd _ g
+      | Just sc <- view identifier g `lookup` view subcells netlist <&> view supercell
+      = g & vdd .~ view vdd sc & gnd .~ view gnd sc
+    vddGnd _ g = g
+
+    createNets tech = fromListWith mappend
+      [ (net, Net net mempty (singleton (gate ^. number) [pin]))
+      | gate <- toList $ netlist ^. gates
+      , (contact, net) <- assocs $ gate ^. wires
+      , let key = gate ^. identifier
+      , let scope = lookup contact
+      , pin <- toList
+            $ join (tech ^. stdCells ^? ix key . pins . to scope)
+          <|> join (netlist ^. subcells ^? ix key . supercell . pins . to scope)
+      ]
 
 
 

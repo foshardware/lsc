@@ -18,7 +18,6 @@ import Control.Monad.Trans
 import Control.Monad.Codensity
 import Prelude hiding ((.), id)
 
-import LSC.Synthesis
 import LSC.Easy
 import LSC.Exline
 import LSC.Force
@@ -50,8 +49,9 @@ legalization :: Compiler' NetGraph
 legalization = id
   >>> dag netGraph (remote placeColumn)
   >>> remote placeRows
-  >>> arr inlineGeometry
+  >>> remote inlineGeometry
   >>> remote contactGeometry
+  >>> remote estimations
 
 
 
@@ -67,12 +67,6 @@ route = local routeInteger
 place :: Compiler' NetGraph
 place = local placeEasy
 
-
-synthesize :: Compiler' RTL
-synthesize = local synthesizeLogic
-
-physical :: Compiler RTL NetGraph
-physical = local synthesizeGeometry
 
 
 netGraph :: DAG Identifier NetGraph

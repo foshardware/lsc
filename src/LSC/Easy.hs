@@ -20,8 +20,6 @@ placeRows top = do
  
   (gs, (x, y)) <- runStateT (sequence $ top ^. gates <&> afterRow top) (0, 0)
 
-  debug [ unpack (view identifier top) ++ " layout area: " ++ show (x, y) ]
-
   pure $ top &~ do
     gates .= gs
     supercell %= (geometry .~ [Rect 0 0 x y])

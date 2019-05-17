@@ -6,10 +6,9 @@ import Control.Lens
 import Control.Monad
 import Data.Foldable
 import Data.String
-import Data.Map (assocs, lookup)
+import Data.Map (assocs)
 import Data.Maybe
 import Data.Text hiding (take)
-import Data.Vector (indexM)
 import qualified Data.Text as Text
 import qualified Data.Text.Lazy    as Lazy
 import qualified Data.Text.Lazy.IO as Lazy
@@ -21,7 +20,6 @@ import Text.Blaze.Svg.Renderer.Text (renderSvg)
 
 import Prelude hiding (lookup)
 
-import LSC.NetGraph
 import LSC.Types
 
 
@@ -145,7 +143,7 @@ svgPaths netlist = (Circuit2D gs ns, mempty)
   where
 
     ns =
-      [ (net, outerPins net ++ (inducePins =<< assocs (net ^. contacts)), net ^. geometry)
+      [ (net, (outerPins net ++) . inducePins =<< net ^. contacts . to assocs, net ^. geometry)
       | net <- set geometry (netlist ^. supercell . mappend (vdd . ports) (gnd . ports)) mempty
       : toList (netlist ^. nets)
       ]

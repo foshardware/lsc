@@ -47,7 +47,7 @@ coarseningThreshold = 8
 
 
 balanceFactor :: Rational
-balanceFactor = 1 % 20
+balanceFactor = 1 % 10
 
 
 type NetArray  = Vector IntSet

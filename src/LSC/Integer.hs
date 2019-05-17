@@ -23,8 +23,9 @@ import Prelude hiding (lookup)
 
 import Control.MILP.Types
 
-import LSC.Synthesis
+import LSC.NetGraph
 import LSC.Types
+
 
 
 routeInteger :: NetGraph -> LSC NetGraph
