@@ -24,18 +24,18 @@ placeRows top = do
 
   pure $ top &~ do
     gates .= gs
-    supercell %= (geometry .~ [Rect 0 0 y x])
+    supercell %= (geometry .~ [Rect 0 0 x y])
 
 
 afterRow :: NetGraph -> Gate -> StateT (Integer, Integer) LSC Gate
 afterRow top g
   | Just sub <- lookup (g ^. identifier) (top ^. subcells)
-  , Rect 0 0 h w : _ <- sub ^. supercell . geometry
+  , Rect 0 0 w h : _ <- sub ^. supercell . geometry
   = do
     (x, y) <- get
     channel <- view rowSize <$> lift technology
     put (max w x, y + h + channel)
-    pure $ g & geometry .~ [Layered y 0 (y + h) w [Metal2, Metal3]]
+    pure $ g & geometry .~ [Layered 0 y w (y + h) [Metal2, Metal3]]
 afterRow _ g = pure g
 
 
@@ -47,7 +47,7 @@ placeColumn netlist = do
 
   pure $ netlist &~ do
     gates .= gs 
-    supercell %= (geometry .~ [Rect 0 0 y x])
+    supercell %= (geometry .~ [Rect 0 0 x y])
 
 
 afterColumn :: Gate -> StateT (Integer, Integer) LSC Gate
@@ -57,7 +57,7 @@ afterColumn g = do
     case ds of
       Just (w, h) -> do
         put (x + w + 2000, max y h)
-        pure $ g & geometry .~ [Layered 0 x h (x + w) [Metal2, Metal3]]
+        pure $ g & geometry .~ [Layered x 0 (x + w) h [Metal2, Metal3]]
       _ -> pure g
 
 

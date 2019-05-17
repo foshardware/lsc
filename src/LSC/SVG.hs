@@ -87,6 +87,7 @@ place (g, path@(p : _)) = do
     ! A.y (S.toValue $ y + 24)
     ! A.fontSize "24"
     ! A.fontFamily "monospace"
+    ! A.transform (fromString $ "rotate(90 "++ show (x + 8) ++","++ show (y + 24)  ++")")
     $ renderText $ g ^. identifier
 
   follow path
