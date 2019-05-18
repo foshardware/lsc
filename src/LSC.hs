@@ -41,7 +41,9 @@ stage4 = zeroArrow
 
 globalPlacement :: Compiler' NetGraph
 globalPlacement = proc top -> do
-  legalization <<< local (columns 64) -<< top
+  next <- legalization <<< local (columns 64) -<< top
+  remote estimations -< next
+  returnA -< next
 
 
 
@@ -51,7 +53,6 @@ legalization = id
   >>> remote placeRows
   >>> remote inlineGeometry
   >>> remote contactGeometry
-  >>> remote estimations
 
 
 

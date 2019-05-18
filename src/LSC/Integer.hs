@@ -34,9 +34,9 @@ routeInteger top = do
   netlist <- contactGeometry top
 
   debug
-    [ "start routeInteger @ module", netlist ^. identifier & unpack
-    , "-", netlist ^. gates & length & show, "gates"
-    , "-", netlist ^. nets & length & show, "nets"
+    [ "start routeInteger @ module " <> netlist ^. identifier . to unpack
+    , "- " <> netlist ^. gates . to length . to show <> " gates"
+    , "- " <> netlist ^. nets . to length . to show <> " nets"
     ]
 
   area <- freeRectangle
@@ -56,7 +56,7 @@ routeInteger top = do
 
   result <- satisfyInteger
 
-  debug ["stop  routeInteger @ module", netlist ^. identifier & unpack]
+  debug ["stop routeInteger @ module " <> netlist ^. identifier . to unpack]
 
   maybe (pure netlist) pure $ do
 

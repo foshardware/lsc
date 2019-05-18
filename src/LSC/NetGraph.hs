@@ -64,19 +64,18 @@ markEdges top =
 
 
 
-estimations :: NetGraph -> LSC NetGraph
+estimations :: NetGraph -> LSC ()
 estimations top = do
  
   let gs = top ^. gates
       ns = top ^. nets
  
   let box = boundingBox [ p | g <- toList gs, p <- take 1 $ g ^. geometry ]
+
   debug
     [ unpack (view identifier top) ++ " layout area: " ++ show (width box, height box)
-    , unpack (view identifier top) ++ " sum of HPWL: " ++ show (sum $ hpwl gs <$> ns)
+    , unpack (view identifier top) ++ " sum of hpwl: " ++ show (sum $ hpwl gs <$> ns)
     ]
-
-  pure top
 
 
 

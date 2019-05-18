@@ -8,6 +8,7 @@ import Control.Monad
 import Control.Monad.Trans
 import Control.Monad.Trans.Maybe
 import Control.Concurrent
+import Data.Char
 import Data.Default
 import Data.Either
 import qualified Data.Text.IO as Text
@@ -17,8 +18,9 @@ import System.IO
 import Text.Parsec (parse)
 import Text.ParserCombinators.Parsec.Number (decimal)
 
-import LSC.BLIF    (parseBLIF, toBLIF)
+import LSC.BLIF    (parseBLIF)
 import LSC.LEF     (parseLEF, fromLEF)
+import LSC.DEF     (printDEF, toDEF)
 
 import LSC
 import LSC.BLIF
@@ -42,7 +44,7 @@ program = do
   opts <- liftIO $ compilerOpts flags
 
   let arg x = or [ k == x | (k, _) <- flags ]
-      str x = head [ v | (k, v) <- flags, k == x ]
+      list x = [ map toLower v | (k, v) <- flags, k == x ]
 
   when (null flags) exit
 
@@ -55,7 +57,7 @@ program = do
   -- firrtl synthesis
   when (arg Exline && arg Firrtl)
     $ do
-      fir_ <- liftIO $ Text.readFile $ str Firrtl
+      fir_ <- liftIO $ Text.readFile $ head $ list Firrtl
       liftIO $ either
         (ioError . userError . show)
         (putStrLn . show)
@@ -65,8 +67,8 @@ program = do
    -- svg output
   when (arg Lef && arg Blif)
     $ do
-      net_ <- liftIO $ Text.readFile $ str Blif
-      lef_ <- liftIO $ Text.readFile $ str Lef
+      net_ <- liftIO $ Text.readFile $ head $ list Blif
+      lef_ <- liftIO $ Text.readFile $ head $ list Lef
 
       tech <- liftIO $ either
         (ioError . userError . show)
@@ -77,22 +79,20 @@ program = do
         (pure . fromBLIF)
         (parseBLIF net_)
 
-      when (arg Exline)
-        $ do
-          new <- liftIO $ evalLSC opts tech $ compiler stage1 netlist
-          liftIO $ printBLIF $ toBLIF new
-          exit
-
       when (arg LayoutEstimation)
         $ do
           circuit2d <- liftIO $ evalLSC opts tech $ compiler stage1 netlist
-          liftIO $ plotStdout circuit2d
+          case list Compile of
+            "def" : _ -> liftIO $ printDEF $ toDEF circuit2d
+            _ -> liftIO $ plotStdout circuit2d
           exit
 
       when (arg Compile)
         $ do
           circuit2d <- lift $ evalLSC opts tech $ compiler stage4 netlist
-          liftIO $ plotStdout circuit2d
+          case list Compile of
+            "def" : _ -> liftIO $ printDEF $ toDEF circuit2d
+            _ -> liftIO $ plotStdout circuit2d
           exit
 
 
@@ -153,7 +153,7 @@ args =
         (OptArg  ((Iterations, ) . maybe "4" id) "n")               "iterations"
 
     , Option ['c']      ["compile"]
-        (OptArg ((Compile,  ) . maybe "svg" id) "svg,magic")        "output format"
+        (OptArg ((Compile,  ) . maybe "svg" id) "svg,def,magic")    "output format"
 
     , Option ['s']      ["smt"]        (ReqArg (Smt, ) "yices,z3")  "specify smt backend"
     , Option ['j']      ["cores"]      (ReqArg (Cores,  ) "count")  "limit number of cores"

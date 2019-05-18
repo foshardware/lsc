@@ -27,6 +27,7 @@ dependencies:
 - cond
 - data-default
 - data-default-class
+- def
 - entropy
 - file-embed
 - firrtl
