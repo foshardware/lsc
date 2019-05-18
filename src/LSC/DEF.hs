@@ -68,7 +68,7 @@ fromNet top n = DEF.Net (n ^. identifier) $
     | (i, ps) <- n ^. contacts . to assocs
     , p <- ps
     , g <- toList $ top ^. gates ^? ix i
-    ] 
+    ]
 
 
 fromPin :: Rect.Pin -> DEF.Pin
