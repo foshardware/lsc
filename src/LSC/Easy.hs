@@ -18,7 +18,7 @@ import LSC.Types
 placeRows :: NetGraph -> LSC NetGraph
 placeRows top = do
  
-  (gs, (x, y)) <- runStateT (sequence $ top ^. gates <&> afterRow top) (0, 0)
+  (gs, (x, y)) <- runStateT (sequence $ top ^. gates <&> afterRow top) (0, 20000)
 
   pure $ top &~ do
     gates .= gs
@@ -32,7 +32,7 @@ afterRow top g
   = do
     (x, y) <- get
     channel <- view rowSize <$> lift technology
-    put (max w x, y + h + channel)
+    put (max w x, y + h + 2 * channel)
     pure $ g & geometry .~ [Layered 0 y w (y + h) [Metal2, Metal3] def]
 afterRow _ g = pure g
 
@@ -41,7 +41,7 @@ afterRow _ g = pure g
 placeColumn :: NetGraph -> LSC NetGraph
 placeColumn netlist = do
 
-  (gs, (x, y)) <- runStateT (sequence $ netlist ^. gates <&> afterColumn) (0, 0)
+  (gs, (x, y)) <- runStateT (sequence $ netlist ^. gates <&> afterColumn) (20000, 0)
 
   pure $ netlist &~ do
     gates .= gs 
@@ -54,7 +54,7 @@ afterColumn g = do
     ds <- lookupDims g <$> lift technology
     case ds of
       Just (w, h) -> do
-        put (x + w + 2000, max y h)
+        put (x + w + 60000, max y h)
         pure $ g & geometry .~ [Layered x 0 (x + w) h [Metal2, Metal3] def]
       _ -> pure g
 

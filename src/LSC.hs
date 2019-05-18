@@ -41,7 +41,7 @@ stage4 = zeroArrow
 
 globalPlacement :: Compiler' NetGraph
 globalPlacement = proc top -> do
-  next <- legalization <<< local (columns 64) -<< top
+  next <- legalization <<< local columns -<< top
   remote estimations -< next
   returnA -< next
 

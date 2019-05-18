@@ -24,8 +24,9 @@ import LSC.Types
 
 
 
-columns :: Int -> NetGraph -> LSC NetGraph
-columns k top = do
+columns :: NetGraph -> LSC NetGraph
+columns top = do
+  let k = ceiling (sqrt $ fromIntegral $ top ^. gates . to length :: Float)
   next <- kWayPartitioning k top
   let cs = [ (s ^. identifier, s) | s <- leaves next ]
       ss = Map.fromList cs
