@@ -20,7 +20,7 @@ import Text.ParserCombinators.Parsec.Number (decimal)
 
 import LSC.BLIF    (parseBLIF)
 import LSC.LEF     (parseLEF, fromLEF)
-import LSC.DEF     (printDEF, toDEF)
+import LSC.DEF     (printDEF, toDEF, fromDEF, parseDEF)
 
 import LSC
 import LSC.BLIF
@@ -65,46 +65,42 @@ program = do
       exit
 
    -- svg output
-  when (arg Lef && arg Blif)
+  when (arg Lef && (arg Blif || arg Def))
     $ do
-      net_ <- liftIO $ Text.readFile $ head $ list Blif
-      lef_ <- liftIO $ Text.readFile $ head $ list Lef
 
-      tech <- liftIO $ either
-        (ioError . userError . show)
-        (pure . fromLEF)
-        (parseLEF lef_)
-      netlist <- liftIO $ either
-        (ioError . userError . show)
-        (pure . fromBLIF)
-        (parseBLIF net_)
+      tech <- liftIO $ either (ioError . userError . show) (pure . fromLEF) . parseLEF
+          =<< Text.readFile (head $ list Lef)
+
+      netlist <- liftIO $ case (arg Blif, arg Def) of
+          (True, _) -> either (ioError . userError . show) (pure . fromBLIF) . parseBLIF
+                   =<< Text.readFile (head $ list Blif) 
+          (_, True) -> either (ioError . userError . show) (pure . fromDEF) . parseDEF
+                   =<< Text.readFile (head $ list Def)
+          _ -> ioError $ userError "no netgraph info"
 
       when (arg LayoutEstimation)
         $ do
           circuit2d <- liftIO $ evalLSC opts tech $ compiler stage1 netlist
-          case list Compile of
-            "def" : _ -> liftIO $ printDEF $ toDEF circuit2d
-            _ -> liftIO $ plotStdout circuit2d
+          liftIO $ printStdout circuit2d $ list Output
           exit
 
       when (arg Compile)
         $ do
           circuit2d <- lift $ evalLSC opts tech $ compiler stage4 netlist
-          case list Compile of
-            "def" : _ -> liftIO $ printDEF $ toDEF circuit2d
-            _ -> liftIO $ plotStdout circuit2d
+          liftIO $ printStdout circuit2d $ list Output
+          exit
+
+      when (arg Output)
+        $ do
+          circuit2d <- pure netlist
+          liftIO $ printStdout circuit2d $ list Output
           exit
 
 
-  when (arg Exline && not (arg Blif) && not (arg Firrtl))
-    $ do
-      liftIO $ hPutStrLn stderr "exline: no rtl given"
-      exit
 
-  when (arg Exline && not (arg Lef))
-    $ do
-      liftIO $ hPutStrLn stderr "exline: no tech given"
-      exit
+printStdout :: NetGraph -> [FlagValue] -> IO ()
+printStdout ckt ("def" : _) = printDEF $ toDEF ckt
+printStdout ckt _ = plotStdout ckt
 
 
 
@@ -115,9 +111,11 @@ data FlagKey
   | Version
   | Blif
   | Lef
+  | Def
   | Exline
   | LayoutEstimation
   | Compile
+  | Output
   | Visuals
   | Iterations
   | CutRatio
@@ -140,6 +138,7 @@ args =
     , Option ['b']      ["blif"]       (ReqArg (Blif, ) "FILE")     "BLIF file"
 
     , Option ['l']      ["lef"]        (ReqArg (Lef,  ) "FILE")     "LEF file"
+    , Option ['d']      ["def"]        (ReqArg (Def,  ) "FILE")     "DEF file"
     , Option [ ]        ["estimate-layout"] (NoArg (LayoutEstimation, mempty)) "estimate area"
 
     , Option ['d']      ["debug"]      (NoArg  (Debug, mempty))     "print some debug info"
@@ -152,7 +151,9 @@ args =
     , Option ['i']      ["iterations"]
         (OptArg  ((Iterations, ) . maybe "4" id) "n")               "iterations"
 
-    , Option ['c']      ["compile"]
+    , Option ['c']      ["compile"]    (NoArg (Compile,  mempty))   "compile"
+
+    , Option ['o']      ["output"]
         (OptArg ((Compile,  ) . maybe "svg" id) "svg,def,magic")    "output format"
 
     , Option ['s']      ["smt"]        (ReqArg (Smt, ) "yices,z3")  "specify smt backend"

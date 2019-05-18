@@ -2,10 +2,12 @@
 
 module LSC.DEF
   ( module Language.DEF.Builder
-  , toDEF
+  , module Language.DEF.Parser
+  , fromDEF, toDEF
   ) where
 
 import Control.Lens
+import Data.Default
 import Data.Foldable
 import Data.Maybe
 import Data.Map (assocs, withoutKeys)
@@ -14,9 +16,15 @@ import qualified Data.Set as Set
 import Data.Text (pack)
 
 import Language.DEF.Builder
+import Language.DEF.Parser (parseDEF)
 import Language.DEF.Syntax as DEF
 
 import LSC.Types as Rect
+
+
+
+fromDEF :: DEF -> NetGraph
+fromDEF = const def
 
 
 
