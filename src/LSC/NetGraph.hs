@@ -48,6 +48,28 @@ hpwl gs n = width p + height p
 
 
 
+markRouting :: NetGraph -> [Line Integer]
+markRouting top = join [ either horizontal vertical track | track <- top ^. supercell . routing ]
+
+  where
+
+    horizontal p =
+      [ Line (0, y) (x, y) :: Line Integer
+      | i <- [ 0 .. p ^. steps - 1 ]
+      , x <- top ^. supercell . geometry <&> view r 
+      , let y = fromIntegral i * p ^. space + p ^. offset
+      ]
+
+    vertical p =
+      [ Line (x, 0) (x, y) :: Line Integer
+      | i <- [1 .. p ^. steps]
+      , let x = fromIntegral i * p ^. space + p ^. offset
+      , y <- top ^. supercell . geometry <&> view t 
+      ]
+
+
+
+
 markEdges :: NetGraph -> [Line Integer]
 markEdges top =
     [ Line (p^.l + po^.l, p^.b + po^.b) (q^.l + qo^.l, q^.b + qo^.b)
@@ -101,15 +123,27 @@ inlineGeometry top = pure $ top &~ do
 
 
 
+gateGeometry :: NetGraph -> LSC NetGraph
+gateGeometry netlist = do
+
+  cells <- view stdCells <$> technology
+
+  let expand g = g & geometry %~ maybe id (fmap . drag) (cells ^? ix (g ^. identifier) . dims)
+      drag (w, h) p = p & t +~ h & r +~ w
+
+  pure $ netlist &~ do
+      gates %= fmap expand
+
+
+
 contactGeometry :: NetGraph -> LSC NetGraph
 contactGeometry netlist = do
 
   tech <- technology
 
-  netlist
-    & gates %~ fmap (vddGnd tech)
-    & nets  .~ createNets tech
-    & pure
+  pure $ netlist &~ do
+      gates %= fmap (vddGnd tech)
+      nets  .= createNets tech
 
   where
 

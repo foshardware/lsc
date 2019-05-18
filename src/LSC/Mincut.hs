@@ -1,7 +1,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TupleSections #-}
 
-module LSC.Exline where
+module LSC.Mincut where
 
 import Control.Lens
 import Control.Monad

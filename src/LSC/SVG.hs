@@ -20,6 +20,7 @@ import Text.Blaze.Svg.Renderer.Text (renderSvg)
 
 import Prelude hiding (lookup)
 
+import LSC.NetGraph
 import LSC.Types
 
 
@@ -138,7 +139,7 @@ fill _ = "transparent"
 
 
 svgPaths :: NetGraph -> Circuit
-svgPaths netlist = (Circuit2D gs ns, mempty)
+svgPaths netlist = (Circuit2D gs ns, markRouting netlist)
 
   where
 

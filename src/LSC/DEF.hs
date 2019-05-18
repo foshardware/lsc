@@ -25,26 +25,38 @@ import LSC.Types as Rect
 
 
 fromDEF :: DEF -> NetGraph
-fromDEF (DEF options area _ cs ps ns) = def &~ do
+fromDEF (DEF options area ts cs ps ns) = def &~ do
     identifier .= identifierFrom options
+    supercell .= supercellFrom sc area ts
     gates .= V.fromList (fromComponent sc <$> cs)
-    where sc = scaleFrom options
+
+    where sc x = ceiling $ x * scaleFrom options
+
+type Scale = Double -> Integer
 
 
-fromComponent :: Double -> DEF.Component -> Gate
+supercellFrom :: Scale -> DieArea -> [DEF.Track] -> AbstractCell
+supercellFrom sc (DieArea (x1, y1) (x2, y2)) ts = def &~ do
+    routing .= (fromTrack sc <$> ts)
+    geometry .= [Rect (sc x1) (sc y1) (sc x2) (sc y2)]
+
+
+fromTrack :: Scale -> DEF.Track -> Either Rect.Track Rect.Track
+fromTrack sc (DEF.Track "X" a ss c _) = Right $ Rect.Track (sc a) (fromIntegral ss) (sc c) mempty 
+fromTrack sc (DEF.Track   _ a ss c _) = Left  $ Rect.Track (sc a) (fromIntegral ss) (sc c) mempty
+
+
+
+fromComponent :: Scale -> DEF.Component -> Gate
 fromComponent sc (Component i j placed) = def &~ do
-    identifier .= i
+    identifier .= j
     geometry .= fromPlaced sc placed
 
 
 
-fromPlaced :: Double -> Maybe Placed -> Path
+fromPlaced :: Scale -> Maybe Placed -> Path
 fromPlaced sc (Just (Placed (x, y) _)) =
-  [ Layered
-    (ceiling $ x * sc)
-    (ceiling $ y * sc)
-    (ceiling $ x * sc)
-    (ceiling $ y * sc)
+  [ Layered (sc x) (sc y) (sc x) (sc y)
     [Metal2, Metal3]
   ]
 fromPlaced _ _ = mempty

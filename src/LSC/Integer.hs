@@ -73,7 +73,7 @@ routeInteger top = do
       nets  .= ns
       nets  %= insert "vdd" (Net "vdd" ps mempty)
       nets  %= insert "gnd" (Net "gnd" gr mempty)
-      supercell .= AbstractCell [pad]
+      supercell .= AbstractCell [pad] mempty
         (def & ports .~ fmap (integrate [Metal2]) ri)
         (def & ports .~ fmap (integrate [Metal3]) ri)
         qs

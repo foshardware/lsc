@@ -19,9 +19,9 @@ import Control.Monad.Codensity
 import Prelude hiding ((.), id)
 
 import LSC.Easy
-import LSC.Exline
 import LSC.Force
 import LSC.Integer
+import LSC.Mincut
 import LSC.NetGraph
 import LSC.Types
 import LSC.Version

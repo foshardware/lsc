@@ -23,6 +23,7 @@ import LSC.DEF     (printDEF, toDEF, fromDEF, parseDEF)
 
 import LSC
 import LSC.BLIF
+import LSC.NetGraph
 import LSC.SVG
 import LSC.Types
 import LSC.Version
@@ -79,8 +80,19 @@ program = do
           liftIO $ printStdout circuit2d $ list Output
           exit
 
-      circuit2d <- pure netlist
+      circuit2d <- liftIO $ evalLSC opts tech $ gateGeometry netlist
       liftIO $ printStdout circuit2d $ list Output
+      exit
+
+
+  when (null inputs)
+    $ do
+      void $ liftIO $ ioError $ userError "no inputs given"
+      exit
+
+  unless (arg Lef)
+    $ do
+      void $ liftIO $ ioError $ userError "no library given"
       exit
 
 
@@ -171,4 +183,4 @@ compilerFlags argv =
     case getOpt Permute args argv of
         (o, n, []  ) -> pure (o, n)
         (_, _, errs) -> mempty <$ hPutStrLn stderr (concat errs ++ usageInfo header args)
-     where header = "Usage: lsc [arg...]"
+     where header = "Usage: lsc [arg...] input"

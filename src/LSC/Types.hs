@@ -129,8 +129,24 @@ instance Hashable Gate where
   hashWithSalt s = hashWithSalt s . encode
 
 
+
+data Track = Track
+  { _offset :: Integer
+  , _steps  :: Int
+  , _space  :: Integer
+  , _z      :: [Layer]
+  } deriving (Generic, Show)
+
+instance ToJSON Track
+instance FromJSON Track
+
+instance Hashable Track
+
+
+
 data AbstractCell = AbstractCell
   { _geometry  :: Path
+  , _routing   :: [Either Track Track]
   , _vdd       :: Pin
   , _gnd       :: Pin
   , _pins      :: Map Identifier Pin
@@ -402,11 +418,13 @@ instance Default NetGraph where
   def = NetGraph mempty def mempty mempty mempty
 
 
+makeFieldsNoPrefix ''Track
+
 
 makeFieldsNoPrefix ''AbstractCell
 
 instance Default AbstractCell where
-  def = AbstractCell mempty def def mempty
+  def = AbstractCell mempty mempty def def mempty
 
 
 makeFieldsNoPrefix ''Net
