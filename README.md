@@ -26,12 +26,12 @@
 
 ### Place and route a small component
 
-`lsc -b sample/fulladder.blif -l sample/osu035.lef -c -d > result.blif`  
+`lsc -l sample/osu035.lef -c -d --output=svg sample/fulladder.blif > result.svg`  
 
 
-### Exline a large component
+### Create graphics from def file
 
-`lsc -b sample/picorv32.blif -l sample/osu035.lef -x -d > result.blif`  
+`lsc -l sample/osu035.lef --output=svg sample/map9v3.def > result.svg`  
 
 
 ## Tests

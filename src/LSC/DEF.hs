@@ -14,6 +14,7 @@ import Data.Map (assocs, withoutKeys)
 import Data.Set (Set)
 import qualified Data.Set as Set
 import Data.Text (pack)
+import qualified Data.Vector as V
 
 import Language.DEF.Builder
 import Language.DEF.Parser (parseDEF)
@@ -24,7 +25,43 @@ import LSC.Types as Rect
 
 
 fromDEF :: DEF -> NetGraph
-fromDEF = const def
+fromDEF (DEF options area _ cs ps ns) = def &~ do
+    identifier .= identifierFrom options
+    gates .= V.fromList (fromComponent sc <$> cs)
+    where sc = scaleFrom options
+
+
+fromComponent :: Double -> DEF.Component -> Gate
+fromComponent sc (Component i j placed) = def &~ do
+    identifier .= i
+    geometry .= fromPlaced sc placed
+
+
+
+fromPlaced :: Double -> Maybe Placed -> Path
+fromPlaced sc (Just (Placed (x, y) _)) =
+  [ Layered
+    (ceiling $ x * sc)
+    (ceiling $ y * sc)
+    (ceiling $ x * sc)
+    (ceiling $ y * sc)
+    [Metal2, Metal3]
+  ]
+fromPlaced _ _ = mempty
+
+
+
+scaleFrom :: [Option] -> Double
+scaleFrom (Units (DistanceList x) : _) = fromIntegral x
+scaleFrom (_ : xs) = scaleFrom xs
+scaleFrom _ = 1
+
+
+
+identifierFrom :: [Option] -> Identifier
+identifierFrom (Design i : _) = i
+identifierFrom (_ : xs) = identifierFrom xs
+identifierFrom _ = "top"
 
 
 
@@ -33,9 +70,9 @@ toDEF top = DEF
   (defaultOptions $ Just $ top ^. identifier)
   (dieArea $ top ^. supercell . geometry . to listToMaybe) 
   mempty
-  (toList $ top ^. gates <&> fromComponent)
-  (toList $ top ^. supercell . pins <&> fromPin)
-  (toList $ withoutKeys (top ^. nets) power <&> fromNet top)
+  (toList $ top ^. gates <&> toComponent)
+  (toList $ top ^. supercell . pins <&> toPin)
+  (toList $ withoutKeys (top ^. nets) power <&> toNet top)
 
 
 
@@ -58,15 +95,15 @@ enumeratedGate :: Gate -> Identifier
 enumeratedGate g = g ^. identifier <> "_" <> pack (g ^. number . to show)
 
 
-fromComponent :: Gate -> DEF.Component
-fromComponent g = Component (enumeratedGate g) (g ^. identifier) (Just $ Placed p "N")
+toComponent :: Gate -> DEF.Component
+toComponent g = Component (enumeratedGate g) (g ^. identifier) (Just $ Placed p "N")
   where
       p = maybe (0, 0) (\x -> (scaleDown $ x^.l, scaleDown $ x^.b)) $ g ^. geometry . to listToMaybe
 
 
 
-fromNet :: NetGraph -> Rect.Net -> DEF.Net
-fromNet top n = DEF.Net (n ^. identifier) $
+toNet :: NetGraph -> Rect.Net -> DEF.Net
+toNet top n = DEF.Net (n ^. identifier) $
 
     [ Left (n ^. identifier)
     | elem (n ^. identifier) (top ^. supercell . pins <&> view identifier)
@@ -79,8 +116,8 @@ fromNet top n = DEF.Net (n ^. identifier) $
     ]
 
 
-fromPin :: Rect.Pin -> DEF.Pin
-fromPin pin = DEF.Pin (pin ^. identifier)
+toPin :: Rect.Pin -> DEF.Pin
+toPin pin = DEF.Pin (pin ^. identifier)
     (Just $ pin ^. identifier)
     (Just $ Layer "metal1" (0, 0) (1, 1))
     (listToMaybe [ Placed (scaleDown $ p^.l, scaleDown $ p^.b) "N" | p <- pin ^. ports ])

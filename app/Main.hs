@@ -3,7 +3,6 @@
 module Main where
 
 import Control.Lens
-
 import Control.Monad
 import Control.Monad.Trans
 import Control.Monad.Trans.Maybe
@@ -24,7 +23,6 @@ import LSC.DEF     (printDEF, toDEF, fromDEF, parseDEF)
 
 import LSC
 import LSC.BLIF
-import LSC.FIR
 import LSC.SVG
 import LSC.Types
 import LSC.Version
@@ -40,7 +38,7 @@ exit = guard False
 program :: App ()
 program = do
 
-  (flags, _) <- liftIO $ compilerFlags =<< getArgs
+  (flags, inputs) <- liftIO $ compilerFlags =<< getArgs
   opts <- liftIO $ compilerOpts flags
 
   let arg x = or [ k == x | (k, _) <- flags ]
@@ -54,29 +52,20 @@ program = do
       liftIO $ hPutStrLn stderr $ versionString
       exit
 
-  -- firrtl synthesis
-  when (arg Exline && arg Firrtl)
-    $ do
-      fir_ <- liftIO $ Text.readFile $ head $ list Firrtl
-      liftIO $ either
-        (ioError . userError . show)
-        (putStrLn . show)
-        (parseFIR fir_)
-      exit
 
-   -- svg output
-  when (arg Lef && (arg Blif || arg Def))
+  when (arg Lef && not (null inputs))
     $ do
 
       tech <- liftIO $ either (ioError . userError . show) (pure . fromLEF) . parseLEF
           =<< Text.readFile (head $ list Lef)
 
-      netlist <- liftIO $ case (arg Blif, arg Def) of
-          (True, _) -> either (ioError . userError . show) (pure . fromBLIF) . parseBLIF
-                   =<< Text.readFile (head $ list Blif) 
-          (_, True) -> either (ioError . userError . show) (pure . fromDEF) . parseDEF
-                   =<< Text.readFile (head $ list Def)
-          _ -> ioError $ userError "no netgraph info"
+      netlist <- liftIO $ case inputs of
+          path : _ -> do
+              file <- Text.readFile path
+              either (ioError . userError . show) pure $ head
+                 $ [ blif | let blif = fromBLIF <$> parseBLIF file, isRight blif ]
+                ++ [ def_ | let def_ = fromDEF <$> parseDEF file, isRight def_ ]
+          _ -> ioError $ userError "no input given"
 
       when (arg LayoutEstimation)
         $ do
@@ -90,11 +79,9 @@ program = do
           liftIO $ printStdout circuit2d $ list Output
           exit
 
-      when (arg Output)
-        $ do
-          circuit2d <- pure netlist
-          liftIO $ printStdout circuit2d $ list Output
-          exit
+      circuit2d <- pure netlist
+      liftIO $ printStdout circuit2d $ list Output
+      exit
 
 
 
@@ -112,7 +99,6 @@ data FlagKey
   | Blif
   | Lef
   | Def
-  | Exline
   | LayoutEstimation
   | Compile
   | Output
@@ -135,26 +121,22 @@ args :: [OptDescr Flag]
 args =
     [ Option ['v']      ["verbose"]    (NoArg  (Verbose, mempty))   "chatty output on stderr"
     , Option ['V', '?'] ["version"]    (NoArg  (Version, mempty))   "show version number"
-    , Option ['b']      ["blif"]       (ReqArg (Blif, ) "FILE")     "BLIF file"
 
     , Option ['l']      ["lef"]        (ReqArg (Lef,  ) "FILE")     "LEF file"
-    , Option ['d']      ["def"]        (ReqArg (Def,  ) "FILE")     "DEF file"
-    , Option [ ]        ["estimate-layout"] (NoArg (LayoutEstimation, mempty)) "estimate area"
+    , Option ['x']      ["estimate-layout"] (NoArg (LayoutEstimation, mempty)) "estimate area"
 
-    , Option ['d']      ["debug"]      (NoArg  (Debug, mempty))     "print some debug info"
-    , Option ['g']      ["visuals"]    (NoArg  (Visuals, mempty))   "show visuals"
-    , Option ['x']      ["exline"]
-        (OptArg ((Exline, ) . maybe "top" id)   "component")        "just exline and exit"
     , Option [ ]        ["cut-ratio"]
         (OptArg  ((CutRatio, ) . maybe "40" id) "n")                "max bound cut sizes"
 
+    , Option ['d']      ["debug"]      (NoArg  (Debug, mempty))     "print some debug info"
+    , Option ['g']      ["visuals"]    (NoArg  (Visuals, mempty))   "show visuals"
     , Option ['i']      ["iterations"]
         (OptArg  ((Iterations, ) . maybe "4" id) "n")               "iterations"
 
-    , Option ['c']      ["compile"]    (NoArg (Compile,  mempty))   "compile"
+    , Option ['c']      ["compile"]    (NoArg (Compile, mempty))    "compile"
 
     , Option ['o']      ["output"]
-        (OptArg ((Compile,  ) . maybe "svg" id) "svg,def,magic")    "output format"
+        (OptArg ((Output,  ) . maybe "svg" id) "svg,def,magic")     "output format"
 
     , Option ['s']      ["smt"]        (ReqArg (Smt, ) "yices,z3")  "specify smt backend"
     , Option ['j']      ["cores"]      (ReqArg (Cores,  ) "count")  "limit number of cores"
