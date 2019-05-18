@@ -55,11 +55,24 @@ fromComponent sc (Component i j placed) = def &~ do
 
 
 fromPlaced :: Scale -> Maybe Placed -> Path
-fromPlaced sc (Just (Placed (x, y) _)) =
+fromPlaced sc (Just (Placed (x, y) ori)) =
   [ Layered (sc x) (sc y) (sc x) (sc y)
-    [Metal2, Metal3]
+    [Metal2, Metal3] (fromText ori)
   ]
 fromPlaced _ _ = mempty
+
+
+
+fromText :: Identifier -> Orientation
+fromText "N" = N
+fromText "S" = S
+fromText "W" = W
+fromText "E" = E
+fromText "FN" = FN
+fromText "FS" = FS
+fromText "FW" = FW
+fromText "FE" = FE
+fromText _ = error "undefined orientation"
 
 
 

@@ -325,6 +325,77 @@ instance Show Fail where
   show = unFail
 
 
+
+data Orientation = N | S | W | E | FN | FS | FW | FE
+  deriving (Eq, Generic, Show)
+
+instance FromJSON Orientation
+instance ToJSON Orientation
+
+
+instance Hashable Orientation
+
+
+instance Default Orientation where
+  def = N
+
+
+instance Semigroup Orientation where
+
+  N <> a = a
+
+  S <> S = N
+  S <> E = W
+  S <> W = E
+
+  W <> E = N
+  W <> W = S
+
+  E <> E = S
+
+  FN <> FN = N
+  FN <> FS = S
+  FN <> FW = W
+  FN <> FE = E
+
+  FN <> S = FS
+  FN <> W = FW
+  FN <> E = FE
+
+
+  FS <> FS = N
+  FS <> FW = E
+  FS <> FE = W
+
+  FS <> S = FN
+  FS <> W = FE
+  FS <> E = FW
+
+
+  FW <> FE = N
+  FW <> FW = S
+
+  FW <> S = FE
+  FW <> W = FS
+  FW <> E = FN
+
+
+  FE <> FE = S
+
+  FE <> S = FW
+  FE <> W = FS
+  FE <> E = FN
+
+
+  a <> b = b <> a
+
+
+instance Monoid Orientation where
+  mempty = def
+  mappend = (<>)
+
+
+
 type Path = [Component Layer Integer]
 
 type Ring l a = Component l (Component l a)
@@ -349,7 +420,7 @@ type IPins = Map Identifier (Pin, IComponent)
 data Component l a
   = Rect    { _l :: a, _b :: a, _r :: a, _t :: a }
   | Via     { _l :: a, _b :: a, _r :: a, _t :: a, _z :: [l] }
-  | Layered { _l :: a, _b :: a, _r :: a, _t :: a, _z :: [l] }
+  | Layered { _l :: a, _b :: a, _r :: a, _t :: a, _z :: [l], _orientation :: Orientation }
   deriving (Eq, Functor, Foldable, Traversable, Generic, Show)
 
 instance (ToJSON l, ToJSON a) => ToJSON (Component l a)
@@ -373,17 +444,26 @@ makeFieldsNoPrefix ''Line
 
 
 
+projectNorth :: Component l a -> Component l a
+projectNorth p | FN <- p ^. orientation = projectNorth $ p & orientation .~ N
+projectNorth p | FS <- p ^. orientation = projectNorth $ p & orientation .~ S
+projectNorth p | FW <- p ^. orientation = projectNorth $ p & orientation .~ W
+projectNorth p | FE <- p ^. orientation = projectNorth $ p & orientation .~ E
+projectNorth p | W <- p ^. orientation = projectNorth $ p & orientation .~ E
+projectNorth p | E <- p ^. orientation = p & t .~ p^.r & r .~ p^.t
+projectNorth p = p
+
+
 width, height :: Num a => Component l a -> a
 width  p = p ^. r - p ^. l
 height p = p ^. t - p ^. b
 
 
 integrate :: [l] -> Component k a -> Component l a
-integrate    [] (Layered x1 y1 x2 y2 _) = Rect    x1 y1 x2 y2
-integrate    [] (Rect    x1 y1 x2 y2)   = Rect    x1 y1 x2 y2
-integrate layer (Layered x1 y1 x2 y2 _) = Layered x1 y1 x2 y2 layer
-integrate layer (Rect    x1 y1 x2 y2)   = Layered x1 y1 x2 y2 layer
-integrate layer (Via     x1 y1 x2 y2 _) = Via     x1 y1 x2 y2 layer
+integrate    [] (Rect    x1 y1 x2 y2)     = Rect    x1 y1 x2 y2
+integrate layer (Layered x1 y1 x2 y2 _ o) = Layered x1 y1 x2 y2 layer o
+integrate layer (Rect    x1 y1 x2 y2)     = Layered x1 y1 x2 y2 layer def
+integrate layer (Via     x1 y1 x2 y2 _)   = Via     x1 y1 x2 y2 layer
 
 
 flipComponent :: Component l a -> Component l a

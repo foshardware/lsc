@@ -11,6 +11,7 @@ import Control.Lens
 import Control.Monad
 import Control.Monad.ST
 import Control.Monad.IO.Class
+import Data.Default
 import Data.Foldable
 import Data.Map (keys)
 import Data.Maybe
@@ -123,6 +124,7 @@ layered v i (x, y)
     (ceiling vx + div x 2)
     (ceiling vy + div y 2)
     [Metal2, Metal3]
+    def
     where V2 vx vy = maybe zero unP $ v ^? ix i . pos
 
 

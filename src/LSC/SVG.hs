@@ -150,7 +150,7 @@ svgPaths netlist = (Circuit2D gs ns, markRouting netlist)
       ]
 
     gs =
-      [ (gate, gate ^. geometry)
+      [ (gate, gate ^. geometry <&> projectNorth)
       | gate <- toList $ netlist ^. gates
       ]
 

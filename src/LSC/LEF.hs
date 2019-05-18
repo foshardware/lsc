@@ -71,6 +71,7 @@ portRectangles tech ident (MacroPinPortRect x1 y1 x2 y2 : rest) = Layered
   (ceiling $ x2 * g)
   (ceiling $ y2 * g)
   (pure $ portLayer ident)
+  def
   : portRectangles tech ident rest
   where g = scale tech
 portRectangles tech ident (_ : rest) = portRectangles tech ident rest

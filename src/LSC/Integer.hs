@@ -311,6 +311,7 @@ getLayered f path = Layered
   <*> f (path ^. r)
   <*> f (path ^. t)
   <*> pure (path ^. z)
+  <*> pure def
 
 
 disjointGates :: INodes -> LSC ()

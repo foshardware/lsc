@@ -33,7 +33,7 @@ afterRow top g
     (x, y) <- get
     channel <- view rowSize <$> lift technology
     put (max w x, y + h + channel)
-    pure $ g & geometry .~ [Layered 0 y w (y + h) [Metal2, Metal3]]
+    pure $ g & geometry .~ [Layered 0 y w (y + h) [Metal2, Metal3] def]
 afterRow _ g = pure g
 
 
@@ -55,15 +55,15 @@ afterColumn g = do
     case ds of
       Just (w, h) -> do
         put (x + w + 2000, max y h)
-        pure $ g & geometry .~ [Layered x 0 (x + w) h [Metal2, Metal3]]
+        pure $ g & geometry .~ [Layered x 0 (x + w) h [Metal2, Metal3] def]
       _ -> pure g
 
 
 placeEasy :: NetGraph -> LSC NetGraph
 placeEasy netlist = do
 
-  offset <- (4 *) . fst . view standardPin <$> technology
-  rows  <- fmap (+ offset) <$> divideArea (netlist ^. gates)
+  off <- (4 *) . fst . view standardPin <$> technology
+  rows  <- fmap (+ off) <$> divideArea (netlist ^. gates)
 
   let pivot = div (netlist ^. gates & length & succ) (length rows)
 
@@ -72,15 +72,15 @@ placeEasy netlist = do
 
   nodes <- evalStateT
     (sequence $ netlist ^. gates <&> sections abstractCells)
-    (offset, offset, replicate pivot =<< alternate rows)
+    (off, off, replicate pivot =<< alternate rows)
 
   let x = maximum $ maybe 0 (view r) . listToMaybe . view geometry <$> nodes
       y = maximum $ maybe 0 (view t) . listToMaybe . view geometry <$> nodes
 
-  debug [ unpack (view identifier netlist) ++ " layout area: " ++ show (x + offset, y + offset) ]
+  debug [ unpack (view identifier netlist) ++ " layout area: " ++ show (x + off, y + off) ]
 
   let super = def &~ do
-        geometry .= [Rect 0 0 (x + offset) (y + offset)]
+        geometry .= [Rect 0 0 (x + off) (y + off)]
 
   pure $ netlist &~ do
       gates .= nodes
@@ -99,7 +99,7 @@ sections
   -> StateT (Integer, Integer, [Either a a]) LSC Gate
 sections subs gate = do
 
-  offset <- (4 *) . fst . view standardPin <$> lift technology
+  off <- (4 *) . fst . view standardPin <$> lift technology
 
   let rotate (x, y) = if x > y then (y, x) else (x, y)
 
@@ -113,22 +113,22 @@ sections subs gate = do
     [] -> pure gate
 
     Right _ : Left next : rows -> do
-      put (x + w + offset, y + h + offset, Left next : rows)
+      put (x + w + off, y + h + off, Left next : rows)
       pure $ gate &~ do
-          geometry .= [Layered x y (x + w) (y + h) [Metal2, Metal3]]
+          geometry .= [Layered x y (x + w) (y + h) [Metal2, Metal3] def]
 
     Left _ : Right next : rows -> do
-      put (x + w + offset, y - h - offset, Right next : rows)
+      put (x + w + off, y - h - off, Right next : rows)
       pure $ gate &~ do
-          geometry .= [Layered x (y - h - offset) (x + w) (y - offset) [Metal2, Metal3]]
+          geometry .= [Layered x (y - h - off) (x + w) (y - off) [Metal2, Metal3] def]
 
     Left _ : rows -> do
-      put (x, y - h - offset, rows)
+      put (x, y - h - off, rows)
       pure $ gate &~ do
-          geometry .= [Layered x (y - h - offset) (x + w) (y - offset) [Metal2, Metal3]]
+          geometry .= [Layered x (y - h - off) (x + w) (y - off) [Metal2, Metal3] def]
 
     Right _ : rows -> do
-      put (x, y + h + offset, rows)
+      put (x, y + h + off, rows)
       pure $ gate &~ do
-          geometry .= [Layered x y (x + w) (y + h) [Metal2, Metal3]]
+          geometry .= [Layered x y (x + w) (y + h) [Metal2, Metal3] def]
 
