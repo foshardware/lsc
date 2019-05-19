@@ -110,8 +110,7 @@ type Permutation = Vector Int
 
 
 data Heu s = Heu
-  { _gainsLeft    :: Gain s Int
-  , _gainsRight   :: Gain s Int
+  { _gains        :: Gain s Int
   , _freeCells    :: IntSet
   , _moves        :: [(Move, Bipartitioning)]
   }
@@ -146,7 +145,7 @@ runFM f = do
 runFMWithGen :: Gen s -> FM s a -> ST s a
 runFMWithGen s f = do
   g <- Gain <$> newSTRef mempty <*> thaw mempty <*> new
-  r <- newSTRef $ Heu g g mempty mempty
+  r <- newSTRef $ Heu g mempty mempty
   runReaderT f (s, r)
 
 
@@ -418,24 +417,21 @@ processCell :: (V, E) -> Bipartitioning -> FM s ()
 processCell (v, e) p = do
   ck <- selectBaseCell v p
   for_ ck $ \ c -> do
-    lockCell c p
+    lockCell c
     q <- moveCell c p
     updateGains c (v, e) p
     processCell (v, e) q
 
 
-lockCell :: Int -> Bipartitioning -> FM s ()
-lockCell c p = do
+lockCell :: Int -> FM s ()
+lockCell c = do
   update freeCells $ delete c
-  removeGain p c
+  removeGain c
 
 
 moveCell :: Int -> Bipartitioning -> FM s Bipartitioning
 moveCell c p = do
-  let Bisect a _ = p
-  Gain _ u _ <- if member c a
-      then value gainsLeft
-      else value gainsRight
+  Gain _ u _ <- value gains
   g <- st $ read u c
   let q = move c p
   update moves ((Move g c, q) :)
@@ -444,22 +440,9 @@ moveCell c p = do
 
 selectBaseCell :: V -> Bipartitioning -> FM s (Maybe Int)
 selectBaseCell v p = do
-  bucket1 <- maxGain =<< value gainsLeft
-  bucket2 <- maxGain =<< value gainsRight
-  case (bucket1, bucket2) of
-    (Just (x, xs), Just (y, _))
-        | x > y
-        , balanceCriterion (length v) p `any` xs
-        -> pure $ balanceCriterion (length v) p `find` xs
-    (Just _, Just (_, xs))
-        | balanceCriterion (length v) p `any` xs
-        -> pure $ balanceCriterion (length v) p `find` xs
-    (_, Just (_, xs))
-        | balanceCriterion (length v) p `any` xs
-        -> pure $ balanceCriterion (length v) p `find` xs
-    (Just (_, xs), _)
-        | balanceCriterion (length v) p `any` xs
-        -> pure $ balanceCriterion (length v) p `find` xs
+  bucket <- maxGain
+  case bucket of
+    Just (_, xs) -> pure $ balanceCriterion (length v) p `find` xs
     _ -> pure Nothing
 
 
@@ -474,17 +457,18 @@ updateGains c (v, e) p = do
   for_ (elems $ v ! c) $ \ n -> do
 
     -- reflect changes before the move
-    when (size (t n) == 0) $ for_ (elems $ f n `intersection` free) (modifyGain p succ)
-    when (size (t n) == 1) $ for_ (elems $ t n `intersection` free) (modifyGain p pred)
+    when (size (t n) == 0) $ for_ (elems $ f n `intersection` free) (modifyGain succ)
+    when (size (t n) == 1) $ for_ (elems $ t n `intersection` free) (modifyGain pred)
 
     -- reflect changes after the move
-    when (size (f n) == succ 0) $ for_ (elems $ t n `intersection` free) (modifyGain p pred)
-    when (size (f n) == succ 1) $ for_ (elems $ f n `intersection` free) (modifyGain p succ)
+    when (size (f n) == succ 0) $ for_ (elems $ t n `intersection` free) (modifyGain pred)
+    when (size (f n) == succ 1) $ for_ (elems $ f n `intersection` free) (modifyGain succ)
 
 
 
-maxGain :: Gain s Int -> FM s (Maybe (Int, [Int]))
-maxGain (Gain gmax _ m) = do
+maxGain :: FM s (Maybe (Int, [Int]))
+maxGain = do
+  Gain gmax _ m <- value gains
   mg <- st $ maxView <$> readSTRef gmax
   case mg of
     Just (g, _) -> do
@@ -493,12 +477,10 @@ maxGain (Gain gmax _ m) = do
     _ -> pure Nothing
 
 
-removeGain :: Bipartitioning -> Int -> FM s ()
-removeGain (Bisect p _) c = do
+removeGain :: Int -> FM s ()
+removeGain c = do
 
-  Gain gmax u m <- if member c p
-      then value gainsLeft
-      else value gainsRight
+  Gain gmax u m <- value gains
 
   st $ do
 
@@ -512,12 +494,10 @@ removeGain (Bisect p _) c = do
 
 
 
-modifyGain :: Bipartitioning -> (Int -> Int) -> Int -> FM s ()
-modifyGain (Bisect p _) f c = do
+modifyGain :: (Int -> Int) -> Int -> FM s ()
+modifyGain f c = do
 
-  Gain gmax u m <- if member c p
-      then value gainsLeft
-      else value gainsRight
+  Gain gmax u m <- value gains
 
   st $ do
 
@@ -544,23 +524,15 @@ initialGains (v, e) p = do
          in size (S.filter (\ n -> size (f n) == 1) ns)
           - size (S.filter (\ n -> size (t n) == 0) ns)
 
-  let Bisect a b = p
-      gmax_p = foldMap (singleton . (nodes!)) (elems a)
-      gmax_q = foldMap (singleton . (nodes!)) (elems b)
+  let gmax = foldMap singleton nodes
 
-  (lft, rgt) <- st $ do
-      gain_p <- newSized $ 2 * size gmax_p + 1
-      gain_q <- newSized $ 2 * size gmax_q + 1
-      flip imapM_ nodes $ \ k x -> when (member k a)
-        $ mutate gain_p x $ (, ()) . pure . maybe [k] (k:)
-      flip imapM_ nodes $ \ k x -> when (member k b)
-        $ mutate gain_q x $ (, ()) . pure . maybe [k] (k:)
-      (,)
-        <$> (Gain <$> newSTRef gmax_p <*> thaw nodes <*> pure gain_p)
-        <*> (Gain <$> newSTRef gmax_q <*> thaw nodes <*> pure gain_q)
+  initial <- st $ do
+      gain <- newSized $ 2 * size gmax + 1
+      flip imapM_ nodes $ \ k x ->
+          mutate gain x $ (, ()) . pure . maybe [k] (k:)
+      Gain <$> newSTRef gmax <*> thaw nodes <*> pure gain
 
-  update gainsLeft  $ const lft
-  update gainsRight $ const rgt
+  update gains $ const initial
 
 
 
