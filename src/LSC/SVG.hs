@@ -8,7 +8,7 @@ import Data.Foldable
 import Data.String
 import Data.Map (assocs)
 import Data.Maybe
-import Data.Text hiding (take)
+import Data.Text hiding (take, null)
 import qualified Data.Text as Text
 import qualified Data.Text.Lazy    as Lazy
 import qualified Data.Text.Lazy.IO as Lazy
@@ -139,7 +139,7 @@ fill _ = "transparent"
 
 
 svgPaths :: NetGraph -> Circuit
-svgPaths netlist = (Circuit2D gs ns, markRouting netlist)
+svgPaths netlist = (Circuit2D gs ns, if null $ netlist ^. nets then markRouting netlist else [])
 
   where
 

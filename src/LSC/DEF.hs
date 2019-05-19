@@ -10,7 +10,7 @@ import Control.Lens
 import Data.Default
 import Data.Foldable
 import Data.Maybe
-import Data.Map (assocs, withoutKeys)
+import Data.Map (fromList, assocs, withoutKeys)
 import Data.Set (Set)
 import qualified Data.Set as Set
 import Data.Text (pack)
@@ -25,14 +25,30 @@ import LSC.Types as Rect
 
 
 fromDEF :: DEF -> NetGraph
-fromDEF (DEF options area ts cs ps ns) = def &~ do
+fromDEF (DEF options area ts cs _ ns _) = def &~ do
     identifier .= identifierFrom options
     supercell .= supercellFrom sc area ts
     gates .= V.fromList (fromComponent sc <$> cs)
+    nets .= fromList [ (n ^. identifier, n) | n <- fromNet sc <$> ns ]
 
     where sc x = ceiling $ x * scaleFrom options
 
 type Scale = Double -> Integer
+
+
+
+fromNet :: Scale -> DEF.Net -> Rect.Net
+fromNet _ (DEF.Net i _ _) = Rect.Net i
+    mempty
+    mempty
+
+
+fromLayer :: LayerName -> Rect.Layer
+fromLayer "metal1" = Metal1
+fromLayer "metal2" = Metal2
+fromLayer "metal3" = Metal3
+fromLayer _ = AnyLayer
+
 
 
 supercellFrom :: Scale -> DieArea -> [DEF.Track] -> AbstractCell
@@ -48,7 +64,7 @@ fromTrack sc (DEF.Track   _ a ss c _) = Left  $ Rect.Track (sc a) (fromIntegral 
 
 
 fromComponent :: Scale -> DEF.Component -> Gate
-fromComponent sc (Component i j placed) = def &~ do
+fromComponent sc (Component _ j placed) = def &~ do
     identifier .= j
     geometry .= fromPlaced sc placed
 
@@ -98,6 +114,7 @@ toDEF top = DEF
   (toList $ top ^. gates <&> toComponent)
   (toList $ top ^. supercell . pins <&> toPin)
   (toList $ withoutKeys (top ^. nets) power <&> toNet top)
+  mempty
 
 
 
@@ -128,8 +145,9 @@ toComponent g = Component (enumeratedGate g) (g ^. identifier) (Just $ Placed p 
 
 
 toNet :: NetGraph -> Rect.Net -> DEF.Net
-toNet top n = DEF.Net (n ^. identifier) $
+toNet top n = DEF.Net (n ^. identifier)
 
+    (
     [ Left (n ^. identifier)
     | elem (n ^. identifier) (top ^. supercell . pins <&> view identifier)
     ] ++
@@ -139,6 +157,10 @@ toNet top n = DEF.Net (n ^. identifier) $
     , p <- ps
     , g <- toList $ top ^. gates ^? ix i
     ]
+    )
+
+    Nothing
+
 
 
 toPin :: Rect.Pin -> DEF.Pin
