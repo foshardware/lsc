@@ -28,12 +28,12 @@ import Data.Vector
   ( Vector
   , unsafeFreeze, unsafeThaw
   , freeze, thaw
+  , replicate
   , (!)
   )
 import Data.Vector.Mutable
   ( MVector
   , read, write, modify
-  , replicate
   , unsafeSwap
   , take, slice
   , copy, grow
@@ -100,22 +100,35 @@ makeFieldsNoPrefix ''Heu
 type KGGGP s = ReaderT (Heu s) (ST s)
 
 
+runKGGGP :: KGGGP s a -> ST s a
+runKGGGP f = do
+    r <- Heu <$> thaw mempty  <*> newSTRef mempty
+    runReaderT f r
+
+
 st :: ST s a -> KGGGP s a
 st = lift
 
 
 
-initKgggp :: (V, E) -> Partitioning -> KGGGP s ()
-initKgggp (v, _) fixed = do
+balanceConstraint :: V -> Int -> Int -> KGGGP s Bool
+balanceConstraint v c p = do
+    partitioning <- view parts <$> ask
+    let k = M.length partitioning
+        wavg = (fromIntegral (length v) / fromIntegral k) * (1 + balanceFactor)
 
-    let k = length fixed
+    wi <- fromIntegral . size . insert c <$> read partitioning p
 
-    join $ copy
-        <$> (pure . take k =<< flip grow k =<< thaw fixed)
-        <*> (pure . take k =<< flip grow k . view parts =<< ask)
+    pure $ wi <= wavg
 
-    free <- view freeCells <$> ask
-    st $ writeSTRef free $ fromDistinctAscList [ 0 .. length v - 1] \\ foldMap id fixed
+
+
+connectivityConstraint :: V -> Int -> Int -> KGGGP s Bool
+connectivityConstraint v c p = do
+    partitioning <- view parts <$> ask
+    nodes <- elems <$> read partitioning p
+    pure $ not $ S.null $ intersection (v!c) (foldMap (v!) nodes)
+
 
 
 
@@ -123,8 +136,8 @@ kgggp :: (V, E) -> Partitioning -> KGGGP s Partitioning
 kgggp (v, e) fixed = do
 
     hreg <- st $ initialDisplacements (v, e) fixed
-    hnbc <- st $ undefined :: KGGGP s (Gain s Int)
-    hncc <- st $ undefined :: KGGGP s (Gain s Int)
+    hnbc <- st $ newGains v $ length fixed
+    hncc <- st $ newGains v $ length fixed
 
     free <- view freeCells <$> ask
 
@@ -187,6 +200,20 @@ kgggp (v, e) fixed = do
 
 
 
+initKgggp :: (V, E) -> Partitioning -> KGGGP s ()
+initKgggp (v, _) fixed = do
+
+    let k = length fixed
+
+    join $ copy
+        <$> (pure . take k =<< flip grow k =<< thaw fixed)
+        <*> (pure . take k =<< flip grow k . view parts =<< ask)
+
+    free <- view freeCells <$> ask
+    st $ writeSTRef free $ fromDistinctAscList [ 0 .. length v - 1] \\ foldMap id fixed
+
+
+
 emptyGains :: Gain s a -> ST s Bool
 emptyGains (Gain x s _) = fmap isJust $ runMaybeT $ do
     for_ [0 .. length s - 1] $ \ i -> whenM (S.null <$> read x i) mzero
@@ -205,34 +232,23 @@ maximumGain (Gain maxg _ buckets) = do
 
 
 
-
-balanceConstraint :: V -> Int -> Int -> KGGGP s Bool
-balanceConstraint v c p = do
-    partitioning <- view parts <$> ask
-    let k = M.length partitioning
-        wavg = (fromIntegral (length v) / fromIntegral k) * (1 + balanceFactor)
-
-    wi <- fromIntegral . size . insert c <$> read partitioning p
-
-    pure $ wi <= wavg
-
-
-
-connectivityConstraint :: V -> Int -> Int -> KGGGP s Bool
-connectivityConstraint v c p = do
-    partitioning <- view parts <$> ask
-    nodes <- elems <$> read partitioning p
-    pure $ not $ S.null $ intersection (v!c) (foldMap (v!) nodes)
-
-
-
-
 moveDisplacement :: Displacement -> Gain s Int -> Gain s Int -> ST s ()
 moveDisplacement (c, p) hf ht = do
 
    g <- removeGain c p hf
    insertGain c p g ht
 
+
+
+
+newGains :: V -> Int -> ST s (Gain s Int)
+newGains v k = do
+
+    maxg    <- thaw $ replicate k mempty
+    nodes   <- sequence $ replicate k $ thaw $ 0 <$ v
+    buckets <- sequence $ replicate k new
+
+    pure $ Gain maxg nodes buckets
 
 
 
@@ -314,5 +330,15 @@ modifyGain c i f (Gain maxg nodes buckets) = do
     mutate (buckets ! i) g $ (, ()) . fmap (filter (/= c))
     mutate (buckets ! i) (f g) $ (, ()) . pure . maybe [c] (c:)
 
+
+
+inputRoutine :: Foldable f => Int -> Int -> f (Int, Int) -> ST s (V, E)
+inputRoutine n c xs = do
+    ns <- unsafeThaw $ replicate n mempty
+    cs <- unsafeThaw $ replicate c mempty
+    for_ xs $ \ (x, y) -> do
+      modify ns (insert y) x
+      modify cs (insert x) y
+    (,) <$> freeze cs <*> freeze ns
 
 
