@@ -7,12 +7,10 @@
 
 module LSC.KGGGP where
 
-import Control.Conditional (whenM)
 import Control.Lens hiding (parts, set)
 import Control.Monad
 import Control.Monad.Loops
 import Control.Monad.Reader
-import Control.Monad.Trans.Maybe
 import Control.Monad.ST
 import Data.Foldable
 import Data.Function
@@ -41,6 +39,8 @@ import Data.Vector.Mutable
 import qualified Data.Vector.Mutable as M
 import Prelude hiding (replicate, length, read, lookup, take, drop)
 
+import LSC.Types (V, E)
+
 
 
 
@@ -48,18 +48,8 @@ balanceFactor :: Rational
 balanceFactor = 1 % 10
 
 
-type NetArray  = Vector IntSet
-type CellArray = Vector IntSet
-
-type Area = Vector Int
-
-type V = CellArray
-type E = NetArray
-type A = Area
-
-
 data Gain s a = Gain
-  (MVector s IntSet)               -- track existing gains
+  (STRef s Int, MVector s IntSet)  -- track existing gains
   (Vector (MVector s Int))         -- gains indexed by node
   (Vector (HashTable s Int [a]))   -- nodes paired with partition indexed by gain
 
@@ -83,6 +73,15 @@ type Partitioning = Vector IntSet
 type MPartitioning s = MVector s IntSet
 
 
+cutSizes :: V -> Partitioning -> [Int]
+cutSizes v partitioning =
+    [ size $ foldMap (v!) (elems p) `intersection` foldMap (v!) (elems q)
+    | p <- toList partitioning
+    , q <- toList partitioning
+    ]
+
+
+
 type Clustering = Vector IntSet
 
 
@@ -102,7 +101,7 @@ type KGGGP s = ReaderT (Heu s) (ST s)
 
 runKGGGP :: KGGGP s a -> ST s a
 runKGGGP f = do
-    r <- Heu <$> thaw mempty  <*> newSTRef mempty
+    r <- Heu <$> thaw (replicate 1000 mempty)  <*> newSTRef mempty
     runReaderT f r
 
 
@@ -135,25 +134,32 @@ connectivityConstraint v c p = do
 kgggp :: (V, E) -> Partitioning -> KGGGP s Partitioning
 kgggp (v, e) fixed = do
 
+    let k = length fixed
+
+    partitioning <- view parts <$> ask
+    for_ [0 .. k - 1] $ \ q -> do
+        write partitioning q $ fixed ! q
+
+    free <- view freeCells <$> ask
+    st $ writeSTRef free $ fromDistinctAscList [0 .. length v - 1] \\ foldMap id fixed
+
+
     hreg <- st $ initialDisplacements (v, e) fixed
     hnbc <- st $ newGains v $ length fixed
     hncc <- st $ newGains v $ length fixed
-
-    free <- view freeCells <$> ask
 
     whileM_ (st $ not . S.null <$> readSTRef free) $ do
 
       (node, part) <- untilJust $ do
 
           reg <- st $ not <$> emptyGains hreg
-          ncc <- st $ not <$> emptyGains hncc
           nbc <- st $ not <$> emptyGains hnbc
+          ncc <- st $ not <$> emptyGains hncc
 
           if reg
           then do
 
             (node, part) <- st $ maximumGain hreg
-            partitioning <- view parts <$> ask
             nodes <- read partitioning part
 
             balance <- balanceConstraint v node part
@@ -187,45 +193,48 @@ kgggp (v, e) fixed = do
           else pure Nothing
 
 
-      st $ modifySTRef free $ delete node
+      st $ do
 
-      partitioning <- view parts <$> ask
+        modifySTRef free $ delete node
+
+        for_ [0 .. length fixed - 1] $ \ q -> do
+          _ <- removeGain node q hreg
+          _ <- removeGain node q hnbc
+          _ <- removeGain node q hncc
+          pure ()
+
+        f <- readSTRef free
+        update (v, e) node part f hreg
+        update (v, e) node part f hnbc
+        update (v, e) node part f hncc
+
+
       modify partitioning (insert node) part
 
-      pure ()
+
+    freeze . take k . view parts =<< ask
 
 
-    freeze . view parts =<< ask
-
-
-
-
-initKgggp :: (V, E) -> Partitioning -> KGGGP s ()
-initKgggp (v, _) fixed = do
-
-    let k = length fixed
-
-    join $ copy
-        <$> (pure . take k =<< flip grow k =<< thaw fixed)
-        <*> (pure . take k =<< flip grow k . view parts =<< ask)
-
-    free <- view freeCells <$> ask
-    st $ writeSTRef free $ fromDistinctAscList [ 0 .. length v - 1] \\ foldMap id fixed
 
 
 
 emptyGains :: Gain s a -> ST s Bool
-emptyGains (Gain x s _) = fmap isJust $ runMaybeT $ do
-    for_ [0 .. length s - 1] $ \ i -> whenM (S.null <$> read x i) mzero
+emptyGains (Gain (len, maxg) _ _) = do
+    k <- readSTRef len
+    emp <- newSTRef True
+    for_ [0 .. k - 1] $ \ i -> do
+        modifySTRef emp . (&&) . S.null =<< read maxg i
+    readSTRef emp
 
 
 
 maximumGain :: Gain s Int -> ST s (Int, Int)
-maximumGain (Gain maxg _ buckets) = do
-    gm <- newSTRef (minBound, 0)
-    for_ [0 .. length buckets - 1] $ \ q -> do
-        h <- findMin <$> read maxg q
-        modifySTRef gm $ \ (g, p) -> last $ (g, p) : [(h, q) | h > g]
+maximumGain (Gain (len, maxg) _ buckets) = do
+    k <- readSTRef len
+    gm <- newSTRef (minBound, minBound)
+    for_ [0 .. k - 1] $ \ q -> do
+        h <- fmap fst . maxView <$> read maxg q
+        modifySTRef gm $ \ (g, p) -> last $ (g, p) : [(fromJust h, q) | maybe False (g <) h]
     (g, p) <- readSTRef gm
     c <- maybe undefined head <$> lookup (buckets ! p) g
     pure (c, p)
@@ -244,7 +253,7 @@ moveDisplacement (c, p) hf ht = do
 newGains :: V -> Int -> ST s (Gain s Int)
 newGains v k = do
 
-    maxg    <- thaw $ replicate k mempty
+    maxg    <- (,) <$> newSTRef k <*> thaw (replicate k mempty)
     nodes   <- sequence $ replicate k $ thaw $ 0 <$ v
     buckets <- sequence $ replicate k new
 
@@ -259,17 +268,19 @@ initialDisplacements (v, e) fixed = do
 
     let zeroes n = n <$ mutate n 0 (const (Just [0 .. length v - 1], ()))
 
-    maxg    <- thaw $ mempty <$ fixed
+    maxg    <- (,) <$> newSTRef (length fixed) <*> thaw (mempty <$ fixed)
     nodes   <- sequence $ thaw (0 <$ v) <$ fixed
     buckets <- sequence $ (zeroes =<< new) <$ fixed
 
     let gain = Gain maxg nodes buckets
 
-    flip imapM_ fixed $ \ i p ->
+    flip imapM_ fixed $ \ i p -> do
       for_ (elems p) $ \ c -> do
+          _ <- removeGain c i gain
+          update (v, e) c i free gain
+      g <- maximum <$> freeze (nodes ! i)
+      modify (snd maxg) (insert g) i
 
-        _ <- removeGain c i gain
-        update (v, e) c i free gain
 
     pure gain 
 
@@ -297,8 +308,8 @@ removeGain c i (Gain maxg nodes buckets) = do
     g <- read (nodes ! i) c
     b <- foldMap id <$> lookup (buckets ! i) g
 
-    when (null $ tail b) $ do 
-        modify maxg (delete g) i
+    when (null b || null (tail b)) $ do
+        modify (snd maxg) (delete g) i
 
     mutate (buckets ! i) g $ (, ()) . fmap (filter (/= c))
 
@@ -310,7 +321,7 @@ insertGain :: Int -> Int -> Int -> Gain s Int -> ST s ()
 insertGain c i g (Gain maxg nodes buckets) = do
 
     write (nodes ! i) c g
-    modify maxg (insert g) i
+    modify (snd maxg) (insert g) i
     mutate (buckets ! i) g $ (, ()) . pure . maybe [c] (c:)
 
  
@@ -323,9 +334,9 @@ modifyGain c i f (Gain maxg nodes buckets) = do
 
     modify (nodes ! i) f c
 
-    modify maxg (insert (f g)) i
-    when (null $ tail b) $ do 
-        modify maxg (delete g) i
+    modify (snd maxg) (insert (f g)) i
+    when (null b || null (tail b)) $ do
+        modify (snd maxg) (delete g) i
 
     mutate (buckets ! i) g $ (, ()) . fmap (filter (/= c))
     mutate (buckets ! i) (f g) $ (, ()) . pure . maybe [c] (c:)

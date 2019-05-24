@@ -36,6 +36,7 @@ import Prelude hiding (replicate, length, read, lookup, take, drop, head)
 import System.Random.MWC
 
 import LSC.Entropy
+import LSC.Types (V, E)
 
 
 
@@ -49,15 +50,6 @@ coarseningThreshold = 8
 balanceFactor :: Rational
 balanceFactor = 1 % 10
 
-
-type NetArray  = Vector IntSet
-type CellArray = Vector IntSet
-
-type Area = Vector Int
-
-type V = CellArray
-type E = NetArray
-type A = Area
 
 
 data Gain s a = Gain

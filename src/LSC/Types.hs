@@ -22,6 +22,7 @@ import Control.Exception
 import Data.Default
 import Data.Foldable
 import Data.Function (on)
+import Data.IntSet (IntSet)
 import Data.Map (Map, unionWith, lookup)
 import Data.Semigroup
 import Data.Hashable
@@ -44,6 +45,15 @@ import System.Console.Concurrent
 
 import GHC.Generics
 import Prelude hiding (lookup)
+
+
+
+type NetArray  = Vector IntSet
+type CellArray = Vector IntSet
+
+
+type V = CellArray
+type E = NetArray
 
 
 
