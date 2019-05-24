@@ -11,8 +11,8 @@ import Control.Conditional (whenM)
 import Control.Lens hiding (parts, set)
 import Control.Monad
 import Control.Monad.Loops
-import Control.Monad.Primitive
 import Control.Monad.Reader
+import Control.Monad.Trans.Maybe
 import Control.Monad.ST
 import Data.Foldable
 import Data.Function
@@ -28,7 +28,7 @@ import Data.Vector
   ( Vector
   , unsafeFreeze, unsafeThaw
   , freeze, thaw
-  , (!), indexed
+  , (!)
   )
 import Data.Vector.Mutable
   ( MVector
@@ -38,18 +38,10 @@ import Data.Vector.Mutable
   , take, slice
   , copy, grow
   )
-import Prelude hiding (replicate, length, read, lookup, take, drop, head)
-import System.Random.MWC
-
-import LSC.Entropy
+import qualified Data.Vector.Mutable as M
+import Prelude hiding (replicate, length, read, lookup, take, drop)
 
 
-
-matchingRatio :: Rational
-matchingRatio = 1 % 3
-
-coarseningThreshold :: Int
-coarseningThreshold = 8
 
 
 balanceFactor :: Rational
@@ -74,6 +66,10 @@ data Gain s a = Gain
 
 numberOfPartitions :: Gain s Int -> Int
 numberOfPartitions (Gain _ x _) = length x
+
+
+
+type Displacement = (Int, Int)
 
 
 
@@ -130,7 +126,9 @@ kgggp (v, e) fixed = do
     hnbc <- st $ undefined :: KGGGP s (Gain s Int)
     hncc <- st $ undefined :: KGGGP s (Gain s Int)
 
-    whileM_ (pure . not . S.null =<< st . readSTRef . view freeCells =<< ask) $ do
+    free <- view freeCells <$> ask
+
+    whileM_ (st $ not . S.null <$> readSTRef free) $ do
 
       (node, part) <- untilJust $ do
 
@@ -144,12 +142,16 @@ kgggp (v, e) fixed = do
             (node, part) <- st $ maximumGain hreg
             partitioning <- view parts <$> ask
             nodes <- read partitioning part
+
+            balance <- balanceConstraint v node part
+            connectivity <- connectivityConstraint v node part
+
             if S.null nodes
             then pure $ Just (node, part)
-            else if not $ balanceConstraint node part
-                 then moveDisplacement (node, part) hreg hnbc
-            else if not $ connectivityConstraint node part
-                 then moveDisplacement (node, part) hreg hncc
+            else if not balance
+                 then st $ Nothing <$ moveDisplacement (node, part) hreg hnbc
+            else if not connectivity
+                 then st $ Nothing <$ moveDisplacement (node, part) hreg hncc
             else pure $ Just (node, part)
 
           else if ncc
@@ -157,8 +159,10 @@ kgggp (v, e) fixed = do
 
             (node, part) <- st $ maximumGain hncc
 
-            if not $ balanceConstraint node part
-            then moveDisplacement (node, part) hncc hnbc
+            balance <- balanceConstraint v node part
+
+            if not balance
+            then st $ Nothing <$ moveDisplacement (node, part) hncc hnbc
             else pure $ Just (node, part)
 
           else if nbc
@@ -170,7 +174,6 @@ kgggp (v, e) fixed = do
           else pure Nothing
 
 
-      free <- view freeCells <$> ask 
       st $ modifySTRef free $ delete node
 
       partitioning <- view parts <$> ask
@@ -185,29 +188,58 @@ kgggp (v, e) fixed = do
 
 
 emptyGains :: Gain s a -> ST s Bool
-emptyGains (Gain x _ _) = all S.null <$> unsafeFreeze x
+emptyGains (Gain x s _) = fmap isJust $ runMaybeT $ do
+    for_ [0 .. length s - 1] $ \ i -> whenM (S.null <$> read x i) mzero
 
 
 
 maximumGain :: Gain s Int -> ST s (Int, Int)
-maximumGain (Gain maxg nodes buckets) = pure (0, 0)
+maximumGain (Gain maxg _ buckets) = do
+    gm <- newSTRef (minBound, 0)
+    for_ [0 .. length buckets - 1] $ \ q -> do
+        h <- findMin <$> read maxg q
+        modifySTRef gm $ \ (g, p) -> last $ (g, p) : [(h, q) | h > g]
+    (g, p) <- readSTRef gm
+    c <- maybe undefined head <$> lookup (buckets ! p) g
+    pure (c, p)
 
 
 
-balanceConstraint = undefined
+
+balanceConstraint :: V -> Int -> Int -> KGGGP s Bool
+balanceConstraint v c p = do
+    partitioning <- view parts <$> ask
+    let k = M.length partitioning
+        wavg = (fromIntegral (length v) / fromIntegral k) * (1 + balanceFactor)
+
+    wi <- fromIntegral . size . insert c <$> read partitioning p
+
+    pure $ wi <= wavg
 
 
-connectivityConstraint = undefined
+
+connectivityConstraint :: V -> Int -> Int -> KGGGP s Bool
+connectivityConstraint v c p = do
+    partitioning <- view parts <$> ask
+    nodes <- elems <$> read partitioning p
+    pure $ not $ S.null $ intersection (v!c) (foldMap (v!) nodes)
 
 
-moveDisplacement = undefined
+
+
+moveDisplacement :: Displacement -> Gain s Int -> Gain s Int -> ST s ()
+moveDisplacement (c, p) hf ht = do
+
+   g <- removeGain c p hf
+   insertGain c p g ht
+
 
 
 
 initialDisplacements :: (V, E) -> Partitioning -> ST s (Gain s Int)
 initialDisplacements (v, e) fixed = do
 
-    let free = fromDistinctAscList [ 0 .. length v - 1] \\ foldMap id fixed
+    let free = fromDistinctAscList [0 .. length v - 1] \\ foldMap id fixed
 
     let zeroes n = n <$ mutate n 0 (const (Just [0 .. length v - 1], ()))
 
@@ -220,7 +252,7 @@ initialDisplacements (v, e) fixed = do
     flip imapM_ fixed $ \ i p ->
       for_ (elems p) $ \ c -> do
 
-        removeGain c i gain
+        _ <- removeGain c i gain
         update (v, e) c i free gain
 
     pure gain 
@@ -243,7 +275,7 @@ update (v, e) c i free gain = do
 
 
 
-removeGain :: Int -> Int -> Gain s Int -> ST s ()
+removeGain :: Int -> Int -> Gain s Int -> ST s Int
 removeGain c i (Gain maxg nodes buckets) = do
 
     g <- read (nodes ! i) c
@@ -253,6 +285,17 @@ removeGain c i (Gain maxg nodes buckets) = do
         modify maxg (delete g) i
 
     mutate (buckets ! i) g $ (, ()) . fmap (filter (/= c))
+
+    pure g
+
+
+
+insertGain :: Int -> Int -> Int -> Gain s Int -> ST s ()
+insertGain c i g (Gain maxg nodes buckets) = do
+
+    write (nodes ! i) c g
+    modify maxg (insert g) i
+    mutate (buckets ! i) g $ (, ()) . pure . maybe [c] (c:)
 
  
 
