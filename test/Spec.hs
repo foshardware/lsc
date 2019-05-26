@@ -39,23 +39,78 @@ import LSC.KGGGP as KGGGP
 main :: IO ()
 main = defaultMain $ testGroup "LSC"
   [ gggp
-  -- , fm
-  -- , concurrency
+  , fm
+  , concurrency
   ]
 
 
 gggp :: TestTree
 gggp = testGroup "KGGGP"
-  [ testCase "Deterministic KGGGP" kgggpDeterministic
+  [ testCase "Insert Gain" kgggpInsertGain
+  , testCase "Remove Gain" kgggpRemoveGain
+  , testCase "Modify Gain" kgggpModifyGain
+  , testCase "Empty Gains" kgggpEmptyGains
   ]
 
 
-kgggpDeterministic :: IO ()
-kgggpDeterministic = do
-  (v, e) <- arbitraryHypergraph 10
-  p <- stToIO $ runKGGGP $ kgggp (v, e) (replicate 4 mempty)
-  assertEqual "partitioning" mempty p
-  assertEqual "cut size" [11] $ cutSizes v p
+kgggpInsertGain :: IO ()
+kgggpInsertGain = do
+
+    x <- stToIO $ do
+      (v, _) <- queue_1Hypergraph
+      bs <- newGains v "bs" 4
+      insertGain 5 3 4 bs
+      maximumGain bs
+    assertEqual "maximum gain" x (5, 3)
+
+
+
+kgggpRemoveGain :: IO ()
+kgggpRemoveGain = do
+
+    x <- stToIO $ do
+      (v, _) <- queue_1Hypergraph
+      bs <- newGains v "bs" 4
+      insertGain 2 3 4 bs
+      insertGain 5 3 4 bs
+      _ <- KGGGP.removeGain 5 3 bs
+      maximumGain bs
+    assertEqual "maximum gain" x (2, 3)
+
+
+
+kgggpModifyGain :: IO ()
+kgggpModifyGain = do
+
+    (x, g) <- stToIO $ do
+      (v, _) <- queue_1Hypergraph
+      bs <- newGains v "bs" 4
+      insertGain 3 3 5 bs
+      insertGain 2 3 4 bs
+      insertGain 1 2 2 bs
+      KGGGP.modifyGain 2 3 succ bs
+      (,) <$> maximumGain bs <*> KGGGP.removeGain 2 3 bs
+    assertEqual "gain" g (Just 5)
+    assertEqual "maximum gain" x (2, 3)
+
+
+
+kgggpEmptyGains :: IO ()
+kgggpEmptyGains = do
+
+    (x, y) <- stToIO $ do
+      (v, _) <- queue_1Hypergraph
+      bs <- newGains v "bs" 4
+      KGGGP.insertGain 3 3 5 bs
+      _ <- KGGGP.removeGain 3 3 bs
+      x <- emptyGains bs
+      KGGGP.insertGain 3 3 5 bs
+      y <- emptyGains bs
+      pure (x, y)
+
+    assertBool "empty" x
+    assertBool "not empty" $ not y
+
 
 
 
