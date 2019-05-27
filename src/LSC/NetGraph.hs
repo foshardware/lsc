@@ -43,18 +43,23 @@ boundingBox xs = Rect
 
 hpwlMatrix :: Matrix Gate -> Net -> Int
 hpwlMatrix m n = width p + height p
+
   where
+
     p = boundingBox nodes
+
     coords = runST $ do
         v <- new $ nrows m * ncols m
         sequence_
-            [ write v gi (i, j)
+            [ write v g (i, j)
             | i <- [1 .. nrows m]
             , j <- [1 .. ncols m]
-            , let gi = getElem i j m ^. number
-            , gi >= 0
+            , let g = getElem i j m ^. number
+            , g >= 0
             ]
+
         unsafeFreeze v
+
     nodes =
       [ Rect x y (succ x) (succ y)
       | (i, _) <- n ^. contacts . to assocs
@@ -113,16 +118,23 @@ markEdges top =
 
 
 
-estimationsMatrix :: Matrix Gate -> LSC ()
-estimationsMatrix m = do
+sumOfHpwlMatrix :: Matrix Gate -> Int
+sumOfHpwlMatrix m = do
 
   let v = mconcat [ getRow i m | i <- [1 .. nrows m] ]
       e = rebuildEdges v
 
-  debug [show $ view number <$> m]
+  sum $ hpwlMatrix m <$> e
+
+
+
+estimationsMatrix :: Matrix Gate -> LSC ()
+estimationsMatrix m = do
+
 
   debug
-    [ "sum of hpwl: " ++ show (sum $ hpwlMatrix m <$> e)
+    [ show $ view number <$> m
+    , "sum of hpwl: " ++ show (sumOfHpwlMatrix m)
     ]
 
 

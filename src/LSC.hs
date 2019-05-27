@@ -15,11 +15,13 @@ import qualified Control.Concurrent.MSem as MSem
 import Control.Exception
 import Control.Lens
 import Control.Monad.Trans
-import Control.Monad.Codensity
+import Control.Monad.Codensity hiding (improve)
+import Data.Function (on)
 import Prelude hiding ((.), id)
 
 import LSC.Easy
 import LSC.Force
+import LSC.Improve
 import LSC.Integer
 import LSC.Mincut
 import LSC.NetGraph
@@ -42,7 +44,7 @@ stage4 = zeroArrow
 globalPlacement :: Compiler' NetGraph
 globalPlacement = proc top -> do
     x <- local initialMatrix -< top
-    y <- local placeMatrix   -< x
+    y <- improving 8 (local placeMatrix) (flip compare `on` sumOfHpwlMatrix) -< x
     remote estimationsMatrix -< x
     remote estimationsMatrix -< y
     returnA -< top
@@ -78,22 +80,30 @@ circuit :: DAG Identifier RTL
 circuit = DAG (view identifier) subcircuits
 
 
+
 type Compiler' a = Compiler a a
 
 type Compiler = LSR LS
+
 
 compiler :: Compiler a b -> a -> LSC b
 compiler = unLS . reduce
 
 
+improving :: Int -> Compiler' a -> (a -> a -> Ordering) -> Compiler' a
+improving k f p = local $ improve k (compiler f) p
+
+
 expensive :: (a -> b) -> Compiler a b
 expensive f = local $ pure . f
+
 
 remote_ :: LSC b -> Compiler' b
 remote_ f = remote (<$ f)
 
 remote :: (a -> LSC b) -> Compiler a b
 remote = LSR . Lift . LS
+
 
 local_ :: LSC b -> Compiler' b
 local_ f = local (<$ f)
@@ -105,6 +115,7 @@ local k = remote $ \ x -> do
   case o ^. workers of
     Singleton -> k x
     Workers i -> liftIO $ MSem.with i $ runLSC o s (k x)
+
 
 
 env_ :: Simple Setter CompilerOpts o -> o -> Compiler a b -> Compiler a b
