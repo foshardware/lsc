@@ -1,18 +1,21 @@
 
 module LSC.Improve where
 
+import Control.Lens
 
 import LSC.Types
 
 
 
-improve :: Int -> (a -> LSC a) -> (a -> a -> Ordering) -> a -> LSC a
-improve k action criterion x = do
+improve :: (a -> LSC a) -> (a -> a -> Ordering) -> a -> LSC a
+improve action criterion x = do
+
+    k <- view iterations <$> environment
 
     y <- improveStep k action criterion x
 
     case criterion x y of
-        LT -> improve k action criterion y
+        LT -> improve action criterion y
         _  -> pure x
 
 
@@ -24,6 +27,6 @@ improveStep k action criterion x = do
     y <- action x
 
     case criterion x y of
-        LT -> improve k action criterion y
-        _  -> improve (pred k) action criterion x
+        LT -> improve action criterion y
+        _  -> improveStep (pred k) action criterion x
 

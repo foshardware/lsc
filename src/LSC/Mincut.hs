@@ -10,20 +10,16 @@ import Control.Monad.IO.Class
 import Control.Monad.Trans.Class
 import Control.Monad.ST
 import Control.Monad.State (execStateT, get, put)
-import Data.STRef
 import Data.Default
 import Data.Foldable hiding (concat)
 import Data.Function
 import Data.Maybe
-import Data.IntSet (size, elems, singleton, intersection, insert, delete, member)
-import Data.IntMap (IntMap)
-import qualified Data.IntMap as I
+import Data.IntSet (size, elems, intersection, insert, delete, member)
 import Data.Map (Map, assocs)
 import qualified Data.Map as Map
 import Data.Semigroup
 import Data.Matrix hiding (toList, (!))
-import Data.Vector (Vector, filter, fromListN, (!), concat, thaw, unsafeFreeze, unzip, take)
-import Data.Vector.Mutable (read, write)
+import Data.Vector (Vector, filter, fromListN, (!), thaw, unsafeFreeze, unzip, take)
 import qualified Data.Vector.Algorithms.Intro as Intro
 import Prelude hiding (filter, concat, lookup, take, read, unzip)
 
@@ -55,54 +51,7 @@ slidingWindow k m = flip execStateT m $ sequence
 
 placeWindow :: Matrix Gate -> LSC (Matrix Gate)
 placeWindow m | ncols m <= 2 = pure m
-placeWindow m = do
-
-    let w = ncols m `div` 2
-        h = nrows m
-
-    let v = flattenGateMatrix m
-        e = rebuildEdges $ set number `imap` v
-
-
-    Bisect p q <- liftIO $ nonDeterministic $ do
-
-        hy <- st $ hypergraph (set number `imap` v) e
-        fmMultiLevel hy coarseningThreshold matchingRatio
-
-    let u = I.fromList [ (c ^. number, c) | c <- toList v ]
-
-    let result = ala Endo foldMap [ reorder i v u $ Bisect p q | i <- [1 .. h] ] m
-
-    m1 <- placeWindow $ submatrix 1 h 1 w result
-    m2 <- placeWindow $ submatrix 1 h (succ w) (ncols m) result
-
-    pure $ m1 <|> m2
-
-
-
-
-reorder :: Int -> Vector Gate -> IntMap Gate -> Bipartitioning -> Matrix Gate -> Matrix Gate
-reorder i v u (Bisect p q) m = runST $ do
-
-    let this = foldMap singleton $ filter (>= 0) $ view number <$> getRow i m
-        that = foldMap (singleton . view number) . fmap (v!) . elems
-        cells = fromListN (ncols m) $ catMaybes $ (u ^?) . ix
-           <$> elems (intersection this $ that p)
-            <> elems (intersection this $ that q)
-
-    ctr <- newSTRef 0
-    mrow <- thaw $ getRow i m
-    for_ [0 .. ncols m - 1] $ \ j -> do
-        k <- readSTRef ctr
-        g <- read mrow j
-        unless (g ^. number < 0) $ do
-            write mrow j $ cells ! k
-            modifySTRef' ctr succ
-
-    row <- unsafeFreeze mrow
-    pure $ mapRow (\ j _ -> row ! pred j) i m
-
-
+placeWindow m = undefined
 
 
 

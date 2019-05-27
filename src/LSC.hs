@@ -46,7 +46,7 @@ globalPlacement :: Compiler' NetGraph
 globalPlacement = proc top -> do
     m <- local initialMatrix -< top
     remote estimationsMatrix -< m
-    result <- improving 1 (local placeMatrix) (flip compare `on` sumOfHpwlMatrix) -< m
+    result <- improving (local placeMatrix) (flip compare `on` sumOfHpwlMatrix) -< m
     remote estimationsMatrix -< result
     returnA -< top
 
@@ -97,8 +97,8 @@ compiler :: Compiler a b -> a -> LSC b
 compiler = unLS . reduce
 
 
-improving :: Int -> Compiler' a -> (a -> a -> Ordering) -> Compiler' a
-improving k f p = local $ improve k (compiler f) p
+improving :: Compiler' a -> (a -> a -> Ordering) -> Compiler' a
+improving f = local . improve (compiler f)
 
 
 expensive :: (a -> b) -> Compiler a b
