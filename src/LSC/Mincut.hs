@@ -15,16 +15,17 @@ import Data.Default
 import Data.Foldable hiding (concat)
 import Data.Function
 import Data.Maybe
-import Data.IntSet (size, elems, singleton, intersection)
+import Data.IntSet (size, elems, singleton, intersection, insert, delete, member)
 import Data.IntMap (IntMap)
 import qualified Data.IntMap as I
 import Data.Map (Map, assocs)
 import qualified Data.Map as Map
 import Data.Semigroup
 import Data.Matrix hiding (toList, (!))
-import Data.Vector (Vector, filter, fromListN, (!), concat, thaw, unsafeFreeze)
-import Data.Vector.Mutable ( read, write)
-import Prelude hiding (filter, concat, lookup, take, read)
+import Data.Vector (Vector, filter, fromListN, (!), concat, thaw, unsafeFreeze, unzip, take)
+import Data.Vector.Mutable (read, write)
+import qualified Data.Vector.Algorithms.Intro as Intro
+import Prelude hiding (filter, concat, lookup, take, read, unzip)
 
 import LSC.FM as FM
 import LSC.NetGraph
@@ -135,10 +136,13 @@ placeMatrix m = do
     let v = flattenGateMatrix m
         e = rebuildEdges $ set number `imap` v
 
+    let h = nrows m `div` 2
+        w = ncols m `div` 2
+
     (q1, q2, q3, q4) <- liftIO $ nonDeterministic $ do
 
-        h <- st $ hypergraph (set number `imap` v) e
-        Bisect q12 q34 <- fmMultiLevel h coarseningThreshold matchingRatio
+        hy <- st $ hypergraph (set number `imap` v) e
+        Bisect q12 q34 <- refit hy (2*w*h) <$> fmMultiLevel hy coarseningThreshold matchingRatio
 
         let v12 = fromListN (size q12) $ (v!) <$> elems q12
             v34 = fromListN (size q34) $ (v!) <$> elems q34
@@ -146,12 +150,11 @@ placeMatrix m = do
             e34 = rebuildEdges $ set number `imap` v34
 
         h12 <- st $ hypergraph (set number `imap` v12) e12
-        Bisect q1 q2 <- fmMultiLevel h12 coarseningThreshold matchingRatio
+        Bisect q1 q2 <- refit h12 (w*h) <$> fmMultiLevel h12 coarseningThreshold matchingRatio
 
         h34 <- st $ hypergraph (set number `imap` v34) e34
-        Bisect q3 q4 <- fmMultiLevel h34 coarseningThreshold matchingRatio
+        Bisect q3 q4 <- refit h34 (w*h) <$> fmMultiLevel h34 coarseningThreshold matchingRatio
 
-        -- TODO: rebalance sections based on available space
         pure
           ( fromListN (size q1) ((v12!) <$> elems q1)
           , fromListN (size q2) ((v12!) <$> elems q2)
@@ -159,15 +162,42 @@ placeMatrix m = do
           , fromListN (size q4) ((v34!) <$> elems q4)
           )
 
-    let h = nrows m `div` 2
-        w = ncols m `div` 2
-
     m1 <- placeMatrix $ matrix h w $ \ (x, y) -> maybe def id $ q1 ^? ix (pred x * w + pred y)
     m2 <- placeMatrix $ matrix h w $ \ (x, y) -> maybe def id $ q2 ^? ix (pred x * w + pred y)
     m3 <- placeMatrix $ matrix h w $ \ (x, y) -> maybe def id $ q3 ^? ix (pred x * w + pred y)
     m4 <- placeMatrix $ matrix h w $ \ (x, y) -> maybe def id $ q4 ^? ix (pred x * w + pred y)
 
     pure $ joinBlocks (m2, m1, m3, m4)
+
+
+
+
+refit :: (V, E) -> Int -> Bipartitioning -> Bipartitioning
+refit _ k (Bisect p q)
+    | size p <= k
+    , size q <= k
+    = Bisect p q
+refit _ k (Bisect p q)
+    | size p > k
+    , size q > k
+    = error
+    $ "impossible size: "++ show (size p, size q, k)
+refit _ _ (Bisect p q)
+    | size p == size q
+    = Bisect p q
+refit (v, e) k (Bisect p q)
+    | size p < size q
+    = refit (v, e) k (Bisect q p)
+refit (v, e) k (Bisect p q) = runST $ do
+
+    let f x = size . intersection x . foldMap (e!) . elems
+        len = size p - k
+
+    u <- thaw $ filter (\ (i, _) -> member i p) $ imap (,) v
+    Intro.partialSortBy (compare `on` \ (_, x) -> f p x - f q x) u len
+    (iv, _) <- unzip . take len <$> unsafeFreeze u
+
+    pure $ Bisect (ala Endo foldMap (delete <$> iv) p) (ala Endo foldMap (insert <$> iv) q)
 
 
 
