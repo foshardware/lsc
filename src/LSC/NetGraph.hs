@@ -20,6 +20,7 @@ import Data.Maybe
 import Data.Serialize.Put
 import Data.Text (unpack)
 import Data.Text.Encoding
+import Data.Matrix (Matrix)
 import Data.Vector (Vector, imap)
 import qualified Data.Vector as V
 import Prelude hiding (lookup)
@@ -34,6 +35,11 @@ boundingBox xs = Rect
     (minimum $ view b <$> xs)
     (maximum $ view r <$> xs)
     (maximum $ view t <$> xs)
+
+
+
+hpwlMatrix :: Matrix Gate -> Int
+hpwlMatrix m = undefined
 
 
 
