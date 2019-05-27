@@ -41,25 +41,25 @@ stage4 = zeroArrow
 
 globalPlacement :: Compiler' NetGraph
 globalPlacement = proc top -> do
-    _ <- local placeMatrix <<< local initialMatrix -< top
---    next <- local placeQuad -< top
---    remote estimations -< next
---    returnA -< next
+    x <- local initialMatrix -< top
+    y <- local placeMatrix   -< x
+    remote estimationsMatrix -< x
+    remote estimationsMatrix -< y
     returnA -< top
 
 
 legalization :: Compiler' NetGraph
 legalization = id
-  >>> dag netGraph (remote placeColumn)
-  >>> remote placeRows
-  >>> remote inlineGeometry
-  >>> remote contactGeometry
+    >>> dag netGraph (remote placeColumn)
+    >>> remote placeRows
+    >>> remote inlineGeometry
+    >>> remote contactGeometry
 
 
 
 animatePlacement :: Compiler' NetGraph
 animatePlacement = zeroArrow
-  <+> local placeEasy >>> local placeForce
+    <+> local placeEasy >>> local placeForce
 
 
 

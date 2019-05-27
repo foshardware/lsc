@@ -37,8 +37,6 @@ initialMatrix top = do
     let (w, h) = head $ dropWhile (\ (x, y) -> x * y < top ^. gates . to length) boards
         result = matrix w h $ \ (x, y) -> maybe def id $ top ^. gates ^? ix (pred x * w + pred y)
 
-    debug [show $ view number <$> result]
-
     pure result
 
 
@@ -86,13 +84,8 @@ placeMatrix m = do
     m3 <- placeMatrix $ matrix h w $ \ (x, y) -> maybe def id $ q3 ^? ix (pred x * w + pred y)
     m4 <- placeMatrix $ matrix h w $ \ (x, y) -> maybe def id $ q4 ^? ix (pred x * w + pred y)
 
-    debug $ show . fmap (view number) <$> [m1,m2,m3,m4]
 
-    let result = (m2 <|> m1) <-> (m3 <|> m4)
-
-    debug [show $ view number <$> result]
-
-    pure result
+    pure $ (m2 <|> m1) <-> (m3 <|> m4)
 
 
 

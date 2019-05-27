@@ -7,6 +7,7 @@ module LSC.NetGraph where
 import Control.Applicative
 import Control.Lens hiding (imap)
 import Control.Monad
+import Control.Monad.ST
 import Data.Bits
 import Data.ByteString.Base16
 import Data.Default
@@ -20,8 +21,10 @@ import Data.Maybe
 import Data.Serialize.Put
 import Data.Text (unpack)
 import Data.Text.Encoding
-import Data.Matrix (Matrix)
+import Data.Matrix (Matrix, nrows, ncols, getElem, getRow)
 import Data.Vector (Vector, imap)
+import Data.Vector.Unboxed (unsafeFreeze)
+import Data.Vector.Unboxed.Mutable (new, write)
 import qualified Data.Vector as V
 import Prelude hiding (lookup)
 
@@ -29,7 +32,7 @@ import LSC.Types
 
 
 
-boundingBox :: [Component l Integer] -> Component l Integer
+boundingBox :: Ord n => [Component l n] -> Component l n
 boundingBox xs = Rect
     (minimum $ view l <$> xs)
     (minimum $ view b <$> xs)
@@ -38,8 +41,26 @@ boundingBox xs = Rect
 
 
 
-hpwlMatrix :: Matrix Gate -> Int
-hpwlMatrix m = undefined
+hpwlMatrix :: Matrix Gate -> Net -> Int
+hpwlMatrix m n = width p + height p
+  where
+    p = boundingBox nodes
+    coords = runST $ do
+        v <- new $ nrows m * ncols m
+        sequence_
+            [ write v gi (i, j)
+            | i <- [1 .. nrows m]
+            , j <- [1 .. ncols m]
+            , let gi = getElem i j m ^. number
+            , gi >= 0
+            ]
+        unsafeFreeze v
+    nodes =
+      [ Rect x y (succ x) (succ y)
+      | (i, _) <- n ^. contacts . to assocs
+      , (x, y) <- toList $ coords ^? ix i
+      ]
+
 
 
 
@@ -88,6 +109,20 @@ markEdges top =
     , q <- join $ toList $ top ^. gates ^? ix j . geometry . to (take 1)
     , po <- join $ take 1 src <&> view ports
     , qo <- join $ take 1 snk <&> view ports
+    ]
+
+
+
+estimationsMatrix :: Matrix Gate -> LSC ()
+estimationsMatrix m = do
+
+  let v = mconcat [ getRow i m | i <- [1 .. nrows m] ]
+      e = rebuildEdges v
+
+  debug [show $ view number <$> m]
+
+  debug
+    [ "sum of hpwl: " ++ show (sum $ hpwlMatrix m <$> e)
     ]
 
 
