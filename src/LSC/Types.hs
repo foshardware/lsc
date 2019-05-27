@@ -542,7 +542,7 @@ instance Ord Gate where
   compare = compare `on` view number
 
 instance Default Gate where
-  def = Gate mempty mempty def def mempty def
+  def = Gate mempty mempty def def mempty (-1)
 
 
 type Arboresence a = (Net, a, a)

@@ -35,16 +35,17 @@ stage1 = globalPlacement
 
 stage4 :: Compiler' NetGraph
 stage4 = zeroArrow
-  <+> dag netGraph (env_ rowSize 21000 route <+> route)
+    <+> dag netGraph (env_ rowSize 21000 route <+> route)
 
 
 
 globalPlacement :: Compiler' NetGraph
 globalPlacement = proc top -> do
-  next <- legalization <<< local columns -<< top
-  remote estimations -< next
-  returnA -< next
-
+    _ <- local placeMatrix <<< local initialMatrix -< top
+--    next <- local placeQuad -< top
+--    remote estimations -< next
+--    returnA -< next
+    returnA -< top
 
 
 legalization :: Compiler' NetGraph
