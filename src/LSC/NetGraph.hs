@@ -131,10 +131,10 @@ sumOfHpwlMatrix m = do
 estimationsMatrix :: Matrix Gate -> LSC ()
 estimationsMatrix m = do
 
-
   debug
     [ show $ view number <$> m
-    , "sum of hpwl: " ++ show (sumOfHpwlMatrix m)
+    , unwords [show $ nrows m, "x", show $ ncols m]
+    , unwords ["sum of hpwl:", show $ sumOfHpwlMatrix m]
     ]
 
 

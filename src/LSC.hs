@@ -32,6 +32,7 @@ import LSC.Version
 
 stage1 :: Compiler' NetGraph
 stage1 = globalPlacement
+    >>> detailedPlacement
 
 
 
@@ -43,11 +44,17 @@ stage4 = zeroArrow
 
 globalPlacement :: Compiler' NetGraph
 globalPlacement = proc top -> do
-    x <- local initialMatrix -< top
-    y <- improving 8 (local placeMatrix) (flip compare `on` sumOfHpwlMatrix) -< x
-    remote estimationsMatrix -< x
-    remote estimationsMatrix -< y
+    m <- local initialMatrix -< top
+    remote estimationsMatrix -< m
+    result <- improving 4 (local placeMatrix) (flip compare `on` sumOfHpwlMatrix) -< m
+    remote estimationsMatrix -< result
     returnA -< top
+
+
+
+detailedPlacement :: Compiler' NetGraph
+detailedPlacement = id
+
 
 
 legalization :: Compiler' NetGraph
