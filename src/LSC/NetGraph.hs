@@ -1,6 +1,7 @@
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE OverloadedStrings #-}
 
 module LSC.NetGraph where
 
@@ -16,17 +17,17 @@ import Data.Function
 import Data.Hashable
 import qualified Data.IntSet as S
 import Data.List (sortBy)
-import Data.Map hiding (null, toList, foldl', foldr, take)
+import Data.Map hiding (null, toList, foldl', foldr, take, filter)
 import Data.Maybe
 import Data.Serialize.Put
 import Data.Text (unpack)
 import Data.Text.Encoding
 import Data.Matrix (Matrix, nrows, ncols, getElem, getRow)
-import Data.Vector (Vector, imap)
+import Data.Vector (Vector, imap, filter)
 import Data.Vector.Unboxed (unsafeFreeze)
 import Data.Vector.Unboxed.Mutable (new, write)
 import qualified Data.Vector as V
-import Prelude hiding (lookup)
+import Prelude hiding (lookup, filter)
 
 import LSC.Types
 
@@ -42,6 +43,7 @@ boundingBox xs = Rect
 
 
 hpwlMatrix :: Matrix Gate -> Net -> Int
+hpwlMatrix _ n | elem (n ^. identifier) ["clk"] = 1
 hpwlMatrix m n = width p + height p
 
   where
@@ -70,6 +72,7 @@ hpwlMatrix m n = width p + height p
 
 
 hpwl :: Vector Gate -> Net -> Integer
+hpwl  _ n | elem (n ^. identifier) ["clk"] = 0
 hpwl gs n = width p + height p
   where
     p = boundingBox nodes
@@ -118,6 +121,11 @@ markEdges top =
 
 
 
+flattenGateMatrix :: Matrix Gate -> Vector Gate
+flattenGateMatrix m = filter (\ g -> g ^. number >= 0) $ mconcat [ getRow i m | i <- [1 .. nrows m] ]
+
+
+
 sumOfHpwlMatrix :: Matrix Gate -> Int
 sumOfHpwlMatrix m = do
 
@@ -134,6 +142,8 @@ estimationsMatrix m = do
   debug
     [ show $ view number <$> m
     , unwords [show $ nrows m, "x", show $ ncols m]
+    , unwords ["gate count:", show $ length $ flattenGateMatrix m]
+    , unwords [" net count:", show $ length $ rebuildEdges $ flattenGateMatrix m]
     , unwords ["sum of hpwl:", show $ sumOfHpwlMatrix m]
     ]
 

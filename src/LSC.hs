@@ -46,7 +46,7 @@ globalPlacement :: Compiler' NetGraph
 globalPlacement = proc top -> do
     m <- local initialMatrix -< top
     remote estimationsMatrix -< m
-    result <- improving 4 (local placeMatrix) (flip compare `on` sumOfHpwlMatrix) -< m
+    result <- improving 1 (local placeMatrix) (flip compare `on` sumOfHpwlMatrix) -< m
     remote estimationsMatrix -< result
     returnA -< top
 

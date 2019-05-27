@@ -140,6 +140,8 @@ placeMatrix m = do
         h <- st $ hypergraph (set number `imap` v) e
         Bisect q12 q34 <- fmMultiLevel h coarseningThreshold matchingRatio
 
+        when (size q12 + size q34 /= length v) $ error $ show (size q12, size q34, length v) 
+
         let v12 = fromListN (size q12) $ (v!) <$> elems q12
             v34 = fromListN (size q34) $ (v!) <$> elems q34
         let e12 = rebuildEdges $ set number `imap` v12
@@ -150,6 +152,9 @@ placeMatrix m = do
 
         h34 <- st $ hypergraph (set number `imap` v34) e34
         Bisect q3 q4 <- fmMultiLevel h34 coarseningThreshold matchingRatio
+
+        when (size q1 + size q2 + size q3 + size q4 /= length v)
+            $ error $ show (size q1, size q2, size q3, size q4, length v) 
 
         pure
           ( fromListN (size q1) ((v12!) <$> elems q1)
@@ -168,11 +173,6 @@ placeMatrix m = do
 
     pure $ joinBlocks (m2, m1, m3, m4)
 
-
-
-
-flattenGateMatrix :: Matrix Gate -> Vector Gate
-flattenGateMatrix m = filter (\ g -> g ^. number >= 0) $ concat [ getRow i m | i <- [1 .. nrows m] ]
 
 
 
