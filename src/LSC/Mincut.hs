@@ -14,14 +14,13 @@ import Data.Default
 import Data.Foldable hiding (concat)
 import Data.Function
 import Data.Maybe
-import Data.IntSet (size, elems, intersection, insert, delete, member, fromAscList)
+import Data.IntSet (size, elems, fromAscList)
 import Data.Map (Map, assocs)
 import qualified Data.Map as Map
 import qualified Data.IntMap as IntMap
 import Data.Semigroup
 import Data.Matrix hiding (toList, (!))
-import Data.Vector (Vector, filter, fromListN, (!), thaw, unsafeFreeze, unzip, take)
-import qualified Data.Vector.Algorithms.Intro as Intro
+import Data.Vector (Vector, filter, fromListN, (!))
 import Prelude hiding (filter, concat, lookup, take, read, unzip)
 
 import LSC.Improve
@@ -148,36 +147,6 @@ placeMatrix m = do
         bisect by = Bisect
             (fromAscList [x | x <- [0 .. length (fst by) - 1], even x])
             (fromAscList [x | x <- [0 .. length (fst by) - 1], odd x])
-
-
-
-
-refit :: (V, E) -> Int -> Bipartitioning -> Bipartitioning
-refit _ k (Bisect p q)
-    | size p <= k
-    , size q <= k
-    = Bisect p q
-refit _ k (Bisect p q)
-    | size p > k
-    , size q > k
-    = error
-    $ "impossible size: "++ show (size p, size q, k)
-refit _ _ (Bisect p q)
-    | size p == size q
-    = Bisect p q
-refit (v, e) k (Bisect p q)
-    | size p < size q
-    = refit (v, e) k (Bisect q p)
-refit (v, e) k (Bisect p q) = runST $ do
-
-    let f x = size . intersection x . foldMap (e!) . elems
-        len = size p - k
-
-    u <- thaw $ filter (\ (i, _) -> member i p) $ imap (,) v
-    Intro.partialSortBy (compare `on` \ (_, x) -> f p x - f q x) u len
-    (iv, _) <- unzip . take len <$> unsafeFreeze u
-
-    pure $ Bisect (ala Endo foldMap (delete <$> iv) p) (ala Endo foldMap (insert <$> iv) q)
 
 
 

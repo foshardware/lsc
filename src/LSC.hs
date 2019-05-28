@@ -16,7 +16,6 @@ import Control.Exception
 import Control.Lens
 import Control.Monad.Trans
 import Control.Monad.Codensity hiding (improve)
-import Data.Function (on)
 import Prelude hiding ((.), id)
 
 import LSC.Easy

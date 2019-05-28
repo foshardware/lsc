@@ -8,7 +8,7 @@
 module LSC.FM where
 
 import Control.Conditional (whenM)
-import Control.Lens hiding (indexed)
+import Control.Lens hiding (indexed, imap)
 import Control.Monad
 import Control.Monad.Loops
 import Control.Monad.Primitive
@@ -29,10 +29,13 @@ import Data.Vector
   , unsafeFreeze, unsafeThaw
   , freeze, thaw
   , take, generate
-  , (!), indexed
+  , (!), indexed, unzip
+  , imap
   )
+import qualified Data.Vector as V
 import Data.Vector.Mutable (MVector, read, write, modify, replicate, unsafeSwap, slice)
-import Prelude hiding (replicate, length, read, lookup, take, drop, head)
+import qualified Data.Vector.Algorithms.Intro as Intro
+import Prelude hiding (replicate, length, read, lookup, take, drop, head, unzip)
 import System.Random.MWC
 
 import LSC.Entropy
@@ -238,6 +241,36 @@ fmMultiLevel (v, e) t r = do
         write partitioning j =<< fmPartition h (Just q)
 
     read partitioning 0
+
+
+
+
+refit :: (V, E) -> Int -> Bipartitioning -> Bipartitioning
+refit _ k (Bisect p q)
+    | size p <= k
+    , size q <= k
+    = Bisect p q
+refit _ k (Bisect p q)
+    | size p > k
+    , size q > k
+    = error
+    $ "impossible size: "++ show (size p, size q, k)
+refit _ _ (Bisect p q)
+    | size p == size q
+    = Bisect p q
+refit (v, e) k (Bisect p q)
+    | size p < size q
+    = refit (v, e) k (Bisect q p)
+refit (v, e) k (Bisect p q) = runST $ do
+
+    let f x = size . intersection x . foldMap (e!) . elems
+        len = size p - k
+
+    u <- thaw $ V.filter (\ (i, _) -> member i p) $ imap (,) v
+    Intro.partialSortBy (compare `on` \ (_, x) -> f p x - f q x) u len
+    (iv, _) <- unzip . take len <$> unsafeFreeze u
+
+    pure $ Bisect (ala Endo foldMap (delete <$> iv) p) (ala Endo foldMap (insert <$> iv) q)
 
 
 
