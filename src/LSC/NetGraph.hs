@@ -1,12 +1,14 @@
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE OverloadedStrings #-}
 
 module LSC.NetGraph where
 
 import Control.Applicative
 import Control.Lens hiding (imap)
 import Control.Monad
+import Control.Monad.ST
 import Data.Bits
 import Data.ByteString.Base16
 import Data.Default
@@ -15,20 +17,23 @@ import Data.Function
 import Data.Hashable
 import qualified Data.IntSet as S
 import Data.List (sortBy)
-import Data.Map hiding (null, toList, foldl', foldr, take)
+import Data.Map hiding (null, toList, foldl', foldr, take, filter)
 import Data.Maybe
 import Data.Serialize.Put
 import Data.Text (unpack)
 import Data.Text.Encoding
-import Data.Vector (Vector, imap)
+import Data.Matrix (Matrix, nrows, ncols, getElem, getRow)
+import Data.Vector (Vector, imap, filter)
+import Data.Vector.Unboxed (unsafeFreeze)
+import Data.Vector.Unboxed.Mutable (new, write)
 import qualified Data.Vector as V
-import Prelude hiding (lookup)
+import Prelude hiding (lookup, filter)
 
 import LSC.Types
 
 
 
-boundingBox :: [Component l Integer] -> Component l Integer
+boundingBox :: Ord n => [Component l n] -> Component l n
 boundingBox xs = Rect
     (minimum $ view l <$> xs)
     (minimum $ view b <$> xs)
@@ -37,7 +42,37 @@ boundingBox xs = Rect
 
 
 
+hpwlMatrix :: Matrix Gate -> Net -> Int
+hpwlMatrix _ n | elem (n ^. identifier) ["clk"] = 1
+hpwlMatrix m n = width p + height p
+
+  where
+
+    p = boundingBox nodes
+
+    coords = runST $ do
+        v <- new $ nrows m * ncols m
+        sequence_
+            [ write v g (i, j)
+            | i <- [1 .. nrows m]
+            , j <- [1 .. ncols m]
+            , let g = getElem i j m ^. number
+            , g >= 0
+            ]
+
+        unsafeFreeze v
+
+    nodes =
+      [ Rect x y (succ x) (succ y)
+      | (i, _) <- n ^. contacts . to assocs
+      , (x, y) <- toList $ coords ^? ix i
+      ]
+
+
+
+
 hpwl :: Vector Gate -> Net -> Integer
+hpwl  _ n | elem (n ^. identifier) ["clk"] = 0
 hpwl gs n = width p + height p
   where
     p = boundingBox nodes
@@ -82,6 +117,34 @@ markEdges top =
     , q <- join $ toList $ top ^. gates ^? ix j . geometry . to (take 1)
     , po <- join $ take 1 src <&> view ports
     , qo <- join $ take 1 snk <&> view ports
+    ]
+
+
+
+flattenGateMatrix :: Matrix Gate -> Vector Gate
+flattenGateMatrix m = filter (\ g -> g ^. number >= 0) $ mconcat [ getRow i m | i <- [1 .. nrows m] ]
+
+
+
+sumOfHpwlMatrix :: Matrix Gate -> Int
+sumOfHpwlMatrix m = do
+
+  let v = mconcat [ getRow i m | i <- [1 .. nrows m] ]
+      e = rebuildEdges v
+
+  sum $ hpwlMatrix m <$> e
+
+
+
+estimationsMatrix :: Matrix Gate -> LSC ()
+estimationsMatrix m = do
+
+  debug
+    [ show $ view number <$> m
+    , unwords [show $ nrows m, "x", show $ ncols m]
+    , unwords ["gate count:", show $ length $ flattenGateMatrix m]
+    , unwords [" net count:", show $ length $ rebuildEdges $ flattenGateMatrix m]
+    , unwords ["sum of hpwl:", show $ sumOfHpwlMatrix m]
     ]
 
 

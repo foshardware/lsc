@@ -8,7 +8,7 @@
 module LSC.FM where
 
 import Control.Conditional (whenM)
-import Control.Lens hiding (indexed)
+import Control.Lens hiding (indexed, imap)
 import Control.Monad
 import Control.Monad.Loops
 import Control.Monad.Primitive
@@ -29,13 +29,17 @@ import Data.Vector
   , unsafeFreeze, unsafeThaw
   , freeze, thaw
   , take, generate
-  , (!), indexed
+  , (!), indexed, unzip
+  , imap
   )
+import qualified Data.Vector as V
 import Data.Vector.Mutable (MVector, read, write, modify, replicate, unsafeSwap, slice)
-import Prelude hiding (replicate, length, read, lookup, take, drop, head)
+import qualified Data.Vector.Algorithms.Intro as Intro
+import Prelude hiding (replicate, length, read, lookup, take, drop, head, unzip)
 import System.Random.MWC
 
 import LSC.Entropy
+import LSC.Types (V, E)
 
 
 
@@ -49,15 +53,6 @@ coarseningThreshold = 8
 balanceFactor :: Rational
 balanceFactor = 1 % 10
 
-
-type NetArray  = Vector IntSet
-type CellArray = Vector IntSet
-
-type Area = Vector Int
-
-type V = CellArray
-type E = NetArray
-type A = Area
 
 
 data Gain s a = Gain
@@ -249,6 +244,36 @@ fmMultiLevel (v, e) t r = do
 
 
 
+
+refit :: (V, E) -> Int -> Bipartitioning -> Bipartitioning
+refit _ k (Bisect p q)
+    | size p <= k
+    , size q <= k
+    = Bisect p q
+refit _ k (Bisect p q)
+    | size p > k
+    , size q > k
+    = error
+    $ "impossible size: "++ show (size p, size q, k)
+refit _ _ (Bisect p q)
+    | size p == size q
+    = Bisect p q
+refit (v, e) k (Bisect p q)
+    | size p < size q
+    = refit (v, e) k (Bisect q p)
+refit (v, e) k (Bisect p q) = runST $ do
+
+    let f x = size . intersection x . foldMap (e!) . elems
+        len = size p - k
+
+    u <- thaw $ V.filter (\ (i, _) -> member i p) $ imap (,) v
+    Intro.partialSortBy (compare `on` \ (_, x) -> f p x - f q x) u len
+    (iv, _) <- unzip . take len <$> unsafeFreeze u
+
+    pure $ Bisect (ala Endo foldMap (delete <$> iv) p) (ala Endo foldMap (insert <$> iv) q)
+
+
+
 rebalance :: Bipartitioning -> FM s Bipartitioning
 rebalance (Bisect p q)
   | size p < size q
@@ -359,18 +384,20 @@ match (v, e) r u = do
 
 
 fmPartition :: (V, E) -> Maybe Bipartitioning -> FM s Bipartitioning
-fmPartition (v, e) (Just p) = bipartition (v, e) p
+fmPartition (v, e) (Just p) = bipartition (v, e) Nothing p
 fmPartition (v, e)  Nothing = do
   u <- randomPermutation $ length v
   let (p, q) = splitAt (length v `div` 2) (toList u)
-  bipartition (v, e) $ Bisect (fromList p) (fromList q)
+  bipartition (v, e) Nothing $ Bisect (fromList p) (fromList q)
 
 
 
-fiducciaMattheyses :: (V, E) -> FM s Bipartitioning
-fiducciaMattheyses (v, e)
-  = bipartition (v, e)
-  $ Bisect (fromAscList [x | x <- base, part x]) (fromAscList [x | x <- base, not $ part x])
+fiducciaMattheyses :: (V, E) -> Maybe IntSet -> FM s Bipartitioning
+fiducciaMattheyses (v, e) free = do
+
+  bipartition (v, e) free
+      $ Bisect (fromAscList [x | x <- base, part x]) (fromAscList [x | x <- base, not $ part x])
+
   where
     base = [0 .. length v - 1]
     part = if length v < 1000
@@ -378,10 +405,11 @@ fiducciaMattheyses (v, e)
       else (<= length v `div` 2)
 
 
-bipartition :: (V, E) -> Bipartitioning -> FM s Bipartitioning
-bipartition (v, e) p = do
 
-  update freeCells $ const $ fromAscList [0 .. length v - 1]
+bipartition :: (V, E) -> Maybe IntSet -> Bipartitioning -> FM s Bipartitioning
+bipartition (v, e) free p = do
+
+  update freeCells $ const $ maybe (fromAscList [0 .. length v - 1]) id free
   update moves $ const mempty
 
   initialGains (v, e) p
@@ -391,7 +419,7 @@ bipartition (v, e) p = do
 
   if g <= 0
     then pure p
-    else bipartition (v, e) q
+    else bipartition (v, e) free q
 
 
 
@@ -438,12 +466,15 @@ moveCell c p = do
   pure q
 
 
+
 selectBaseCell :: V -> Bipartitioning -> FM s (Maybe Int)
 selectBaseCell v p = do
   bucket <- maxGain
   case bucket of
+    Just (g, []) -> error $ show g
     Just (_, xs) -> pure $ balanceCriterion (length v) p `find` xs
     _ -> pure Nothing
+
 
 
 updateGains :: Int -> (V, E) -> Bipartitioning -> FM s ()
@@ -518,6 +549,8 @@ modifyGain f c = do
 initialGains :: (V, E) -> Bipartitioning -> FM s ()
 initialGains (v, e) p = do
 
+  free <- value freeCells
+
   let nodes = flip imap v $ \ i ns ->
         let f = fromBlock p i e
             t = toBlock p i e
@@ -529,7 +562,9 @@ initialGains (v, e) p = do
   initial <- st $ do
       gain <- newSized $ 2 * size gmax + 1
       flip imapM_ nodes $ \ k x ->
-          mutate gain x $ (, ()) . pure . maybe [k] (k:)
+          mutate gain x $ if member x free
+             then (, ()) . pure . maybe [k] (k:)
+             else (, ())
       Gain <$> newSTRef gmax <*> thaw nodes <*> pure gain
 
   update gains $ const initial

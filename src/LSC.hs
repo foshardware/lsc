@@ -15,11 +15,12 @@ import qualified Control.Concurrent.MSem as MSem
 import Control.Exception
 import Control.Lens
 import Control.Monad.Trans
-import Control.Monad.Codensity
+import Control.Monad.Codensity hiding (improve)
 import Prelude hiding ((.), id)
 
 import LSC.Easy
 import LSC.Force
+import LSC.Improve
 import LSC.Integer
 import LSC.Mincut
 import LSC.NetGraph
@@ -30,35 +31,38 @@ import LSC.Version
 
 stage1 :: Compiler' NetGraph
 stage1 = globalPlacement
+    >>> detailedPlacement
 
 
 
 stage4 :: Compiler' NetGraph
 stage4 = zeroArrow
-  <+> dag netGraph (env_ rowSize 21000 route <+> route)
+    <+> dag netGraph (env_ rowSize 21000 route <+> route)
 
 
 
 globalPlacement :: Compiler' NetGraph
-globalPlacement = proc top -> do
-  next <- legalization <<< local columns -<< top
-  remote estimations -< next
-  returnA -< next
+globalPlacement = local placeQuad
+
+
+
+detailedPlacement :: Compiler' NetGraph
+detailedPlacement = id
 
 
 
 legalization :: Compiler' NetGraph
 legalization = id
-  >>> dag netGraph (remote placeColumn)
-  >>> remote placeRows
-  >>> remote inlineGeometry
-  >>> remote contactGeometry
+    >>> dag netGraph (remote placeColumn)
+    >>> remote placeRows
+    >>> remote inlineGeometry
+    >>> remote contactGeometry
 
 
 
 animatePlacement :: Compiler' NetGraph
 animatePlacement = zeroArrow
-  <+> local placeEasy >>> local placeForce
+    <+> local placeEasy >>> local placeForce
 
 
 
@@ -77,22 +81,32 @@ circuit :: DAG Identifier RTL
 circuit = DAG (view identifier) subcircuits
 
 
+
 type Compiler' a = Compiler a a
 
 type Compiler = LSR LS
+
 
 compiler :: Compiler a b -> a -> LSC b
 compiler = unLS . reduce
 
 
+improving :: Compiler' a -> (a -> a -> Ordering) -> Compiler' a
+improving f p = remote $ \ x -> do
+    k <- view iterations <$> environment
+    improve k p x $ compiler f
+
+
 expensive :: (a -> b) -> Compiler a b
 expensive f = local $ pure . f
+
 
 remote_ :: LSC b -> Compiler' b
 remote_ f = remote (<$ f)
 
 remote :: (a -> LSC b) -> Compiler a b
 remote = LSR . Lift . LS
+
 
 local_ :: LSC b -> Compiler' b
 local_ f = local (<$ f)
@@ -104,6 +118,7 @@ local k = remote $ \ x -> do
   case o ^. workers of
     Singleton -> k x
     Workers i -> liftIO $ MSem.with i $ runLSC o s (k x)
+
 
 
 env_ :: Simple Setter CompilerOpts o -> o -> Compiler a b -> Compiler a b

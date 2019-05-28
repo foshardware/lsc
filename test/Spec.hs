@@ -19,10 +19,10 @@ import Data.Map (assocs)
 import Data.Ratio
 import Data.Text (Text)
 import Data.Text.Encoding
-import Data.Vector ((!))
+import Data.Vector (replicate, (!))
 import qualified Data.Vector as V
 import qualified Data.Vector.Algorithms.Intro as V
-import Prelude hiding (id, (.))
+import Prelude hiding (id, replicate, (.))
 
 import Test.Tasty
 import Test.Tasty.HUnit
@@ -31,21 +31,95 @@ import Test.Tasty.QuickCheck
 import LSC
 import LSC.BLIF
 import LSC.Types
-import LSC.FM
+import LSC.FM as FM
+import LSC.KGGGP as KGGGP
+
 
 
 main :: IO ()
 main = defaultMain $ testGroup "LSC"
-  [ fm
+  [ gggp
+  , fm
   , concurrency
   ]
 
 
+gggp :: TestTree
+gggp = testGroup "KGGGP"
+  [ testCase "Insert Gain" kgggpInsertGain
+  , testCase "Remove Gain" kgggpRemoveGain
+  , testCase "Modify Gain" kgggpModifyGain
+  , testCase "Empty Gains" kgggpEmptyGains
+  ]
+
+
+kgggpInsertGain :: IO ()
+kgggpInsertGain = do
+
+    x <- stToIO $ do
+      (v, _) <- queue_1Hypergraph
+      bs <- newGains v "bs" 4
+      insertGain 5 3 4 bs
+      maximumGain bs
+    assertEqual "maximum gain" x (5, 3)
+
+
+
+kgggpRemoveGain :: IO ()
+kgggpRemoveGain = do
+
+    x <- stToIO $ do
+      (v, _) <- queue_1Hypergraph
+      bs <- newGains v "bs" 4
+      insertGain 2 3 4 bs
+      insertGain 5 3 4 bs
+      _ <- KGGGP.removeGain 5 3 bs
+      maximumGain bs
+    assertEqual "maximum gain" x (2, 3)
+
+
+
+kgggpModifyGain :: IO ()
+kgggpModifyGain = do
+
+    (x, g) <- stToIO $ do
+      (v, _) <- queue_1Hypergraph
+      bs <- newGains v "bs" 4
+      insertGain 3 3 5 bs
+      insertGain 2 3 4 bs
+      insertGain 1 2 2 bs
+      KGGGP.modifyGain 2 3 succ bs
+      (,) <$> maximumGain bs <*> KGGGP.removeGain 2 3 bs
+    assertEqual "gain" g (Just 5)
+    assertEqual "maximum gain" x (2, 3)
+
+
+
+kgggpEmptyGains :: IO ()
+kgggpEmptyGains = do
+
+    (x, y) <- stToIO $ do
+      (v, _) <- queue_1Hypergraph
+      bs <- newGains v "bs" 4
+      KGGGP.insertGain 3 3 5 bs
+      _ <- KGGGP.removeGain 3 3 bs
+      x <- emptyGains bs
+      KGGGP.insertGain 3 3 5 bs
+      y <- emptyGains bs
+      pure (x, y)
+
+    assertBool "empty" x
+    assertBool "not empty" $ not y
+
+
+
+
+
 fm :: TestTree
-fm = testGroup "FM" $
-  [ testCase "Input routine" $ fmInputRoutine
-  , testCase "Deterministic FM" $ fmDeterministic
-  , testCase "Balance criterion" $ fmBalanceCriterion
+fm = testGroup "FM"
+  [ testCase "Input routine" fmInputRoutine
+  , testCase "Deterministic FM" fmDeterministic
+  , testCase "Balance criterion" fmBalanceCriterion
   , fmML
   ]
 
@@ -93,7 +167,7 @@ fmMatch = do
   (v, e) <- arbitraryHypergraph 10000
   clustering <- nonDeterministic $ do
       u <- randomPermutation $ length v
-      st $ match (v, e) matchingRatio u
+      FM.st $ match (v, e) matchingRatio u
 
   assertEqual "length does not match" (length v) (sum $ size <$> clustering)
   assertBool "elements do not match" $ foldMap id clustering == fromAscList [0 .. length v - 1]
@@ -146,7 +220,7 @@ fmDeterministic = do
 
 
 blifHypergraph :: BLIF -> ST s (V, E)
-blifHypergraph netlist = inputRoutine
+blifHypergraph netlist = FM.inputRoutine
     (top ^. nets . to length)
     (top ^. gates . to length)
     [ (n, c)
@@ -161,7 +235,7 @@ arbitraryHypergraph n = do
   k <- generate $ choose (1, n)
   y <- generate $ choose (k, k+n)
   config <- generate $ vectorOf (4 * k) $ (,) <$> choose (0, pred y) <*> choose (0, pred k)
-  stToIO $ inputRoutine y k config
+  stToIO $ FM.inputRoutine y k config
 
 
 queue_1Hypergraph :: ST s (V, E)

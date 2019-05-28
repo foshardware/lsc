@@ -22,6 +22,7 @@ import Control.Exception
 import Data.Default
 import Data.Foldable
 import Data.Function (on)
+import Data.IntSet (IntSet)
 import Data.Map (Map, unionWith, lookup)
 import Data.Semigroup
 import Data.Hashable
@@ -44,6 +45,15 @@ import System.Console.Concurrent
 
 import GHC.Generics
 import Prelude hiding (lookup)
+
+
+
+type NetArray  = Vector IntSet
+type CellArray = Vector IntSet
+
+
+type V = CellArray
+type E = NetArray
 
 
 
@@ -258,7 +268,6 @@ data CompilerOpts = CompilerOpts
   , _enableDebug   :: Bool
   , _enableVisuals :: Bool
   , _iterations    :: Int
-  , _cutRatio      :: Int
   , _workers       :: Workers
   }
 
@@ -532,7 +541,7 @@ instance Ord Gate where
   compare = compare `on` view number
 
 instance Default Gate where
-  def = Gate mempty mempty def def mempty def
+  def = Gate mempty mempty def def mempty (-1)
 
 
 type Arboresence a = (Net, a, a)
@@ -567,7 +576,7 @@ invert pin = pin
 makeFieldsNoPrefix ''CompilerOpts
 
 instance Default CompilerOpts where
-  def = CompilerOpts 2 100000 (16 * 1000000) True True 4 40 Singleton
+  def = CompilerOpts 2 100000 (16 * 1000000) True True 1 Singleton
 
 
 runLSC :: Environment -> Bootstrap () -> LSC a -> IO a

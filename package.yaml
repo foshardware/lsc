@@ -38,6 +38,7 @@ dependencies:
 - lef
 - lens
 - linear
+- matrix
 - milp
 - mmorph
 - monad-loops

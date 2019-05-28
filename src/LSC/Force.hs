@@ -16,7 +16,7 @@ import Data.Foldable
 import Data.Map (keys)
 import Data.Maybe
 import Data.Monoid
-import qualified Data.Vector as V
+import qualified Data.Vector as V2
 import Data.Vector (Vector, fromList, fromListN, unsafeThaw, unsafeFreeze)
 import Data.Vector.Mutable (write)
 import Linear.Affine hiding (Vector)
@@ -29,7 +29,6 @@ import LSC.Animation
 import LSC.Types
 
 
-type V = V2
 type R = Double
 
 scale :: R
@@ -86,10 +85,10 @@ placeForce top = do
     & gates %~ fmap (\ g -> g & geometry .~ toList (layered ps (g ^. number) <$> lookupDims g tech))
 
 
-renderStep :: Step V R -> Frame
+renderStep :: Step V2 R -> Frame
 renderStep = foldMap rectangle . view particles
 
-rectangle :: Particle V R -> Frame
+rectangle :: Particle V2 R -> Frame
 rectangle p = poly $ bimap (/ scale) (/ scale) <$>
   [ (x - w / 2, y - h / 2)
   , (x - w / 2, y + h / 2)
@@ -101,7 +100,7 @@ rectangle p = poly $ bimap (/ scale) (/ scale) <$>
     V2 x y = unP $ p ^. pos
 
 
-center :: Technology -> Gate -> Particle V R
+center :: Technology -> Gate -> Particle V2 R
 center tech g = Particle
   p
   zero
@@ -116,7 +115,7 @@ center tech g = Particle
 
 
 
-layered :: Vector (Particle V R) -> Int -> (Integer, Integer) -> Component Layer Integer
+layered :: Vector (Particle V2 R) -> Int -> (Integer, Integer) -> Component Layer Integer
 layered v i (x, y)
   = Layered
     (ceiling vx - div x 2)
@@ -128,22 +127,22 @@ layered v i (x, y)
     where V2 vx vy = maybe zero unP $ v ^? ix i . pos
 
 
-simulate :: R -> Step V R -> [Step V R]
+simulate :: R -> Step V2 R -> [Step V2 R]
 simulate d = iterate $ step d
 
 
-step :: R -> Step V R -> Step V R
+step :: R -> Step V2 R -> Step V2 R
 step d = (over particles . fmap) (particle d) . recalc
 
 
-particle :: R -> Particle V R -> Particle V R
+particle :: R -> Particle V2 R -> Particle V2 R
 particle d = stepPos . stepVel
   where
     stepVel p = p & vel .~ (d *^ (p^.vel ^+^ p^.force))
     stepPos p = p & pos %~ (.+^ p^.vel)
 
 
-recalc :: Step V R -> Step V R
+recalc :: Step V2 R -> Step V2 R
 recalc = calcForces . zeroForces
 
   where
@@ -154,9 +153,9 @@ recalc = calcForces . zeroForces
 
     calcForces (Step fs ps)
       = Step fs
-      $ ala Endo foldMap (foldMap (\ (es, f) -> mkForce f <$> es) fs) (runST $ unsafeFreeze =<< V.thaw ps)
+      $ ala Endo foldMap (foldMap (\ (es, f) -> mkForce f <$> es) fs) (runST $ unsafeFreeze =<< V2.thaw ps)
 
-    mkForce :: (Point V R -> Point V R -> V R) -> Edge -> Vector (Particle V R) -> Vector (Particle V R)
+    mkForce :: (Point V2 R -> Point V2 R -> V2 R) -> Edge -> Vector (Particle V2 R) -> Vector (Particle V2 R)
     mkForce f (i1, i2) v = case (,) <$> v ^? ix i1 <*> v ^? ix i2 of
       Nothing -> v
       Just (p1, p2) -> runST $ do
@@ -166,11 +165,11 @@ recalc = calcForces . zeroForces
         unsafeFreeze m
 
 
-euclidean :: (R -> R) -> Point V R -> Point V R -> V R
+euclidean :: (R -> R) -> Point V2 R -> Point V2 R -> V2 R
 euclidean f p1 p2 = f (distance p1 p2) *^ signorm (p2 .-. p1)
 
-hooke :: R -> R -> Point V R -> Point V R -> V R
+hooke :: R -> R -> Point V2 R -> Point V2 R -> V2 R
 hooke k e = euclidean $ \ d -> k * (d - e)
 
-coulomb :: R -> Point V R -> Point V R -> V R
+coulomb :: R -> Point V2 R -> Point V2 R -> V2 R
 coulomb k = euclidean $ \ d -> -k / (d*d)
