@@ -576,7 +576,7 @@ invert pin = pin
 makeFieldsNoPrefix ''CompilerOpts
 
 instance Default CompilerOpts where
-  def = CompilerOpts 2 100000 (16 * 1000000) True True 4 Singleton
+  def = CompilerOpts 2 100000 (16 * 1000000) True True 1 Singleton
 
 
 runLSC :: Environment -> Bootstrap () -> LSC a -> IO a

@@ -372,6 +372,7 @@ fiducciaMattheyses (v, e) free = do
       else (<= length v `div` 2)
 
 
+
 bipartition :: (V, E) -> Maybe IntSet -> Bipartitioning -> FM s Bipartitioning
 bipartition (v, e) free p = do
 

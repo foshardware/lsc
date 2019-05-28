@@ -14,7 +14,7 @@ import Data.Default
 import Data.Foldable hiding (concat)
 import Data.Function
 import Data.Maybe
-import Data.IntSet (size, elems, intersection, insert, delete, member)
+import Data.IntSet (size, elems, intersection, insert, delete, member, fromAscList)
 import Data.Map (Map, assocs)
 import qualified Data.Map as Map
 import Data.Semigroup
@@ -23,6 +23,7 @@ import Data.Vector (Vector, filter, fromListN, (!), thaw, unsafeFreeze, unzip, t
 import qualified Data.Vector.Algorithms.Intro as Intro
 import Prelude hiding (filter, concat, lookup, take, read, unzip)
 
+import LSC.Improve
 import LSC.FM as FM
 import LSC.NetGraph
 import LSC.Types hiding (thaw)
@@ -91,7 +92,8 @@ placeMatrix m = do
     (q1, q2, q3, q4) <- liftIO $ nonDeterministic $ do
 
         hy <- st $ hypergraph (set number `imap` v) e
-        Bisect q12 q34 <- refit hy (2*w*h) <$> fmMultiLevel hy coarseningThreshold matchingRatio
+        Bisect q12 q34 <- improve 4 (flip compare `on` cutSize hy) (bisect hy) $ \ _ -> do
+            refit hy (2*w*h) <$> fmMultiLevel hy coarseningThreshold matchingRatio
 
         let v12 = fromListN (size q12) $ (v!) <$> elems q12
             v34 = fromListN (size q34) $ (v!) <$> elems q34
@@ -99,10 +101,13 @@ placeMatrix m = do
             e34 = rebuildEdges $ set number `imap` v34
 
         h12 <- st $ hypergraph (set number `imap` v12) e12
-        Bisect q1 q2 <- refit h12 (w*h) <$> fmMultiLevel h12 coarseningThreshold matchingRatio
+        Bisect q1 q2 <- improve 4 (flip compare `on` cutSize h12) (bisect h12) $ \ _ -> do
+            refit hy (w*h) <$> fmMultiLevel h12 coarseningThreshold matchingRatio
 
         h34 <- st $ hypergraph (set number `imap` v34) e34
-        Bisect q3 q4 <- refit h34 (w*h) <$> fmMultiLevel h34 coarseningThreshold matchingRatio
+        Bisect q3 q4 <- improve 4 (flip compare `on` cutSize h34) (bisect h34) $ \ _ -> do
+            refit hy (w*h) <$> fmMultiLevel h34 coarseningThreshold matchingRatio
+
 
         pure
           ( fromListN (size q1) ((v12!) <$> elems q1)
@@ -117,6 +122,11 @@ placeMatrix m = do
     m4 <- placeMatrix $ matrix h w $ \ (x, y) -> maybe def id $ q4 ^? ix (pred x * w + pred y)
 
     pure $ joinBlocks (m2, m1, m3, m4)
+
+    where
+        bisect by = Bisect
+            (fromAscList [x | x <- [0 .. length (fst by) - 1], even x])
+            (fromAscList [x | x <- [0 .. length (fst by) - 1], odd x])
 
 
 

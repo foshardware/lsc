@@ -98,7 +98,9 @@ compiler = unLS . reduce
 
 
 improving :: Compiler' a -> (a -> a -> Ordering) -> Compiler' a
-improving f = local . improve (compiler f)
+improving f p = remote $ \ x -> do
+    k <- view iterations <$> environment
+    improve k p x $ compiler f
 
 
 expensive :: (a -> b) -> Compiler a b
