@@ -1,10 +1,6 @@
 
 module LSC.Improve where
 
-import Control.Lens
-
-import LSC.Types
-
 
 
 improve :: Monad m => Int -> (a -> a -> Ordering) -> a -> (a -> m a) -> m a
