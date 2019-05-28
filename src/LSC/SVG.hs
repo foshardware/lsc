@@ -132,7 +132,7 @@ stroke _ = "black"
 
 fill :: [Layer] -> Arg
 fill (Metal2 : Metal3 : _) = "transparent"
-fill (Metal1 : _) = "blue"
+fill (Metal1 : _) = "transparent"
 fill (Metal2 : _) = "red"
 fill (Metal3 : _) = "green"
 fill _ = "transparent"

@@ -70,18 +70,28 @@ placeQuad top = do
 
     cells <- view stdCells <$> technology
 
-    let geo g = g & geometry .~ toList (pos g =<< cells ^? ix (g ^. identifier) . dims)
-        pos g (w, h) = region ^? ix (g ^. number) <&> \(x,y) -> Layered x y (x+w) (y+h) [Metal2, Metal3] N
-        region = IntMap.fromList
-          [ (g ^. number, (fromIntegral j * (w + div w 2), fromIntegral i * (h + div h 2)))
-          | i <- [1 .. nrows m]
-          , j <- [1 .. ncols m]
-          , let g = getElem i j m
-          , let (w, h) = std
-          , g ^. number >= 0
-          ]
+    let geo g = g &~ do
+            geometry .= toList (maybe (filler g) (pos g) $ cells ^? ix (g ^. identifier) . dims)
 
-    pure $ top & gates %~ fmap geo
+        pos g (w, h) = region ^? ix (g ^. number)
+            <&> \ (x, y) -> Layered x y (x+w) (y+h) [Metal2, Metal3] N
+
+        filler g = region ^? ix (g ^. number)
+            <&> \ (x, y) -> Layered x y (x + fst std) (y + snd std) [Metal1] N
+
+
+        region = IntMap.fromList
+            [ (g ^. number, (fromIntegral j * (w + div w 2), fromIntegral i * (h + div h 2)))
+            | i <- [1 .. nrows m]
+            , j <- [1 .. ncols m]
+            , let g = getElem i j m
+            , let (w, h) = std
+            , g ^. number >= 0
+            ]
+
+
+    pure $ top &~ do
+        gates %= fmap geo
 
 
 
@@ -89,8 +99,20 @@ placeQuad top = do
 initialMatrix :: NetGraph -> LSC (Matrix Gate)
 initialMatrix top = do
 
-    let (w, h) = head $ dropWhile (\ (x, y) -> x * y < top ^. gates . to length) boards
-        result = matrix w h $ \ (x, y) -> maybe def id $ top ^. gates ^? ix (pred x * w + pred y)
+    let k = maximum $ top ^. gates <&> view number
+
+    let filler
+          = imap (set number . (k +))
+          $ fromListN (top ^. supercell . pins . to length)
+          $ toList
+          $ top ^. supercell . pins <&> \ p -> def &~ do
+              identifier .= p ^. identifier
+              wires .= Map.singleton (p ^. identifier) (p ^. identifier)
+
+    let vector = top ^. gates <> filler
+
+    let (w, h) = head $ dropWhile (\ (x, y) -> x * y < length vector) boards
+        result = matrix w h $ \ (x, y) -> maybe def id $ vector ^? ix (pred x * w + pred y)
 
     pure result
 
