@@ -109,10 +109,12 @@ placeMatrix m = do
     let h = nrows m `div` 2
         w = ncols m `div` 2
 
+    it <- view iterations <$> environment
+
     (q1, q2, q3, q4) <- liftIO $ nonDeterministic $ do
 
         hy <- st $ hypergraph (set number `imap` v) e
-        Bisect q12 q34 <- improve 4 (flip compare `on` cutSize hy) (bisect hy) $ \ _ -> do
+        Bisect q12 q34 <- improve it (flip compare `on` cutSize hy) (bisect hy) $ \ _ -> do
             refit hy (2*w*h) <$> fmMultiLevel hy coarseningThreshold matchingRatio
 
         let v12 = fromListN (size q12) $ (v!) <$> elems q12
@@ -121,11 +123,11 @@ placeMatrix m = do
             e34 = rebuildEdges $ set number `imap` v34
 
         h12 <- st $ hypergraph (set number `imap` v12) e12
-        Bisect q1 q2 <- improve 4 (flip compare `on` cutSize h12) (bisect h12) $ \ _ -> do
+        Bisect q1 q2 <- improve it (flip compare `on` cutSize h12) (bisect h12) $ \ _ -> do
             refit hy (w*h) <$> fmMultiLevel h12 coarseningThreshold matchingRatio
 
         h34 <- st $ hypergraph (set number `imap` v34) e34
-        Bisect q3 q4 <- improve 4 (flip compare `on` cutSize h34) (bisect h34) $ \ _ -> do
+        Bisect q3 q4 <- improve it (flip compare `on` cutSize h34) (bisect h34) $ \ _ -> do
             refit hy (w*h) <$> fmMultiLevel h34 coarseningThreshold matchingRatio
 
 
