@@ -43,12 +43,7 @@ stage4 = zeroArrow
 
 
 globalPlacement :: Compiler' NetGraph
-globalPlacement = proc top -> do
-    m <- local initialMatrix -< top
-    remote estimationsMatrix -< m
-    result <- improving (local placeMatrix) (flip compare `on` sumOfHpwlMatrix) -< m
-    remote estimationsMatrix -< result
-    returnA -< top
+globalPlacement = local placeQuad
 
 
 

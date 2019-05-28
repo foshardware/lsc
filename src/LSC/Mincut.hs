@@ -17,6 +17,7 @@ import Data.Maybe
 import Data.IntSet (size, elems, intersection, insert, delete, member, fromAscList)
 import Data.Map (Map, assocs)
 import qualified Data.Map as Map
+import qualified Data.IntMap as IntMap
 import Data.Semigroup
 import Data.Matrix hiding (toList, (!))
 import Data.Vector (Vector, filter, fromListN, (!), thaw, unsafeFreeze, unzip, take)
@@ -52,7 +53,7 @@ slidingWindow k m = flip execStateT m $ sequence
 
 placeWindow :: Matrix Gate -> LSC (Matrix Gate)
 placeWindow m | ncols m <= 2 = pure m
-placeWindow m = undefined
+placeWindow _ = undefined
 
 
 
@@ -60,9 +61,29 @@ placeWindow m = undefined
 placeQuad :: NetGraph -> LSC NetGraph
 placeQuad top = do
 
+    let std = (20000, 20000)
+
+    estimationsMatrix =<< initialMatrix top
+
     m <- placeMatrix =<< initialMatrix top
 
-    pure top
+    estimationsMatrix m
+
+    cells <- view stdCells <$> technology
+
+    let geo g = g & geometry .~ toList (pos g =<< cells ^? ix (g ^. identifier) . dims)
+        pos g (w, h) = region ^? ix (g ^. number) <&> \(x,y) -> Layered x y (x+w) (y+h) [Metal2, Metal3] N
+        region = IntMap.fromList
+          [ (g ^. number, (fromIntegral j * (w + div w 2), fromIntegral i * (h + div h 2)))
+          | i <- [1 .. nrows m]
+          , j <- [1 .. ncols m]
+          , let g = getElem i j m
+          , let (w, h) = std
+          , g ^. number >= 0
+          ]
+
+    pure $ top & gates %~ fmap geo
+
 
 
 
