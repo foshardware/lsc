@@ -203,8 +203,7 @@ fmMultiLevel (v, e) t r = do
             j <- readSTRef i
             l <- length . fst <$> read hypergraphs j
             s <- freeze $ slice (max 0 $ j-8) (min 8 $ it-j) hypergraphs
-            pure $ j < pred it && t <= l
-                && any (l /=) (length . fst <$> s)
+            pure $ j < pred it && t <= l && any (l /=) (length . fst <$> s)
     whileM_ continue $ do
 
       hi <- st $ read hypergraphs =<< readSTRef i

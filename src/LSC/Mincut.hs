@@ -111,12 +111,10 @@ initialMatrix top = do
 
     let vector = top ^. gates <> filler
 
-    let (w, h) = head $ dropWhile (\ (x, y) -> x * y < length vector) boards
+    let (w, h) : _ = dropWhile (\ (x, y) -> x * y < length vector) $ iterate (bimap (2*) (2*)) (1, 1)
         result = matrix w h $ \ (x, y) -> maybe def id $ vector ^? ix (pred x * w + pred y)
 
     pure result
-
-    where boards = iterate (bimap (2*) (2*)) (1, 1)
 
 
 
