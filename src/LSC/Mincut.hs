@@ -169,7 +169,7 @@ placeMatrix m = do
 
         hy <- st $ hypergraph (set number `imap` v) e
         Bisect q12 q34 <- improve it (flip compare `on` cutSize hy) (bisect hy) $ \ _ -> do
-            refit hy (2*w*h) <$> fmMultiLevel hy coarseningThreshold matchingRatio
+            refit hy (2*w*h) <$> fmMultiLevel hy mempty coarseningThreshold matchingRatio
 
         let v12 = fromListN (size q12) $ (v!) <$> elems q12
             v34 = fromListN (size q34) $ (v!) <$> elems q34
@@ -178,11 +178,11 @@ placeMatrix m = do
 
         h12 <- st $ hypergraph (set number `imap` v12) e12
         Bisect q1 q2 <- improve it (flip compare `on` cutSize h12) (bisect h12) $ \ _ -> do
-            refit h12 (w*h) <$> fmMultiLevel h12 coarseningThreshold matchingRatio
+            refit h12 (w*h) <$> fmMultiLevel h12 mempty coarseningThreshold matchingRatio
 
         h34 <- st $ hypergraph (set number `imap` v34) e34
         Bisect q3 q4 <- improve it (flip compare `on` cutSize h34) (bisect h34) $ \ _ -> do
-            refit h34 (w*h) <$> fmMultiLevel h34 coarseningThreshold matchingRatio
+            refit h34 (w*h) <$> fmMultiLevel h34 mempty coarseningThreshold matchingRatio
 
 
         pure

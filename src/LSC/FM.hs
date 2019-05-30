@@ -189,18 +189,20 @@ randomPermutation n = do
 
 
 
-fmMultiLevel :: (V, E) -> Int -> Rational -> FM s Bipartitioning
-fmMultiLevel (v, e) t r = do
+fmMultiLevel :: (V, E) -> Lock -> Int -> Rational -> FM s Bipartitioning
+fmMultiLevel (v, e) lock t r = do
 
     i <- st $ newSTRef 0
 
     let it = 64
 
     hypergraphs  <- replicate it mempty
+    locks        <- replicate it mempty
     clusterings  <- replicate it mempty
     partitioning <- replicate it mempty
 
     write hypergraphs 0 (v, e)
+    write locks 0 lock
 
     let continue = st $ do
             j <- readSTRef i
@@ -217,7 +219,7 @@ fmMultiLevel (v, e) t r = do
         modifySTRef' i succ
 
         -- interim clustering
-        pk <- match hi r u
+        (pk, lck) <- match hi lock r u
 
         -- interim hypergraph
         hs <- induce hi pk
@@ -225,22 +227,24 @@ fmMultiLevel (v, e) t r = do
         j <- readSTRef i
         write clusterings j pk
         write hypergraphs j hs
+        write locks j lck
 
 
     -- number of levels
     m <- st $ readSTRef i
 
     hi <- read hypergraphs m
-    write partitioning m =<< fmPartition hi Nothing
+    write partitioning m =<< fmPartition hi lock Nothing
 
     for_ (reverse [0 .. pred m]) $ \ j -> do
         pk <- read clusterings  $ succ j
         p  <- read partitioning $ succ j
 
+        l <- read locks j
         h <- read hypergraphs j
         q <- rebalance =<< project pk p
 
-        write partitioning j =<< fmPartition h (Just q)
+        write partitioning j =<< fmPartition h l (Just q)
 
     read partitioning 0
 
@@ -313,9 +317,10 @@ project pk (Bisect p q) = pure $ Bisect
 
 
 
-match :: (V, E) -> Rational -> Permutation -> ST s Clustering
-match (v, e) r u = do
+match :: (V, E) -> Lock -> Rational -> Permutation -> ST s (Clustering, Lock)
+match (v, e) lock r u = do
 
+  clusteredLock <- newSTRef mempty
   clustering <- replicate (length v) mempty
 
   nMatch <- newSTRef 0
@@ -325,7 +330,7 @@ match (v, e) r u = do
   connectivity <- replicate (length v) 0
 
   sights <- replicate (length v) False
-  let yet n = not <$> read sights n 
+  let yet n = not <$> read sights n
       matched n = write sights n True
 
   let continue n i = i < length v && n % fromIntegral (length v) < r
@@ -340,8 +345,10 @@ match (v, e) r u = do
 
           let neighbours = elems $ foldMap (e!) (elems $ v!uj)
 
-          for_ neighbours $ \ w -> do
-              whenM (yet w) $ write connectivity w $ conn w uj
+          for_ neighbours $ \ w ->
+            whenM (yet w)
+              $ unless (member w lock && member uj lock)
+                $ write connectivity w $ conn w uj
 
           -- find maximum connectivity
           suchaw <- newSTRef (0, Nothing)
@@ -353,6 +360,8 @@ match (v, e) r u = do
           exists <- snd <$> readSTRef suchaw
 
           for_ exists $ \ w -> do
+              when (member w lock || member uj lock)
+                  $ modifySTRef clusteredLock . insert =<< readSTRef k
               modify clustering (insert w) =<< readSTRef k
               matched w
               modifySTRef' nMatch (+2)
@@ -375,7 +384,9 @@ match (v, e) r u = do
 
       modifySTRef' j succ
 
-  take <$> readSTRef k <*> unsafeFreeze clustering
+  (,)
+    <$> (take <$> readSTRef k <*> unsafeFreeze clustering)
+    <*> readSTRef clusteredLock
 
   where
 
@@ -385,12 +396,12 @@ match (v, e) r u = do
 
 
 
-fmPartition :: (V, E) -> Maybe Bipartitioning -> FM s Bipartitioning
-fmPartition (v, e) (Just p) = bipartition (v, e) mempty p
-fmPartition (v, e)  Nothing = do
+fmPartition :: (V, E) -> Lock -> Maybe Bipartitioning -> FM s Bipartitioning
+fmPartition (v, e) lock (Just p) = bipartition (v, e) lock p
+fmPartition (v, e) lock  Nothing = do
   u <- randomPermutation $ length v
   let (p, q) = splitAt (length v `div` 2) (toList u)
-  bipartition (v, e) mempty $ Bisect (fromList p) (fromList q)
+  bipartition (v, e) lock $ Bisect (fromList p) (fromList q)
 
 
 
@@ -464,7 +475,7 @@ moveCell c p = do
   Gain _ u _ <- value gains
   g <- st $ read u c
   let q = move c p
-  update moves ((Move g c, q) :)
+  update moves $ cons (Move g c, q)
   pure q
 
 

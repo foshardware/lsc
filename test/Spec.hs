@@ -143,7 +143,8 @@ fmRealWorld = testGroup "Real World Instances"
 fmMulti :: Int -> (V, E) -> IO ()
 fmMulti cut h = do
   let predicate p = cutSize h p <= cut
-  p <- iterateUntil predicate $ nonDeterministic $ fmMultiLevel h coarseningThreshold matchingRatio
+  p <- iterateUntil predicate $ nonDeterministic
+    $ fmMultiLevel h mempty coarseningThreshold matchingRatio
   assertBool "unexpected cut size" $ cutSize h p <= cut
 
 
@@ -165,9 +166,9 @@ fmRandomPermutation = do
 fmMatch :: IO ()
 fmMatch = do
   (v, e) <- arbitraryHypergraph 10000
-  clustering <- nonDeterministic $ do
+  (clustering, _) <- nonDeterministic $ do
       u <- randomPermutation $ length v
-      FM.st $ match (v, e) matchingRatio u
+      FM.st $ match (v, e) mempty matchingRatio u
 
   assertEqual "length does not match" (length v) (sum $ size <$> clustering)
   assertBool "elements do not match" $ foldMap id clustering == fromAscList [0 .. length v - 1]
