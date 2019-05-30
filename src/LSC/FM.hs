@@ -240,7 +240,7 @@ fmMultiLevel (v, e) lock t r = do
         modifySTRef' i succ
 
         -- interim clustering
-        (pk, lck) <- match hi lock r u
+        (pk, lk) <- match hi lock r u
 
         -- interim hypergraph
         hs <- induce hi pk
@@ -248,15 +248,15 @@ fmMultiLevel (v, e) lock t r = do
         j <- readSTRef i
         write clusterings j pk
         write hypergraphs j hs
-        write locks j lck
+        write locks j lk
 
 
     -- number of levels
     m <- st $ readSTRef i
 
-    hi <- read hypergraphs m
-    li <- read locks m
-    write partitioning m =<< bipartition hi li =<< bipartitionRandom hi li
+    by <- read hypergraphs m
+    lk <- read locks m
+    write partitioning m =<< bipartition by lk =<< bipartitionRandom by lk
 
     for_ (reverse [0 .. pred m]) $ \ j -> do
         pk <- read clusterings  $ succ j

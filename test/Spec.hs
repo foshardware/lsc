@@ -37,7 +37,11 @@ import LSC.KGGGP as KGGGP
 
 
 main :: IO ()
-main = defaultMain $ testGroup "LSC"
+main = defaultMain lsc
+
+
+lsc :: TestTree
+lsc = testGroup "LSC"
   [ gggp
   , fm
   , concurrency
@@ -53,6 +57,61 @@ gggp = testGroup "KGGGP"
   ]
 
 
+
+fm :: TestTree
+fm = testGroup "FM"
+  [ testCase "Input routine" fmInputRoutine
+  , testCase "Deterministic" fmDeterministic
+  , testCase "Balance criterion" fmBalanceCriterion
+  , fmML
+  , fmLocks
+  ]
+
+
+
+fmML :: TestTree
+fmML = testGroup "Multi level"
+  [ testCase "Random permutation" fmRandomPermutation
+  , testCase "Match" fmMatch
+  , testCase "Rebalance" fmRebalance
+  , fmRealWorld
+  ]
+
+fmRealWorld :: TestTree
+fmRealWorld = testGroup "Real world instances"
+  [ testCase "queue_1.blif"     $ fmMulti   7 =<< stToIO queue_1Hypergraph
+  ]
+
+
+fmLocks :: TestTree
+fmLocks = testGroup "Locks"
+  [ testCase "Random bipartition" fmRandomPartition
+  ]
+
+
+
+concurrency :: TestTree
+concurrency = testGroup "Concurrency" $
+  [ testCase "Dual core" $ dualCore n
+  | n <- take 4 $ drop 2 $ iterate (`shiftR` 1) (shiftL 1 20)
+  ] ++
+  [ testCase "Quad core" $ quadCore n
+  | n <- take 4 $ drop 2 $ iterate (`shiftR` 1) (shiftL 1 20)
+  ] ++
+  [ testCase "Stream processor" $ stream n
+  | n <- take 4 $ drop 2 $ iterate (`shiftR` 1) (shiftL 1 20)
+  ] ++
+  [ testCase "Remote procedure" $ remoteProcess n
+  | n <- take 4 $ drop 2 $ iterate (`shiftR` 1) (shiftL 1 20)
+  ] ++
+  [ testCase "Race condition" $ raceCondition n
+  | n <- take 4 $ drop 2 $ iterate (`shiftR` 1) (shiftL 1 20)
+  ]
+
+
+
+-- | KGGGP
+-- 
 kgggpInsertGain :: IO ()
 kgggpInsertGain = do
 
@@ -113,41 +172,11 @@ kgggpEmptyGains = do
 
 
 
-
-
-fm :: TestTree
-fm = testGroup "FM"
-  [ testCase "Input routine" fmInputRoutine
-  , testCase "Deterministic" fmDeterministic
-  , testCase "Balance criterion" fmBalanceCriterion
-  , fmML
-  , fmLocks
-  ]
-
-
-fmLocks :: TestTree
-fmLocks = testGroup "Locks"
-  [ testCase "Random bipartition" fmRandomPartition
-  ]
+-- | FM
+-- 
 
 fmRandomPartition :: IO ()
 fmRandomPartition = pure ()
-
-
-
-fmML :: TestTree
-fmML = testGroup "Multi level"
-  [ testCase "Random permutation" fmRandomPermutation
-  , testCase "Match" fmMatch
-  , testCase "Rebalance" fmRebalance
-  , fmRealWorld
-  ] 
-
-fmRealWorld :: TestTree
-fmRealWorld = testGroup "Real world instances"
-  [ testCase "queue_1.blif"     $ fmMulti   7 =<< stToIO queue_1Hypergraph
-  ]
-
 
 
 fmMulti :: Int -> (V, E) -> IO ()
@@ -260,27 +289,8 @@ queue_1Blif = decodeUtf8 $(embedFile "sample/queue_1.blif")
 
 
 
-
-
-concurrency :: TestTree
-concurrency = testGroup "Concurrency" $
-  [ testCase "Dual core" $ dualCore n
-  | n <- take 4 $ drop 2 $ iterate (`shiftR` 1) (shiftL 1 20)
-  ] ++
-  [ testCase "Quad core" $ quadCore n
-  | n <- take 4 $ drop 2 $ iterate (`shiftR` 1) (shiftL 1 20)
-  ] ++
-  [ testCase "Stream processor" $ stream n
-  | n <- take 4 $ drop 2 $ iterate (`shiftR` 1) (shiftL 1 20)
-  ] ++
-  [ testCase "Remote procedure" $ remoteProcess n
-  | n <- take 4 $ drop 2 $ iterate (`shiftR` 1) (shiftL 1 20)
-  ] ++
-  [ testCase "Race condition" $ raceCondition n
-  | n <- take 4 $ drop 2 $ iterate (`shiftR` 1) (shiftL 1 20)
-  ]
-
-
+-- | Concurrency
+--
 dualCore :: Int -> IO ()
 dualCore n = do
   counter <- newMVar 0
