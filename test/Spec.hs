@@ -118,14 +118,25 @@ kgggpEmptyGains = do
 fm :: TestTree
 fm = testGroup "FM"
   [ testCase "Input routine" fmInputRoutine
-  , testCase "Deterministic FM" fmDeterministic
+  , testCase "Deterministic" fmDeterministic
   , testCase "Balance criterion" fmBalanceCriterion
   , fmML
+  , fmLocks
   ]
 
 
+fmLocks :: TestTree
+fmLocks = testGroup "Locks"
+  [ testCase "Random bipartition" fmRandomPartition
+  ]
+
+fmRandomPartition :: IO ()
+fmRandomPartition = pure ()
+
+
+
 fmML :: TestTree
-fmML = testGroup "FM Multi Level"
+fmML = testGroup "Multi level"
   [ testCase "Random permutation" fmRandomPermutation
   , testCase "Match" fmMatch
   , testCase "Rebalance" fmRebalance
@@ -133,9 +144,8 @@ fmML = testGroup "FM Multi Level"
   ] 
 
 fmRealWorld :: TestTree
-fmRealWorld = testGroup "Real World Instances"
-  [ testCase "queue_1.blif"   $ fmMulti 7 =<< stToIO queue_1Hypergraph
-  , testCase "picorv32.blif"  $ fmMulti 1000 =<< stToIO picorv32Hypergraph
+fmRealWorld = testGroup "Real world instances"
+  [ testCase "queue_1.blif"     $ fmMulti   7 =<< stToIO queue_1Hypergraph
   ]
 
 
@@ -182,7 +192,9 @@ fmRebalance = do
   pivot <- generate $ choose (0, v)
   (p, q) <- nonDeterministic $ do
       u <- randomPermutation v
-      let p = Bisect (fromList [u!i | i <- [0 .. pivot-1]]) (fromList [u!i | i <- [pivot .. v-1]])
+      let p = Bisect
+            (fromList [u!i | i <- [0 .. pivot-1]])
+            (fromList [u!i | i <- [pivot .. v-1]])
       (p, ) <$> rebalance p
   let it = show (bisectBalance p, bisectBalance q)
   assertBool it $ bisectBalance q % v < 5%8
@@ -242,12 +254,6 @@ arbitraryHypergraph n = do
 queue_1Hypergraph :: ST s (V, E)
 queue_1Hypergraph = either (fail . show) blifHypergraph $ parseBLIF queue_1Blif
 
-picorv32Hypergraph :: ST s (V, E)
-picorv32Hypergraph = either (fail . show) blifHypergraph $ parseBLIF picorv32Blif
-
-
-picorv32Blif :: Text
-picorv32Blif = decodeUtf8 $(embedFile "sample/picorv32.blif")
 
 queue_1Blif :: Text
 queue_1Blif = decodeUtf8 $(embedFile "sample/queue_1.blif")

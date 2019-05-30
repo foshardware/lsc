@@ -363,7 +363,7 @@ match (v, e) lock r u = do
       whenM (yet uj) $ do
 
           modify clustering (insert uj) =<< readSTRef k
-          write sights uj True
+          matched uj
 
           let neighbours = elems $ foldMap (e!) (elems $ v!uj)
 
@@ -382,13 +382,15 @@ match (v, e) lock r u = do
           exists <- snd <$> readSTRef suchaw
 
           for_ exists $ \ w -> do
-              when (member w (view lft lock) || member uj (view lft lock))
-                  $ modifySTRef clusteredLock . ((lft %~) . insert) =<< readSTRef k
-              when (member w (view rgt lock) || member uj (view rgt lock))
-                  $ modifySTRef clusteredLock . ((rgt %~) . insert) =<< readSTRef k
               modify clustering (insert w) =<< readSTRef k
               matched w
               modifySTRef' nMatch (+2)
+
+              when (member w (view lft lock) || member uj (view lft lock))
+                  $ modifySTRef clusteredLock . over lft . insert =<< readSTRef k
+              when (member w (view rgt lock) || member uj (view rgt lock))
+                  $ modifySTRef clusteredLock . over rgt . insert =<< readSTRef k
+
 
           -- reset connectivity
           for_ neighbours $ modify connectivity (const 0)
@@ -405,6 +407,11 @@ match (v, e) lock r u = do
           modify clustering (insert uj) =<< readSTRef k
           matched uj
           modifySTRef' k succ
+
+          when (member uj (view lft lock))
+              $ modifySTRef clusteredLock . over lft . insert =<< readSTRef k
+          when (member uj (view rgt lock))
+              $ modifySTRef clusteredLock . over rgt . insert =<< readSTRef k
 
       modifySTRef' j succ
 
