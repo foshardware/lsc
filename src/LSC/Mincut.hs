@@ -15,14 +15,15 @@ import Data.Foldable hiding (concat)
 import Data.Function
 import Data.List (permutations)
 import Data.Maybe
-import Data.IntSet (size, elems, fromAscList)
+import Data.IntSet (size, elems)
 import Data.Map (Map, assocs)
 import qualified Data.Map as Map
 import qualified Data.IntMap as IntMap
 import Data.Semigroup
 import Data.Matrix hiding (toList, (!))
-import Data.Vector (Vector, filter, fromListN, (!))
-import Prelude hiding (filter, concat, lookup, take, read, unzip)
+import Data.Vector (Vector, fromListN, (!))
+import qualified Data.Vector as Vector
+import Prelude hiding ( concat, lookup, take, read, unzip)
 
 import LSC.Improve
 import LSC.FM as FM
@@ -64,7 +65,7 @@ placeQuad top = do
     let std = (20000, 20000)
 
     estimationsMatrix =<< initialMatrix top
-    m <- placeMatrix =<< initialMatrix top
+    m <- placeMatrix [N, W, S, E] =<< initialMatrix top
 
     estimationsMatrix m
 
@@ -152,9 +153,9 @@ matrixPermutations m
 
 
 
-placeMatrix :: Matrix Gate -> LSC (Matrix Gate)
-placeMatrix m | nrows m * ncols m <= 4 = pure m
-placeMatrix m = do
+placeMatrix :: [Orientation] -> Matrix Gate -> LSC (Matrix Gate)
+placeMatrix _ m | nrows m * ncols m <= 4 = pure m
+placeMatrix o m = do
 
     let v = flattenGateMatrix m
         e = rebuildEdges $ set number `imap` v
@@ -166,9 +167,9 @@ placeMatrix m = do
 
     (q1, q2, q3, q4) <- liftIO $ nonDeterministic $ do
 
-        hy <- st $ hypergraph (set number `imap` v) e
-        Bisect q12 q34 <- improve it (flip compare `on` cutSize hy) (bisect hy) $ \ _ -> do
-            refit hy (2*w*h) <$> fmMultiLevel hy mempty coarseningThreshold matchingRatio
+        by <- st $ hypergraph (set number `imap` v) e
+        Bisect q12 q34 <- improve it (flip compare `on` cutSize by) (bisect by) $ \ _ -> do
+            refit by (2*w*h) <$> fmMultiLevel by mempty coarseningThreshold matchingRatio
 
         let v12 = fromListN (size q12) $ (v!) <$> elems q12
             v34 = fromListN (size q34) $ (v!) <$> elems q34
@@ -191,17 +192,22 @@ placeMatrix m = do
           , fromListN (size q4) ((v34!) <$> elems q4)
           )
 
-    m1 <- placeMatrix $ matrix h w $ \ (x, y) -> maybe def id $ q1 ^? ix (pred x * w + pred y)
-    m2 <- placeMatrix $ matrix h w $ \ (x, y) -> maybe def id $ q2 ^? ix (pred x * w + pred y)
-    m3 <- placeMatrix $ matrix h w $ \ (x, y) -> maybe def id $ q3 ^? ix (pred x * w + pred y)
-    m4 <- placeMatrix $ matrix h w $ \ (x, y) -> maybe def id $ q4 ^? ix (pred x * w + pred y)
+    m1 <- placeMatrix
+        (filter (`elem` [N, E]) o)
+        $ matrix h w $ \ (x, y) -> maybe def id $ q1 ^? ix (pred x * w + pred y)
+    m2 <- placeMatrix
+        (filter (`elem` [N, W]) o)
+        $ matrix h w $ \ (x, y) -> maybe def id $ q2 ^? ix (pred x * w + pred y)
+    m3 <- placeMatrix
+        (filter (`elem` [S, W]) o)
+        $ matrix h w $ \ (x, y) -> maybe def id $ q3 ^? ix (pred x * w + pred y)
+    m4 <- placeMatrix
+        (filter (`elem` [S, E]) o)
+        $ matrix h w $ \ (x, y) -> maybe def id $ q4 ^? ix (pred x * w + pred y)
 
     pure $ joinBlocks (m2, m1, m3, m4)
 
-    where
-        bisect by = Bisect
-            (fromAscList [x | x <- [0 .. length (fst by) - 1], even x])
-            (fromAscList [x | x <- [0 .. length (fst by) - 1], odd x])
+    where bisect by = bipartitionEven by mempty
 
 
 
@@ -224,7 +230,7 @@ inline n top
   , not $ null subs
   , sub <- maximumBy (compare `on` length . view pins . view supercell) subs
   = top &~ do
-      gates  %= filter (\ x -> x ^. identifier /= sub ^. identifier)
+      gates  %= Vector.filter (\ x -> x ^. identifier /= sub ^. identifier)
       gates <>= sub ^. gates
     where predicate g = length (view gates g) + length (view gates top) <= succ n
 inline _ top = top
