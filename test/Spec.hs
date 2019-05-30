@@ -215,7 +215,7 @@ fmBalanceCriterion = do
 fmDeterministic :: IO ()
 fmDeterministic = do
   h <- stToIO queue_1Hypergraph
-  p <- stToIO $ evalFM $ fiducciaMattheyses h mempty
+  p <- stToIO $ evalFM $ bipartition h mempty $ bipartitionEven h mempty
   assertEqual "cut size" 9 $ cutSize h p
 
 

@@ -423,16 +423,18 @@ match (v, e) lock r u = do
 
 bipartitionEven :: (V, E) -> Lock -> Bipartitioning
 bipartitionEven (v, _) lock = Bisect
-    (fromDistinctAscList [x | x <- [0 .. length v - 1], even x])
-    (fromDistinctAscList [x | x <- [0 .. length v - 1], odd x])
+    (fromAscList [x | x <- [0 .. length v - 1], even x] \\ view rgt lock <> view lft lock)
+    (fromAscList [x | x <- [0 .. length v - 1],  odd x] \\ view lft lock <> view rgt lock)
 
 
 
 bipartitionRandom :: (V, E) -> Lock -> FM s Bipartitioning
 bipartitionRandom (v, _) lock = do
-    u <- randomPermutation $ length v
-    let (p, q) = splitAt (length v `div` 2) (toList u)
-    pure $ Bisect (fromList p) (fromList q)
+  u <- randomPermutation $ length v
+  let (p, q) = splitAt (length v `div` 2) (toList u)
+  pure $ Bisect
+    (fromList p \\ view rgt lock <> view lft lock)
+    (fromList q \\ view lft lock <> view rgt lock)
 
 
 
