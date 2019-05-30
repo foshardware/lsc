@@ -88,9 +88,8 @@ placeQuad top = do
             , g ^. number >= 0
             ]
 
-
     pure $ top &~ do
-        gates %= fmap geo
+        gates .= fmap geo (flattenGateMatrix m)
 
 
 

@@ -188,5 +188,10 @@ scaleDown n (Circuit2D nodes edges, markers) = (Circuit2D
 
 
 renderText :: Text -> Svg
-renderText = fromString . Text.unpack
+renderText string
+    | Text.length string > 8
+    -- = renderText $ Text.take 5 string <> "..."
+    = renderText $ ".." <> Text.drop (Text.length string - 6) string
+renderText string
+    = fromString $ Text.unpack string
 
