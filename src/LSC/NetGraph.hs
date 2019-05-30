@@ -22,7 +22,7 @@ import Data.Maybe
 import Data.Serialize.Put
 import Data.Text (unpack)
 import Data.Text.Encoding
-import Data.Matrix (Matrix, nrows, ncols, getElem, getRow)
+import Data.Matrix (Matrix, nrows, ncols, getElem, getRow, getMatrixAsVector)
 import Data.Vector (Vector, imap, filter)
 import Data.Vector.Unboxed (unsafeFreeze)
 import Data.Vector.Unboxed.Mutable (new, write)
@@ -122,7 +122,7 @@ markEdges top =
 
 
 flattenGateMatrix :: Matrix Gate -> Vector Gate
-flattenGateMatrix m = filter (\ g -> g ^. number >= 0) $ mconcat [ getRow i m | i <- [1 .. nrows m] ]
+flattenGateMatrix = filter (\ g -> g ^. number >= 0) . getMatrixAsVector
 
 
 

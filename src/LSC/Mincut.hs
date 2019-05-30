@@ -13,6 +13,7 @@ import Control.Monad.State (execStateT, get, put)
 import Data.Default
 import Data.Foldable hiding (concat)
 import Data.Function
+import Data.List (permutations)
 import Data.Maybe
 import Data.IntSet (size, elems, fromAscList)
 import Data.Map (Map, assocs)
@@ -63,7 +64,6 @@ placeQuad top = do
     let std = (20000, 20000)
 
     estimationsMatrix =<< initialMatrix top
-
     m <- placeMatrix =<< initialMatrix top
 
     estimationsMatrix m
@@ -74,11 +74,10 @@ placeQuad top = do
             geometry .= toList (maybe (filler g) (pos g) $ cells ^? ix (g ^. identifier) . dims)
 
         pos g (w, h) = region ^? ix (g ^. number)
-            <&> \ (x, y) -> Layered x y (x+w) (y+h) [Metal2, Metal3] N
+            <&> \ (x, y) -> Layered x y (x + w) (y + h) [Metal2, Metal3] N
 
         filler g = region ^? ix (g ^. number)
             <&> \ (x, y) -> Layered x y (x + fst std) (y + snd std) [Metal1] N
-
 
         region = IntMap.fromList
             [ (g ^. number, (fromIntegral j * (w + div w 2), fromIntegral i * (h + div h 2)))
@@ -111,11 +110,46 @@ initialMatrix top = do
 
     let vector = top ^. gates <> filler
 
-    let (w, h) : _ = dropWhile (\ (x, y) -> x * y < length vector) $ iterate (bimap (2*) (2*)) (1, 1)
+    let (w, h) : _ = dropWhile (\ (x, y) -> x * y < length vector)
+                   $ iterate (bimap (2*) (2*)) (1, 1)
         result = matrix w h $ \ (x, y) -> maybe def id $ vector ^? ix (pred x * w + pred y)
 
     pure result
 
+
+
+rotateBins :: Matrix Gate -> Matrix Gate
+rotateBins m | nrows m * ncols m <= 4 = m
+rotateBins m = ala Endo foldMap
+    [ setBin i j
+    $ minimumBy (compare `on` subHpwl m)
+    $ matrixPermutations
+    $ submatrix i (succ i) j (succ j) m
+    | i <- [1 .. nrows m - 2]
+    , j <- [1 .. ncols m - 2]
+    , odd i, odd j
+    ] m
+
+
+
+subHpwl :: Matrix Gate -> Matrix Gate -> Int
+subHpwl m n = sum $ hpwlMatrix m <$> rebuildEdges (getMatrixAsVector n)
+
+
+
+setBin :: Int -> Int -> Matrix a -> Matrix a -> Matrix a
+setBin i j n = ala Endo foldMap
+    [ setElem (getElem x y n) (i + x - 1, j + y - 1)
+    | x <- [1 .. nrows n]
+    , y <- [1 .. ncols n]
+    ]
+
+
+
+
+matrixPermutations :: Matrix a -> [Matrix a]
+matrixPermutations m
+  = fromList (nrows m) (ncols m) <$> (permutations $ toList $ getMatrixAsVector m)
 
 
 
