@@ -441,13 +441,13 @@ bipartitionRandom (v, _) lock = do
 bipartition :: (V, E) -> Lock -> Bipartitioning -> FM s Bipartitioning
 bipartition (v, e) lock p = do
 
-  update freeCells $ const $ fromDistinctAscList [0 .. length v - 1] \\ view (lft <> rgt) lock
+  update freeCells $ const $ fromAscList [0 .. length v - 1] \\ view (lft <> rgt) lock
   update moves $ const mempty
 
   initialGains (v, e) p
   processCell (v, e) p
 
-  (g, q) <- computeG p
+  (g, q) <- computeG p . reverse <$> value moves
 
   if g <= 0
     then pure p
@@ -455,10 +455,8 @@ bipartition (v, e) lock p = do
 
 
 
-computeG :: Bipartitioning -> FM s (Int, Bipartitioning)
-computeG p0 = do
-  (_, g, h) <- foldl' accum (0, 0, p0) . reverse <$> value moves
-  pure (g, h)
+computeG :: Foldable f => Bipartitioning -> f (Move, Bipartitioning) -> (Int, Bipartitioning)
+computeG p0 ms = let (_, g, h) = foldl' accum (0, 0, p0) ms in (g, h)
   where
     accum :: (Int, Int, Bipartitioning) -> (Move, Bipartitioning) -> (Int, Int, Bipartitioning)
     accum (gmax, g, _) (Move gc _, q)
