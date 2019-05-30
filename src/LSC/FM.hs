@@ -67,6 +67,9 @@ data Move
   deriving Show
 
 
+type Lock = IntSet
+
+
 
 data Bipartitioning = Bisect !IntSet !IntSet
 
@@ -230,12 +233,12 @@ fmMultiLevel (v, e) t r = do
     hi <- read hypergraphs m
     write partitioning m =<< fmPartition hi Nothing
 
-    for_ (reverse [0 .. m - 1]) $ \ j -> do
+    for_ (reverse [0 .. pred m]) $ \ j -> do
         pk <- read clusterings  $ succ j
         p  <- read partitioning $ succ j
 
-        q <- rebalance =<< project pk p
         h <- read hypergraphs j
+        q <- rebalance =<< project pk p
 
         write partitioning j =<< fmPartition h (Just q)
 
@@ -361,7 +364,7 @@ match (v, e) r u = do
 
       modifySTRef' j succ
 
-  whileM_ ((<) <$> readSTRef j <*> pure (length v))
+  whileM_ ((< length v) <$> readSTRef j)
     $ do
 
       uj <- (u!) <$> readSTRef j
@@ -377,25 +380,25 @@ match (v, e) r u = do
   where
 
       -- cost centre!
-      conn x y = sum [ 1 % size (e!f) | f <- elems $ intersection (v!x) (v!y) ]
-
+      conn i j = sum [ 1 % size (e!x) | x <- elems $ intersection (v'!i) (v'!j) ]
+      v' = S.filter (\x -> size (e!x) <= 10) <$> v
 
 
 
 fmPartition :: (V, E) -> Maybe Bipartitioning -> FM s Bipartitioning
-fmPartition (v, e) (Just p) = bipartition (v, e) Nothing p
+fmPartition (v, e) (Just p) = bipartition (v, e) mempty p
 fmPartition (v, e)  Nothing = do
   u <- randomPermutation $ length v
   let (p, q) = splitAt (length v `div` 2) (toList u)
-  bipartition (v, e) Nothing $ Bisect (fromList p) (fromList q)
+  bipartition (v, e) mempty $ Bisect (fromList p) (fromList q)
 
 
 
-fiducciaMattheyses :: (V, E) -> Maybe IntSet -> FM s Bipartitioning
-fiducciaMattheyses (v, e) free = do
+fiducciaMattheyses :: (V, E) -> Lock -> FM s Bipartitioning
+fiducciaMattheyses (v, e) lock = do
 
-  bipartition (v, e) free
-      $ Bisect (fromAscList [x | x <- base, part x]) (fromAscList [x | x <- base, not $ part x])
+  bipartition (v, e) lock
+    $ Bisect (fromAscList [x | x <- base, part x]) (fromAscList [x | x <- base, not $ part x])
 
   where
     base = [0 .. length v - 1]
@@ -405,10 +408,10 @@ fiducciaMattheyses (v, e) free = do
 
 
 
-bipartition :: (V, E) -> Maybe IntSet -> Bipartitioning -> FM s Bipartitioning
-bipartition (v, e) free p = do
+bipartition :: (V, E) -> Lock -> Bipartitioning -> FM s Bipartitioning
+bipartition (v, e) lock p = do
 
-  update freeCells $ const $ maybe (fromAscList [0 .. length v - 1]) id free
+  update freeCells $ const $ fromDistinctAscList [0 .. length v - 1] \\ lock
   update moves $ const mempty
 
   initialGains (v, e) p
@@ -418,7 +421,7 @@ bipartition (v, e) free p = do
 
   if g <= 0
     then pure p
-    else bipartition (v, e) free q
+    else bipartition (v, e) lock q
 
 
 
@@ -429,14 +432,14 @@ computeG p0 = do
   where
     accum :: (Int, Int, Bipartitioning) -> (Move, Bipartitioning) -> (Int, Int, Bipartitioning)
     accum (gmax, g, _) (Move gc _, q)
-      | g + gc > gmax
-      = (g + gc, g + gc, q)
+        | g + gc > gmax
+        = (g + gc, g + gc, q)
     accum (gmax, g, p) (Move gc _, q)
-      | g + gc == gmax
-      , bisectBalance p > bisectBalance q
-      = (gmax, g + gc, q)
+        | g + gc == gmax
+        , bisectBalance p > bisectBalance q
+        = (gmax, g + gc, q)
     accum (gmax, g, p) (Move gc _, _)
-      = (gmax, g + gc, p)
+        = (gmax, g + gc, p)
 
 
 
