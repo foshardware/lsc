@@ -67,14 +67,31 @@ data Move
   deriving Show
 
 
-type Lock = IntSet
+data Lock = Lock
+  { _lft :: !IntSet
+  , _rgt :: !IntSet
+  }
+
+makeLenses ''Lock
+
+
+instance Semigroup Lock where
+  a <> b = a &~ do
+    lft <>= view lft b
+    rgt <>= view rgt b
+
+instance Monoid Lock where
+  mempty = Lock mempty mempty
+  mappend = (<>)
 
 
 
 data Bipartitioning = Bisect !IntSet !IntSet
 
+
 instance Eq Bipartitioning where
   Bisect a _ == Bisect b _ = a == b
+
 
 instance Semigroup Bipartitioning where
   Bisect a b <> Bisect c d = Bisect (a <> c) (b <> d)
@@ -83,12 +100,15 @@ instance Monoid Bipartitioning where
   mempty = Bisect mempty mempty
   mappend = (<>)
 
+
 instance Show Bipartitioning where
   show (Bisect a b) = "<"++ show a ++", "++ show b ++">"
+
 
 move :: Int -> Bipartitioning -> Bipartitioning
 move c (Bisect a b) | member c a = Bisect (delete c a) (insert c b)
 move c (Bisect a b) = Bisect (insert c a) (delete c b)
+
 
 bisectBalance :: Bipartitioning -> Int
 bisectBalance (Bisect a b) = abs $ size a - size b
@@ -98,6 +118,7 @@ cutSize :: (V, E) -> Bipartitioning -> Int
 cutSize (v, _) (Bisect p q) = size $ intersection
     (foldMap (v!) $ elems p)
     (foldMap (v!) $ elems q)
+
 
 
 type Clustering = Vector IntSet
@@ -234,7 +255,8 @@ fmMultiLevel (v, e) lock t r = do
     m <- st $ readSTRef i
 
     hi <- read hypergraphs m
-    write partitioning m =<< fmPartition hi lock Nothing
+    li <- read locks m
+    write partitioning m =<< bipartition hi li =<< bipartitionRandom hi li
 
     for_ (reverse [0 .. pred m]) $ \ j -> do
         pk <- read clusterings  $ succ j
@@ -244,7 +266,7 @@ fmMultiLevel (v, e) lock t r = do
         h <- read hypergraphs j
         q <- rebalance =<< project pk p
 
-        write partitioning j =<< fmPartition h l (Just q)
+        write partitioning j =<< bipartition h l q
 
     read partitioning 0
 
@@ -347,7 +369,7 @@ match (v, e) lock r u = do
 
           for_ neighbours $ \ w ->
             whenM (yet w)
-              $ unless (member w lock && member uj lock)
+              $ unless (member w (view (lft <> rgt) lock) && member uj (view (lft <> rgt) lock))
                 $ write connectivity w $ conn w uj
 
           -- find maximum connectivity
@@ -360,8 +382,10 @@ match (v, e) lock r u = do
           exists <- snd <$> readSTRef suchaw
 
           for_ exists $ \ w -> do
-              when (member w lock || member uj lock)
-                  $ modifySTRef clusteredLock . insert =<< readSTRef k
+              when (member w (view lft lock) || member uj (view lft lock))
+                  $ modifySTRef clusteredLock . ((lft %~) . insert) =<< readSTRef k
+              when (member w (view rgt lock) || member uj (view rgt lock))
+                  $ modifySTRef clusteredLock . ((rgt %~) . insert) =<< readSTRef k
               modify clustering (insert w) =<< readSTRef k
               matched w
               modifySTRef' nMatch (+2)
@@ -396,33 +420,26 @@ match (v, e) lock r u = do
 
 
 
-fmPartition :: (V, E) -> Lock -> Maybe Bipartitioning -> FM s Bipartitioning
-fmPartition (v, e) lock (Just p) = bipartition (v, e) lock p
-fmPartition (v, e) lock  Nothing = do
-  u <- randomPermutation $ length v
-  let (p, q) = splitAt (length v `div` 2) (toList u)
-  bipartition (v, e) lock $ Bisect (fromList p) (fromList q)
+
+bipartitionEven :: (V, E) -> Lock -> Bipartitioning
+bipartitionEven (v, _) lock = Bisect
+    (fromDistinctAscList [x | x <- [0 .. length v - 1], even x])
+    (fromDistinctAscList [x | x <- [0 .. length v - 1], odd x])
 
 
 
-fiducciaMattheyses :: (V, E) -> Lock -> FM s Bipartitioning
-fiducciaMattheyses (v, e) lock = do
-
-  bipartition (v, e) lock
-    $ Bisect (fromAscList [x | x <- base, part x]) (fromAscList [x | x <- base, not $ part x])
-
-  where
-    base = [0 .. length v - 1]
-    part = if length v < 1000
-      then even
-      else (<= length v `div` 2)
+bipartitionRandom :: (V, E) -> Lock -> FM s Bipartitioning
+bipartitionRandom (v, _) lock = do
+    u <- randomPermutation $ length v
+    let (p, q) = splitAt (length v `div` 2) (toList u)
+    pure $ Bisect (fromList p) (fromList q)
 
 
 
 bipartition :: (V, E) -> Lock -> Bipartitioning -> FM s Bipartitioning
 bipartition (v, e) lock p = do
 
-  update freeCells $ const $ fromDistinctAscList [0 .. length v - 1] \\ lock
+  update freeCells $ const $ fromDistinctAscList [0 .. length v - 1] \\ view (lft <> rgt) lock
   update moves $ const mempty
 
   initialGains (v, e) p
