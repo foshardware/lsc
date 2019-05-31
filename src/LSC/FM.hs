@@ -85,6 +85,12 @@ instance Monoid Lock where
   mappend = (<>)
 
 
+lockSwap :: Lock -> Lock
+lockSwap lock = lock &~ do
+    lft .= view rgt lock
+    rgt .= view lft lock
+
+
 
 data Bipartitioning = Bisect !IntSet !IntSet
 
@@ -276,28 +282,31 @@ fmMultiLevel (v, e) lock t r = do
 
 
 
-refit :: (V, E) -> Int -> Bipartitioning -> Bipartitioning
-refit _ k (Bisect p q)
+refit :: (V, E) -> Int -> Lock -> Bipartitioning -> Bipartitioning
+refit _ k _ (Bisect p q)
     | size p <= k
     , size q <= k
     = Bisect p q
-refit (v, e) k (Bisect p q)
+refit (v, e) k _ (Bisect p q)
     | size p > k
     , size q > k
-    =
-    (Bisect p q) -- $ "impossible size: "++ show (size p, size q, k, p, q, length v, length e)
-refit _ _ (Bisect p q)
+    = error
+    $ "impossible size: "++ show (size p, size q, k, p, q, length v, length e)
+refit _ _ _ (Bisect p q)
     | size p == size q
     = Bisect p q
-refit (v, e) k (Bisect p q)
+refit (v, e) k lock (Bisect p q)
     | size p < size q
-    = bisectSwap $ refit (v, e) k $ bisectSwap (Bisect p q) 
-refit (v, e) k (Bisect p q) = runST $ do
+    = bisectSwap $ refit (v, e) k (lockSwap lock) (bisectSwap $ Bisect p q) 
+refit (v, e) k lock (Bisect p q) = runST $ do
 
     let f x = size . intersection x . foldMap (e!) . elems
         len = size p - k
 
-    u <- thaw $ V.filter (\ (i, _) -> member i p) $ imap (,) v
+    u <- thaw
+        $ (<> imap (,) v)
+        $ V.filter (\ (i, _) -> member i p && notMember i (lock ^. lft))
+        $ imap (,) v
     Intro.partialSortBy (compare `on` \ (_, x) -> f p x - f q x) u len
     (iv, _) <- unzip . take len <$> unsafeFreeze u
 
