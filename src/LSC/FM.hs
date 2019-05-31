@@ -30,9 +30,8 @@ import Data.Vector
   , freeze, thaw
   , take, generate
   , (!), indexed, unzip
-  , imap
+  , imap, unstablePartition
   )
-import qualified Data.Vector as V
 import Data.Vector.Mutable (MVector, read, write, modify, replicate, unsafeSwap, slice)
 import qualified Data.Vector.Algorithms.Intro as Intro
 import Prelude hiding (replicate, length, read, lookup, take, drop, head, unzip)
@@ -287,11 +286,10 @@ refit _ k _ (Bisect p q)
     | size p <= k
     , size q <= k
     = Bisect p q
-refit (v, e) k _ (Bisect p q)
-    | size p > k
-    , size q > k
-    = error
-    $ "impossible size: "++ show (size p, size q, k, p, q, length v, length e)
+refit (v, e) k lock (Bisect p q)
+    | size p + size q > 2 * k
+    = Bisect p q -- error
+    -- $ "impossible size: "++ show (lock, size p, size q, k, p, q, length v, length e)
 refit _ _ _ (Bisect p q)
     | size p == size q
     = Bisect p q
@@ -304,11 +302,15 @@ refit (v, e) k lock (Bisect p q) = runST $ do
         len = size p - k
 
     u <- thaw
-        $ (<> imap (,) v)
-        $ V.filter (\ (i, _) -> member i p && notMember i (lock ^. lft))
+        $ uncurry (<>)
+        $ unstablePartition (\ (i, _) -> notMember i $ lock ^. lft)
+        $ fst 
+        $ unstablePartition (\ (i, _) -> member i p)
         $ imap (,) v
     Intro.partialSortBy (compare `on` \ (_, x) -> f p x - f q x) u len
     (iv, _) <- unzip . take len <$> unsafeFreeze u
+
+    when (length iv < len) $ error $ show $ (iv, len)
 
     pure $ Bisect (ala Endo foldMap (delete <$> iv) p) (ala Endo foldMap (insert <$> iv) q)
 

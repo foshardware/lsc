@@ -177,6 +177,8 @@ placeMatrix o m = do
         Bisect q21 q34 <- improve it (flip compare `on` cutSize by) (bisect by ly) $ \ _ ->
             refit by (2*w*h) ly <$> fmMultiLevel by ly coarseningThreshold matchingRatio
 
+        -- when (size q21 > 2*w*h || size q34 > 2*w*h) $ error $ show (q21, q34, ly, size q21, size q34, length v, 2*w*h)
+
         let v21 = fromListN (size q21) $ (v!) <$> elems q21
             v34 = fromListN (size q34) $ (v!) <$> elems q34
         let e21 = rebuildEdges $ set number `imap` v21
