@@ -13,17 +13,17 @@ import Control.Monad.State (execStateT, get, put)
 import Data.Default
 import Data.Foldable hiding (concat)
 import Data.Function
-import Data.List (permutations)
+import Data.List (permutations, intersect)
 import Data.Maybe
-import Data.IntSet (size, elems)
+import Data.IntSet (singleton, size, elems)
 import Data.Map (Map, assocs)
 import qualified Data.Map as Map
 import qualified Data.IntMap as IntMap
 import Data.Semigroup
 import Data.Matrix hiding (toList, (!))
 import Data.Vector (Vector, fromListN, (!))
-import qualified Data.Vector as Vector
-import Prelude hiding ( concat, lookup, take, read, unzip)
+import qualified Data.Vector as V
+import Prelude hiding (concat, lookup, take, read, unzip)
 
 import LSC.Improve
 import LSC.FM as FM
@@ -72,12 +72,12 @@ placeQuad top = do
     cells <- view stdCells <$> technology
 
     let geo g = g &~ do
-            geometry .= toList (maybe (filler g) (pos g) $ cells ^? ix (g ^. identifier) . dims)
+            geometry .= toList (maybe (padCell g) (gate g) $ cells ^? ix (g ^. identifier) . dims)
 
-        pos g (w, h) = region ^? ix (g ^. number)
+        gate g (w, h) = region ^? ix (g ^. number)
             <&> \ (x, y) -> Layered x y (x + w) (y + h) [Metal2, Metal3] N
 
-        filler g = region ^? ix (g ^. number)
+        padCell g = region ^? ix (g ^. number)
             <&> \ (x, y) -> Layered x y (x + fst std) (y + snd std) [Metal1] N
 
         region = IntMap.fromList
@@ -100,15 +100,16 @@ initialMatrix top = do
 
     let k = maximum $ top ^. gates <&> view number
 
-    let filler
+    let padCells
           = imap (set number . (k +))
+          $ fmap (set virtual True)
           $ fromListN (top ^. supercell . pins . to length)
           $ toList
           $ top ^. supercell . pins <&> \ p -> def &~ do
               identifier .= p ^. identifier
               wires .= Map.singleton (p ^. identifier) (p ^. identifier)
 
-    let vector = top ^. gates <> filler
+    let vector = top ^. gates <> padCells
 
     let (w, h) : _ = dropWhile (\ (x, y) -> x * y < length vector)
                    $ iterate (bimap (2*) (2*)) (1, 1)
@@ -167,22 +168,38 @@ placeMatrix o m = do
 
     (q1, q2, q3, q4) <- liftIO $ nonDeterministic $ do
 
+
+        let ly = lockCardinalDirection (intersect o [N, S])
+               $ V.filter (view virtual) (set number `imap` v)
+
         by <- st $ hypergraph (set number `imap` v) e
-        Bisect q12 q34 <- improve it (flip compare `on` cutSize by) (bisect by) $ \ _ -> do
-            refit by (2*w*h) <$> fmMultiLevel by mempty coarseningThreshold matchingRatio
+
+        Bisect q12 q34 <- improve it (flip compare `on` cutSize by) (bisect by ly) $ \ _ ->
+            refit by (2*w*h) <$> fmMultiLevel by ly coarseningThreshold matchingRatio
+
 
         let v12 = fromListN (size q12) $ (v!) <$> elems q12
             v34 = fromListN (size q34) $ (v!) <$> elems q34
         let e12 = rebuildEdges $ set number `imap` v12
             e34 = rebuildEdges $ set number `imap` v34
 
+
+        let l12 = lockCardinalDirection (intersect o [W, E])
+                $ V.filter (view virtual) (set number `imap` v12)
+
         h12 <- st $ hypergraph (set number `imap` v12) e12
-        Bisect q1 q2 <- improve it (flip compare `on` cutSize h12) (bisect h12) $ \ _ -> do
-            refit h12 (w*h) <$> fmMultiLevel h12 mempty coarseningThreshold matchingRatio
+
+        Bisect q2 q1 <- improve it (flip compare `on` cutSize h12) (bisect h12 l12) $ \ _ ->
+            refit h12 (w*h) <$> fmMultiLevel h12 l12 coarseningThreshold matchingRatio
+
+
+        let l34 = lockCardinalDirection (intersect o [W, E])
+                $ V.filter (view virtual) (set number `imap` v34)
 
         h34 <- st $ hypergraph (set number `imap` v34) e34
-        Bisect q3 q4 <- improve it (flip compare `on` cutSize h34) (bisect h34) $ \ _ -> do
-            refit h34 (w*h) <$> fmMultiLevel h34 mempty coarseningThreshold matchingRatio
+
+        Bisect q3 q4 <- improve it (flip compare `on` cutSize h34) (bisect h34 l34) $ \ _ ->
+            refit h34 (w*h) <$> fmMultiLevel h34 l34 coarseningThreshold matchingRatio
 
 
         pure
@@ -193,22 +210,31 @@ placeMatrix o m = do
           )
 
     m1 <- placeMatrix
-        (filter (`elem` [N, E]) o)
+        (intersect o [N, E])
         $ matrix h w $ \ (x, y) -> maybe def id $ q1 ^? ix (pred x * w + pred y)
     m2 <- placeMatrix
-        (filter (`elem` [N, W]) o)
+        (intersect o [N, W])
         $ matrix h w $ \ (x, y) -> maybe def id $ q2 ^? ix (pred x * w + pred y)
     m3 <- placeMatrix
-        (filter (`elem` [S, W]) o)
+        (intersect o [S, W])
         $ matrix h w $ \ (x, y) -> maybe def id $ q3 ^? ix (pred x * w + pred y)
     m4 <- placeMatrix
-        (filter (`elem` [S, E]) o)
+        (intersect o [S, E])
         $ matrix h w $ \ (x, y) -> maybe def id $ q4 ^? ix (pred x * w + pred y)
 
     pure $ joinBlocks (m2, m1, m3, m4)
 
-    where bisect by = bipartitionEven by mempty
+    where bisect = bipartitionEven
 
+
+
+
+lockCardinalDirection :: [Orientation] -> Vector Gate -> Lock
+-- lockCardinalDirection [N] gs = Lock (foldMap singleton $ view number <$> gs) mempty
+-- lockCardinalDirection [W] gs = Lock (foldMap singleton $ view number <$> gs) mempty
+-- lockCardinalDirection [S] gs = Lock mempty (foldMap singleton $ view number <$> gs)
+-- lockCardinalDirection [E] gs = Lock mempty (foldMap singleton $ view number <$> gs)
+lockCardinalDirection   _  _ = mempty
 
 
 
@@ -230,7 +256,7 @@ inline n top
   , not $ null subs
   , sub <- maximumBy (compare `on` length . view pins . view supercell) subs
   = top &~ do
-      gates  %= Vector.filter (\ x -> x ^. identifier /= sub ^. identifier)
+      gates  %= V.filter (\ x -> x ^. identifier /= sub ^. identifier)
       gates <>= sub ^. gates
     where predicate g = length (view gates g) + length (view gates top) <= succ n
 inline _ top = top

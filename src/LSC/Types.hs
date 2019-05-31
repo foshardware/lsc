@@ -130,6 +130,7 @@ data Gate = Gate
   , _gnd        :: Pin
   , _wires      :: Map Identifier Identifier
   , _number     :: Number
+  , _virtual    :: Bool
   } deriving (Generic, Show)
 
 instance ToJSON Gate
@@ -541,7 +542,7 @@ instance Ord Gate where
   compare = compare `on` view number
 
 instance Default Gate where
-  def = Gate mempty mempty def def mempty (-1)
+  def = Gate mempty mempty def def mempty (-1) True
 
 
 type Arboresence a = (Net, a, a)
