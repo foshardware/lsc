@@ -70,7 +70,7 @@ data Move
 data Lock = Lock
   { _lft :: !IntSet
   , _rgt :: !IntSet
-  }
+  } deriving Show
 
 makeLenses ''Lock
 
@@ -112,6 +112,9 @@ move c (Bisect a b) = Bisect (insert c a) (delete c b)
 
 bisectBalance :: Bipartitioning -> Int
 bisectBalance (Bisect a b) = abs $ size a - size b
+
+bisectSwap :: Bipartitioning -> Bipartitioning
+bisectSwap (Bisect p q) = Bisect q p
 
 
 cutSize :: (V, E) -> Bipartitioning -> Int
@@ -278,17 +281,17 @@ refit _ k (Bisect p q)
     | size p <= k
     , size q <= k
     = Bisect p q
-refit _ k (Bisect p q)
+refit (v, e) k (Bisect p q)
     | size p > k
     , size q > k
-    = error
-    $ "impossible size: "++ show (size p, size q, k)
+    =
+    (Bisect p q) -- $ "impossible size: "++ show (size p, size q, k, p, q, length v, length e)
 refit _ _ (Bisect p q)
     | size p == size q
     = Bisect p q
 refit (v, e) k (Bisect p q)
     | size p < size q
-    = refit (v, e) k (Bisect q p)
+    = bisectSwap $ refit (v, e) k $ bisectSwap (Bisect p q) 
 refit (v, e) k (Bisect p q) = runST $ do
 
     let f x = size . intersection x . foldMap (e!) . elems
@@ -305,7 +308,7 @@ refit (v, e) k (Bisect p q) = runST $ do
 rebalance :: Bipartitioning -> FM s Bipartitioning
 rebalance (Bisect p q)
   | size p < size q
-  = rebalance (Bisect q p)
+  = bisectSwap <$> rebalance (bisectSwap $ Bisect p q)
 rebalance (Bisect p q)
   | balanceCriterion (size p + size q) (Bisect p q) minBound
   = pure (Bisect p q)
@@ -430,8 +433,9 @@ match (v, e) lock r u = do
 
 bipartitionEven :: (V, E) -> Lock -> Bipartitioning
 bipartitionEven (v, _) lock = Bisect
-    (fromAscList [x | x <- [0 .. length v - 1], even x] \\ view rgt lock <> view lft lock)
-    (fromAscList [x | x <- [0 .. length v - 1],  odd x] \\ view lft lock <> view rgt lock)
+    ((S.filter even base <> intersection base (view lft lock)) \\ view rgt lock)
+    ((S.filter  odd base <> intersection base (view rgt lock)) \\ view lft lock)
+    where base = fromDistinctAscList [0 .. length v - 1]
 
 
 
@@ -440,8 +444,9 @@ bipartitionRandom (v, _) lock = do
   u <- randomPermutation $ length v
   let (p, q) = splitAt (length v `div` 2) (toList u)
   pure $ Bisect
-    (fromList p \\ view rgt lock <> view lft lock)
-    (fromList q \\ view lft lock <> view rgt lock)
+    ((fromList p <> intersection base (view lft lock)) \\ view rgt lock)
+    ((fromList q <> intersection base (view rgt lock)) \\ view lft lock)
+  where base = fromDistinctAscList [0 .. length v - 1]
 
 
 

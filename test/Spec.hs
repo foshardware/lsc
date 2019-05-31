@@ -85,7 +85,8 @@ fmRealWorld = testGroup "Real world instances"
 
 fmLocks :: TestTree
 fmLocks = testGroup "Locks"
-  [ testCase "Random bipartition" fmRandomPartition
+  [ testCase "Even bipartition" fmEvenPartition
+  , testCase "Random bipartition" fmRandomPartition
   ]
 
 
@@ -175,8 +176,36 @@ kgggpEmptyGains = do
 -- | FM
 -- 
 
+fmEvenPartition :: IO ()
+fmEvenPartition = do
+
+    (v, e) <- arbitraryHypergraph 1000
+
+    xs <- generate $ vectorOf 20 $ choose (0, length v - 1)
+    let Bisect p q = bipartitionEven (v, e) (Lock (fromList xs) mempty)
+    assertEqual "duplicates" (size p + size q) (length v)
+
+    ys <- generate $ vectorOf 20 $ choose (0, length v - 1)
+    let Bisect p1 q1 = bipartitionEven (v, e) (Lock mempty (fromList ys))
+    assertEqual "duplicates" (size p1 + size q1) (length v)
+
+
+
+
 fmRandomPartition :: IO ()
-fmRandomPartition = pure ()
+fmRandomPartition = do
+
+    (v, e) <- arbitraryHypergraph 1000
+
+    xs <- generate $ vectorOf 20 $ choose (0, length v - 1)
+    Bisect p q <- nonDeterministic $ bipartitionRandom (v, e) (Lock (fromList xs) mempty)
+    assertEqual "duplicates" (size p + size q) (length v)
+
+    ys <- generate $ vectorOf 20 $ choose (0, length v - 1)
+    Bisect p1 q1 <- nonDeterministic $ bipartitionRandom (v, e) (Lock mempty (fromList ys))
+    assertEqual "duplicates" (size p1 + size q1) (length v)
+
+
 
 
 fmMulti :: Int -> (V, E) -> IO ()

@@ -174,23 +174,22 @@ placeMatrix o m = do
 
         by <- st $ hypergraph (set number `imap` v) e
 
-        Bisect q12 q34 <- improve it (flip compare `on` cutSize by) (bisect by ly) $ \ _ ->
-            refit by (2*w*h) <$> fmMultiLevel by ly coarseningThreshold matchingRatio
+        Bisect q21 q34 <- improve it (flip compare `on` cutSize by) (bisect by ly) $ \ _ ->
+            refit by (2*w*h) <$> fmMultiLevel by mempty coarseningThreshold matchingRatio
 
-
-        let v12 = fromListN (size q12) $ (v!) <$> elems q12
+        let v21 = fromListN (size q21) $ (v!) <$> elems q21
             v34 = fromListN (size q34) $ (v!) <$> elems q34
-        let e12 = rebuildEdges $ set number `imap` v12
+        let e21 = rebuildEdges $ set number `imap` v21
             e34 = rebuildEdges $ set number `imap` v34
 
 
-        let l12 = lockCardinalDirection (intersect o [W, E])
-                $ V.filter (view virtual) (set number `imap` v12)
+        let l21 = lockCardinalDirection (intersect o [W, E])
+                $ V.filter (view virtual) (set number `imap` v21)
 
-        h12 <- st $ hypergraph (set number `imap` v12) e12
+        h21 <- st $ hypergraph (set number `imap` v21) e21
 
-        Bisect q2 q1 <- improve it (flip compare `on` cutSize h12) (bisect h12 l12) $ \ _ ->
-            refit h12 (w*h) <$> fmMultiLevel h12 l12 coarseningThreshold matchingRatio
+        Bisect q2 q1 <- improve it (flip compare `on` cutSize h21) (bisect h21 mempty) $ \ _ ->
+            refit h21 (w*h) <$> fmMultiLevel h21 mempty coarseningThreshold matchingRatio
 
 
         let l34 = lockCardinalDirection (intersect o [W, E])
@@ -198,13 +197,13 @@ placeMatrix o m = do
 
         h34 <- st $ hypergraph (set number `imap` v34) e34
 
-        Bisect q3 q4 <- improve it (flip compare `on` cutSize h34) (bisect h34 l34) $ \ _ ->
-            refit h34 (w*h) <$> fmMultiLevel h34 l34 coarseningThreshold matchingRatio
+        Bisect q3 q4 <- improve it (flip compare `on` cutSize h34) (bisect h34 mempty) $ \ _ ->
+            refit h34 (w*h) <$> fmMultiLevel h34 mempty coarseningThreshold matchingRatio
 
 
         pure
-          ( fromListN (size q1) ((v12!) <$> elems q1)
-          , fromListN (size q2) ((v12!) <$> elems q2)
+          ( fromListN (size q1) ((v21!) <$> elems q1)
+          , fromListN (size q2) ((v21!) <$> elems q2)
           , fromListN (size q3) ((v34!) <$> elems q3)
           , fromListN (size q4) ((v34!) <$> elems q4)
           )
@@ -230,10 +229,10 @@ placeMatrix o m = do
 
 
 lockCardinalDirection :: [Orientation] -> Vector Gate -> Lock
--- lockCardinalDirection [N] gs = Lock (foldMap singleton $ view number <$> gs) mempty
--- lockCardinalDirection [W] gs = Lock (foldMap singleton $ view number <$> gs) mempty
--- lockCardinalDirection [S] gs = Lock mempty (foldMap singleton $ view number <$> gs)
--- lockCardinalDirection [E] gs = Lock mempty (foldMap singleton $ view number <$> gs)
+lockCardinalDirection [N] gs = Lock (foldMap singleton $ view number <$> gs) mempty
+lockCardinalDirection [W] gs = Lock (foldMap singleton $ view number <$> gs) mempty
+lockCardinalDirection [S] gs = Lock mempty (foldMap singleton $ view number <$> gs)
+lockCardinalDirection [E] gs = Lock mempty (foldMap singleton $ view number <$> gs)
 lockCardinalDirection   _  _ = mempty
 
 
