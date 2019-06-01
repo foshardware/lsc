@@ -213,7 +213,12 @@ placeMatrix o m = do
         (intersect o [S, E])
         $ matrix h w $ \ (x, y) -> maybe def id $ q4 ^? ix (pred x * w + pred y)
 
-    pure $ joinBlocks (m2, m1, m3, m4)
+    pure $ minimumBy (compare `on` sumOfHpwlMatrix) $ joinBlocks <$>
+        [ (m2, m1, m3, m4)
+        , (m2, m1, m4, m3)
+        , (m1, m2, m3, m4)
+        , (m1, m2, m4, m3)
+        ]
 
     where bisect = bipartitionEven
 

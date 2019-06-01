@@ -50,17 +50,18 @@ hpwlMatrix m n = width p + height p
 
     p = boundingBox nodes
 
+    v = flattenGateMatrix m
     coords = runST $ do
-        v <- new $ nrows m * ncols m
+        u <- new $ succ $ maximum $ view number <$> v 
         sequence_
-            [ write v g (i, j)
+            [ write u g (i, j)
             | i <- [1 .. nrows m]
             , j <- [1 .. ncols m]
             , let g = getElem i j m ^. number
             , g >= 0
             ]
 
-        unsafeFreeze v
+        unsafeFreeze u
 
     nodes =
       [ Rect x y (succ x) (succ y)
@@ -129,7 +130,7 @@ flattenGateMatrix = filter (\ g -> g ^. number >= 0) . getMatrixAsVector
 sumOfHpwlMatrix :: Matrix Gate -> Int
 sumOfHpwlMatrix m = do
 
-  let v = mconcat [ getRow i m | i <- [1 .. nrows m] ]
+  let v = flattenGateMatrix m
       e = rebuildEdges v
 
   sum $ hpwlMatrix m <$> e
