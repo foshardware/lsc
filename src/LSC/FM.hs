@@ -50,7 +50,7 @@ coarseningThreshold = 8
 
 
 balanceFactor :: Rational
-balanceFactor = 1 % 10
+balanceFactor = 1 % 20
 
 
 
