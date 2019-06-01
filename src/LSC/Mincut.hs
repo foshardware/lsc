@@ -147,6 +147,13 @@ setBin i j n = ala Endo foldMap
 
 
 
+permutations4 :: (a, a, a, a) -> [(a, a, a, a)]
+permutations4 (e1, e2, e3, e4) =
+    [ (f1, f2, f3, f4)
+    | [f1, f2, f3, f4] <- permutations [e1, e2, e3, e4]
+    ]
+
+
 
 matrixPermutations :: Matrix a -> [Matrix a]
 matrixPermutations m
@@ -155,7 +162,9 @@ matrixPermutations m
 
 
 placeMatrix :: [Orientation] -> Matrix Gate -> LSC (Matrix Gate)
-placeMatrix _ m | nrows m * ncols m <= 4 = pure m
+placeMatrix _ m
+    | nrows m * ncols m <= 4
+    = pure $ minimumBy (compare `on` sumOfHpwlMatrix) (matrixPermutations m)
 placeMatrix o m = do
 
     let v = flattenGateMatrix m
@@ -213,15 +222,12 @@ placeMatrix o m = do
         (intersect o [S, E])
         $ matrix h w $ \ (x, y) -> maybe def id $ q4 ^? ix (pred x * w + pred y)
 
-    pure $ minimumBy (compare `on` sumOfHpwlMatrix) $ joinBlocks <$>
-        [ (m2, m1, m3, m4)
-        , (m2, m1, m4, m3)
-        , (m1, m2, m3, m4)
-        , (m1, m2, m4, m3)
-        ]
+    pure
+      $ minimumBy (compare `on` sumOfHpwlMatrix)
+      $ fmap joinBlocks
+      $ permutations4 (m1, m2, m3, m4)
 
     where bisect = bipartitionEven
-
 
 
 
