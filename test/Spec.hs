@@ -14,7 +14,7 @@ import Data.Bits
 import Data.Default
 import Data.FileEmbed
 import Data.Foldable
-import Data.IntSet (fromList, fromAscList, size)
+import Data.IntSet (fromList, fromAscList, fromDistinctAscList, size)
 import Data.Map (assocs)
 import Data.Ratio
 import Data.Text (Text)
@@ -229,13 +229,16 @@ fmInputRoutine = void $ arbitraryHypergraph 10000
 fmBalanceCriterion :: IO ()
 fmBalanceCriterion = do
 
-  assertBool "t1" $ balanced 420 0 $ bisect [1 .. 210] [211 .. 420]
-  assertBool "t2" $ not $ balanced 420 0 $ bisect [1 .. 105] [106 .. 420]
-  assertBool "t3" $ not $ balanced 420 0 $ bisect [1 .. 319] [320 .. 420]
+  let s420 = fromDistinctAscList [0..420]
+      s42 = fromDistinctAscList [0..42]
 
-  assertBool "t4" $ balanced 42 0 $ bisect [1 .. 20] [21 .. 42]
-  assertBool "t5" $ not $ balanced 42 0 $ bisect [1 .. 10] [11 .. 42]
-  assertBool "t6" $ not $ balanced 42 0 $ bisect [1 .. 31] [32 .. 42]
+  assertBool "t1" $ balanced s420 0 $ bisect [1 .. 210] [211 .. 420]
+  assertBool "t2" $ not $ balanced s420 0 $ bisect [1 .. 105] [106 .. 420]
+  assertBool "t3" $ not $ balanced s420 0 $ bisect [1 .. 319] [320 .. 420]
+
+  assertBool "t4" $ balanced s42 0 $ bisect [1 .. 20] [21 .. 42]
+  assertBool "t5" $ not $ balanced s42 0 $ bisect [1 .. 10] [11 .. 42]
+  assertBool "t6" $ not $ balanced s42 0 $ bisect [1 .. 31] [32 .. 42]
 
   where
 

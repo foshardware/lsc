@@ -289,21 +289,22 @@ rebalance :: Bipartitioning -> FM s Bipartitioning
 rebalance (Bisect p q)
   | size p < size q
   = bisectSwap <$> rebalance (bisectSwap $ Bisect p q)
-rebalance (Bisect p q)
-  | balanceCriterion (size p + size q) (Bisect p q) minBound
-  = pure (Bisect p q)
 rebalance (Bisect p q) = do
-  u <- randomPermutation $ size p + size q
-  st $ do
-    b <- newSTRef $ Bisect p q
-    i <- newSTRef 0
-    let imba x j = j < size p + size q && (not $ balanceCriterion (size p + size q) x (u!j))
-    whileM_ (imba <$> readSTRef b <*> readSTRef i)
-      $ do
-        j <- (u!) <$> readSTRef i
-        when (member j p) $ modifySTRef b $ move j
-        modifySTRef' i succ
-    readSTRef b
+  free <- value freeCells
+  if balanceCriterion free (Bisect p q) minBound
+  then do
+    u <- randomPermutation $ size p + size q
+    st $ do
+      b <- newSTRef $ Bisect p q
+      i <- newSTRef 0
+      let imba x j = j < size p + size q && (not $ balanceCriterion free x (u!j))
+      whileM_ (imba <$> readSTRef b <*> readSTRef i)
+        $ do
+          j <- (u!) <$> readSTRef i
+          when (member j p) $ modifySTRef b $ move j
+          modifySTRef' i succ
+      readSTRef b
+  else pure $ Bisect p q
 
 
 
@@ -450,7 +451,7 @@ computeG p0 ms = let (_, g, h) = foldl' accum (0, 0, p0) ms in (g, h)
 
 processCell :: (V, E) -> Bipartitioning -> FM s ()
 processCell (v, e) p = do
-  ck <- selectBaseCell v p
+  ck <- selectBaseCell p
   for_ ck $ \ c -> do
     lockCell c
     q <- moveCell c p
@@ -474,12 +475,13 @@ moveCell c p = do
 
 
 
-selectBaseCell :: V -> Bipartitioning -> FM s (Maybe Int)
-selectBaseCell v p = do
+selectBaseCell :: Bipartitioning -> FM s (Maybe Int)
+selectBaseCell p = do
   bucket <- maxGain
+  free <- value freeCells
   case bucket of
     Just (g, []) -> error $ show g
-    Just (_, xs) -> pure $ balanceCriterion (length v) p `find` xs
+    Just (_, xs) -> pure $ balanceCriterion free p `find` xs
     _ -> pure Nothing
 
 
@@ -578,16 +580,16 @@ initialGains (v, e) p = do
 
 
 
-balanceCriterion :: Int -> Bipartitioning -> Int -> Bool
-balanceCriterion v (Bisect p q) c
+balanceCriterion :: IntSet -> Bipartitioning -> Int -> Bool
+balanceCriterion free (Bisect p q) c
     | size p > size q
-    = balanceCriterion v (Bisect q p) c
-balanceCriterion v (Bisect p q) c
-    =  (fromIntegral v * (1 - r)) / 2 <= fromIntegral a
-    && (fromIntegral v * (1 + r)) / 2 >= fromIntegral b
+    = balanceCriterion free (Bisect q p) c
+balanceCriterion free (Bisect p q) c
+    =  (fromIntegral (size free) * (1 - r)) / 2 <= fromIntegral a
+    && (fromIntegral (size free) * (1 + r)) / 2 >= fromIntegral b
   where
-    a = last (succ : [pred | member c p]) (size p)
-    b = last (succ : [pred | member c q]) (size q)
+    a = last (succ : [pred | member c p]) (size $ intersection free p)
+    b = last (succ : [pred | member c q]) (size $ intersection free q)
     r = balanceFactor
 
 
