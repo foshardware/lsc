@@ -66,8 +66,30 @@ data Move
   deriving Show
 
 
+data Lock = Lock
+  { _lft :: !IntSet
+  , _rgt :: !IntSet
+  } deriving Show
 
-type Lock = IntSet
+makeLenses ''Lock
+
+
+instance Semigroup Lock where
+  a <> b = a &~ do
+    lft <>= view lft b
+    rgt <>= view rgt b
+
+instance Monoid Lock where
+  mempty = Lock mempty mempty
+  mappend = (<>)
+
+
+lockSwap :: Lock -> Lock
+lockSwap lock = lock &~ do
+    lft .= view rgt lock
+    rgt .= view lft lock
+
+
 
 data Bipartitioning = Bisect !IntSet !IntSet
 
@@ -266,14 +288,14 @@ refit _ k _ (Bisect p q)
     = Bisect p q
 refit (v, e) k lock (Bisect p q)
     | size p + size q > 2 * k
-    = error
-    $ "impossible size: "++ show (lock, size p, size q, k, p, q, length v, length e)
+    = Bisect p q -- error
+    -- $ "impossible size: "++ show (lock, size p, size q, k, p, q, length v, length e)
 refit _ _ _ (Bisect p q)
     | size p == size q
     = Bisect p q
 refit (v, e) k lock (Bisect p q)
     | size p < size q
-    = bisectSwap $ refit (v, e) k lock (bisectSwap $ Bisect p q) 
+    = bisectSwap $ refit (v, e) k (lockSwap lock) (bisectSwap $ Bisect p q) 
 refit (v, e) k lock (Bisect p q) = runST $ do
 
     let f x = size . intersection x . foldMap (e!) . elems
@@ -281,7 +303,7 @@ refit (v, e) k lock (Bisect p q) = runST $ do
 
     u <- thaw
         $ uncurry (<>)
-        $ unstablePartition (\ (i, _) -> notMember i lock)
+        $ unstablePartition (\ (i, _) -> notMember i $ lock ^. lft)
         $ fst 
         $ unstablePartition (\ (i, _) -> member i p)
         $ imap (,) v
@@ -362,7 +384,7 @@ match (v, e) lock r u = do
 
           for_ neighbours $ \ w ->
             whenM (yet w)
-              $ unless (member w lock && member uj lock)
+              $ unless (member w (view (lft <> rgt) lock) && member uj (view (lft <> rgt) lock))
                 $ write connectivity w $ conn w uj
 
           -- find maximum connectivity
@@ -379,8 +401,10 @@ match (v, e) lock r u = do
               matched w
               modifySTRef' nMatch (+2)
 
-              when (member w lock || member uj lock)
-                  $ modifySTRef clusteredLock . insert =<< readSTRef k
+              when (member w (view lft lock) || member uj (view lft lock))
+                  $ modifySTRef clusteredLock . over lft . insert =<< readSTRef k
+              when (member w (view rgt lock) || member uj (view rgt lock))
+                  $ modifySTRef clusteredLock . over rgt . insert =<< readSTRef k
 
 
           -- reset connectivity
@@ -399,8 +423,10 @@ match (v, e) lock r u = do
           matched uj
           modifySTRef' k succ
 
-          when (member uj lock)
-              $ modifySTRef clusteredLock . insert =<< readSTRef k
+          when (member uj (view lft lock))
+              $ modifySTRef clusteredLock . over lft . insert =<< readSTRef k
+          when (member uj (view rgt lock))
+              $ modifySTRef clusteredLock . over rgt . insert =<< readSTRef k
 
       modifySTRef' j succ
 
@@ -419,8 +445,8 @@ match (v, e) lock r u = do
 
 bipartitionEven :: (V, E) -> Lock -> Bipartitioning
 bipartitionEven (v, _) lock = Bisect
-    (S.filter even base \\ lock)
-    (S.filter  odd base \\ lock)
+    ((S.filter even base <> intersection base (view lft lock)) \\ view rgt lock)
+    ((S.filter  odd base <> intersection base (view rgt lock)) \\ view lft lock)
     where base = fromDistinctAscList [0 .. length v - 1]
 
 
@@ -430,15 +456,16 @@ bipartitionRandom (v, _) lock = do
   u <- randomPermutation $ length v
   let (p, q) = splitAt (length v `div` 2) (toList u)
   pure $ Bisect
-    (fromList p \\ lock)
-    (fromList q \\ lock)
+    ((fromList p <> intersection base (view lft lock)) \\ view rgt lock)
+    ((fromList q <> intersection base (view rgt lock)) \\ view lft lock)
+  where base = fromDistinctAscList [0 .. length v - 1]
 
 
 
 bipartition :: (V, E) -> Lock -> Bipartitioning -> FM s Bipartitioning
 bipartition (v, e) lock p = do
 
-  update freeCells $ const $ fromAscList [0 .. length v - 1] \\ lock
+  update freeCells $ const $ fromAscList [0 .. length v - 1] \\ view (lft <> rgt) lock
   update moves $ const mempty
 
   initialGains (v, e) p

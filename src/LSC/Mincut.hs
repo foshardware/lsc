@@ -65,7 +65,7 @@ placeQuad top = do
     let std = (20000, 20000)
 
     estimationsMatrix =<< initialMatrix top
-    m <- placeMatrix [N, W, S, E] =<< initialMatrix top
+    m <- placeMatrix  =<< initialMatrix top
 
     estimationsMatrix m
 
@@ -161,11 +161,11 @@ matrixPermutations m
 
 
 
-placeMatrix :: [Orientation] -> Matrix Gate -> LSC (Matrix Gate)
-placeMatrix _ m
+placeMatrix :: Matrix Gate -> LSC (Matrix Gate)
+placeMatrix m
     | nrows m * ncols m <= 4
     = pure $ minimumBy (compare `on` sumOfHpwlMatrix) (matrixPermutations m)
-placeMatrix o m = do
+placeMatrix m = do
 
     let v = flattenGateMatrix m
         e = rebuildEdges $ set number `imap` v
@@ -177,9 +177,7 @@ placeMatrix o m = do
 
     (q1, q2, q3, q4) <- liftIO $ nonDeterministic $ do
 
-
         by <- st $ hypergraph (set number `imap` v) e
-
         Bisect q21 q34 <- improve it (flip compare `on` cutSize by) (bisect by mempty) $ \ _ ->
             refit by (2*w*h) mempty <$> fmMultiLevel by mempty coarseningThreshold matchingRatio
 
@@ -191,13 +189,10 @@ placeMatrix o m = do
 
 
         h21 <- st $ hypergraph (set number `imap` v21) e21
-
         Bisect q2 q1 <- improve it (flip compare `on` cutSize h21) (bisect h21 mempty) $ \ _ ->
             refit h21 (w*h) mempty <$> fmMultiLevel h21 mempty coarseningThreshold matchingRatio
 
-
         h34 <- st $ hypergraph (set number `imap` v34) e34
-
         Bisect q3 q4 <- improve it (flip compare `on` cutSize h34) (bisect h34 mempty) $ \ _ ->
             refit h34 (w*h) mempty <$> fmMultiLevel h34 mempty coarseningThreshold matchingRatio
 
@@ -209,17 +204,14 @@ placeMatrix o m = do
           , fromListN (size q4) ((v34!) <$> elems q4)
           )
 
+
     m1 <- placeMatrix
-        (intersect o [N, E])
         $ matrix h w $ \ (x, y) -> maybe def id $ q1 ^? ix (pred x * w + pred y)
     m2 <- placeMatrix
-        (intersect o [N, W])
         $ matrix h w $ \ (x, y) -> maybe def id $ q2 ^? ix (pred x * w + pred y)
     m3 <- placeMatrix
-        (intersect o [S, W])
         $ matrix h w $ \ (x, y) -> maybe def id $ q3 ^? ix (pred x * w + pred y)
     m4 <- placeMatrix
-        (intersect o [S, E])
         $ matrix h w $ \ (x, y) -> maybe def id $ q4 ^? ix (pred x * w + pred y)
 
     pure
