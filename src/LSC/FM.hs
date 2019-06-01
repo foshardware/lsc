@@ -288,8 +288,8 @@ refit _ k _ (Bisect p q)
     = Bisect p q
 refit (v, e) k lock (Bisect p q)
     | size p + size q > 2 * k
-    = Bisect p q -- error
-    -- $ "impossible size: "++ show (lock, size p, size q, k, p, q, length v, length e)
+    = error
+    $ "impossible size: "++ show (lock, size p, size q, k, p, q, length v, length e)
 refit _ _ _ (Bisect p q)
     | size p == size q
     = Bisect p q

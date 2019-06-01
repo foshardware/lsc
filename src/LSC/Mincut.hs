@@ -14,16 +14,19 @@ import Data.Default
 import Data.Foldable hiding (concat)
 import Data.Function
 import Data.List (permutations, intersect)
+import qualified Data.List as L
 import Data.Maybe
 import Data.IntSet (singleton, size, elems)
 import Data.Map (Map, assocs)
 import qualified Data.Map as Map
+import qualified Data.Set as S
 import qualified Data.IntMap as IntMap
+import Data.STRef
 import Data.Semigroup
 import Data.Matrix hiding (toList, (!))
 import Data.Vector (Vector, fromListN, (!))
 import qualified Data.Vector as V
-import Prelude hiding (concat, lookup, take, read, unzip)
+import Prelude hiding (concat, lookup, read, unzip)
 
 import LSC.Improve
 import LSC.FM as FM
@@ -68,6 +71,7 @@ placeQuad top = do
     m <- placeMatrix  =<< initialMatrix top
 
     estimationsMatrix m
+    estimationsMatrix $ virtualPins $ setSize def (nrows m + 2) (ncols m + 2) m
 
     cells <- view stdCells <$> technology
 
@@ -119,6 +123,25 @@ initialMatrix top = do
 
 
 
+virtualPins :: Matrix Gate -> Matrix Gate
+virtualPins m = runST $ do
+  s <- newSTRef m
+  for_ (toList $ ps S.\\ rs) $ \ (x, y) -> do
+
+    ms <- readSTRef s
+    let f (i, j) = sum $ hpwlMatrix (swapElem (x, y) (i, j) ms)
+          <$> rebuildEdges (fromListN 2 [getElem x y ms, getElem i j ms])
+    modifySTRef s $ swapElem (x, y) $ minimumBy (compare `on` f) (rs S.\\ ps)
+
+  readSTRef s
+
+  where
+      ps = S.fromList [ (i, j) | i <- [1 .. nrows m], j <- [1 .. ncols m], getElem i j m ^. virtual ]
+      rs = S.fromList $ rim 1 (nrows m) <> rim 2 (nrows m)
+
+
+
+
 rotateBins :: Matrix Gate -> Matrix Gate
 rotateBins m | nrows m * ncols m <= 4 = m
 rotateBins m = ala Endo foldMap
@@ -145,6 +168,21 @@ setBin i j n = ala Endo foldMap
     , y <- [1 .. ncols n]
     ]
 
+
+
+rim :: Int -> Int -> [(Int, Int)]
+rim k w = base <> (swap <$> base)
+  where
+    swap ~(i, j) = (j, i)
+    base = [(i, j) | i <- [k, w - k + 1], j <- [k .. w - k + 1]]
+
+
+
+swapElem :: (Int, Int) -> (Int, Int) -> Matrix a -> Matrix a
+swapElem (fi, fj) (ti, tj) m
+    = setElem (getElem fi fj m) (ti, tj)
+    $ setElem (getElem ti tj m) (fi, fj)
+    $ m
 
 
 permutations4 :: (a, a, a, a) -> [(a, a, a, a)]
