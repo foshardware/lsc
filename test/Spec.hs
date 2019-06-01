@@ -64,6 +64,7 @@ fm = testGroup "FM"
   , testCase "Deterministic" fmDeterministic
   , testCase "Balance criterion" fmBalanceCriterion
   , fmML
+  , fmLocks
   ]
 
 
@@ -81,6 +82,12 @@ fmRealWorld = testGroup "Real world instances"
   [ testCase "queue_1.blif"     $ fmMulti   7 =<< stToIO queue_1Hypergraph
   ]
 
+
+fmLocks :: TestTree
+fmLocks = testGroup "Locks"
+  [ testCase "Even bipartition" fmEvenPartition
+  , testCase "Random bipartition" fmRandomPartition
+  ]
 
 
 
@@ -169,12 +176,43 @@ kgggpEmptyGains = do
 -- | FM
 -- 
 
+fmEvenPartition :: IO ()
+fmEvenPartition = do
+
+    (v, e) <- arbitraryHypergraph 1000
+
+    xs <- generate $ vectorOf 20 $ choose (0, length v - 1)
+    let Bisect p q = bipartitionEven (v, e) (Lock (fromList xs) mempty)
+    assertEqual "duplicates" (size p + size q) (length v)
+
+    ys <- generate $ vectorOf 20 $ choose (0, length v - 1)
+    let Bisect p1 q1 = bipartitionEven (v, e) (Lock mempty (fromList ys))
+    assertEqual "duplicates" (size p1 + size q1) (length v)
+
+
+
+
+fmRandomPartition :: IO ()
+fmRandomPartition = do
+
+    (v, e) <- arbitraryHypergraph 1000
+
+    xs <- generate $ vectorOf 20 $ choose (0, length v - 1)
+    Bisect p q <- nonDeterministic $ bipartitionRandom (v, e) (Lock (fromList xs) mempty)
+    assertEqual "duplicates" (size p + size q) (length v)
+
+    ys <- generate $ vectorOf 20 $ choose (0, length v - 1)
+    Bisect p1 q1 <- nonDeterministic $ bipartitionRandom (v, e) (Lock mempty (fromList ys))
+    assertEqual "duplicates" (size p1 + size q1) (length v)
+
+
+
 
 fmMulti :: Int -> (V, E) -> IO ()
 fmMulti cut h = do
   let predicate p = cutSize h p <= cut
   p <- iterateUntil predicate $ nonDeterministic
-      $ fmMultiLevel h coarseningThreshold matchingRatio
+    $ fmMultiLevel h mempty coarseningThreshold matchingRatio
   assertBool "unexpected cut size" $ cutSize h p <= cut
 
 
@@ -196,9 +234,9 @@ fmRandomPermutation = do
 fmMatch :: IO ()
 fmMatch = do
   (v, e) <- arbitraryHypergraph 10000
-  clustering <- nonDeterministic $ do
+  (clustering, _) <- nonDeterministic $ do
       u <- randomPermutation $ length v
-      FM.st $ match (v, e) matchingRatio u
+      FM.st $ match (v, e) mempty matchingRatio u
 
   assertEqual "length does not match" (length v) (sum $ size <$> clustering)
   assertBool "elements do not match" $ foldMap id clustering == fromAscList [0 .. length v - 1]
@@ -250,7 +288,7 @@ fmBalanceCriterion = do
 fmDeterministic :: IO ()
 fmDeterministic = do
   h <- stToIO queue_1Hypergraph
-  p <- stToIO $ evalFM $ bipartition h $ bipartitionEven h
+  p <- stToIO $ evalFM $ bipartition h mempty $ bipartitionEven h mempty
   assertEqual "cut size" 9 $ cutSize h p
 
 
