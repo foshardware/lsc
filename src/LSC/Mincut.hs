@@ -175,9 +175,9 @@ placeMatrix o m = do
         by <- st $ hypergraph (set number `imap` v) e
 
         Bisect q21 q34 <- improve it (flip compare `on` cutSize by) (bisect by ly) $ \ _ ->
-            refit by (2*w*h) ly <$> fmMultiLevel by ly coarseningThreshold matchingRatio
+            -- refit by (2*w*h) ly <$> fmMultiLevel by ly coarseningThreshold matchingRatio
+            refit by (2*w*h) ly <$> bipartition by ly (bisect by ly)
 
-        -- when (size q21 > 2*w*h || size q34 > 2*w*h) $ error $ show (q21, q34, ly, size q21, size q34, length v, 2*w*h)
 
         let v21 = fromListN (size q21) $ (v!) <$> elems q21
             v34 = fromListN (size q34) $ (v!) <$> elems q34
@@ -192,7 +192,8 @@ placeMatrix o m = do
 
 
         Bisect q2 q1 <- improve it (flip compare `on` cutSize h21) (bisect h21 l21) $ \ _ ->
-            refit h21 (w*h) l21 <$> fmMultiLevel h21 l21 coarseningThreshold matchingRatio
+            -- refit h21 (w*h) l21 <$> fmMultiLevel h21 l21 coarseningThreshold matchingRatio
+            refit h21 (w*h) l21 <$> bipartition h21 l21 (bisect h21 l21)
 
 
         let l34 = lockCardinalDirection (intersect o [W, E])
@@ -201,7 +202,8 @@ placeMatrix o m = do
         h34 <- st $ hypergraph (set number `imap` v34) e34
 
         Bisect q3 q4 <- improve it (flip compare `on` cutSize h34) (bisect h34 l34) $ \ _ ->
-            refit h34 (w*h) l34 <$> fmMultiLevel h34 l34 coarseningThreshold matchingRatio
+            -- refit h34 (w*h) l34 <$> fmMultiLevel h34 l34 coarseningThreshold matchingRatio
+            refit h34 (w*h) l34 <$> bipartition h34 l34 (bisect h34 l34)
 
 
         pure
@@ -236,7 +238,9 @@ lockCardinalDirection [N] gs = Lock (foldMap singleton $ view number <$> gs) mem
 lockCardinalDirection [W] gs = Lock (foldMap singleton $ view number <$> gs) mempty
 lockCardinalDirection [S] gs = Lock mempty (foldMap singleton $ view number <$> gs)
 lockCardinalDirection [E] gs = Lock mempty (foldMap singleton $ view number <$> gs)
-lockCardinalDirection   _ gs = mempty
+lockCardinalDirection [ ] gs = mempty
+lockCardinalDirection   _ gs = Lock (foldMap singleton hs) (foldMap singleton is)
+    where (hs, is) = V.splitAt (length gs `div` 2) $ view number <$> gs
 
 
 
