@@ -71,7 +71,10 @@ placeQuad top = do
     m <- placeMatrix  =<< initialMatrix top
 
     estimationsMatrix m
-    estimationsMatrix $ virtualPins $ setSize def (nrows m + 2) (ncols m + 2) m
+    estimationsMatrix $ virtualPins
+      $   matrix 2 (ncols m + 4) (const def)
+      <-> (matrix (nrows m) 2 (const def) <|> m <|> matrix (nrows m) 2 (const def))
+      <-> matrix 2 (ncols m + 4) (const def)
 
     cells <- view stdCells <$> technology
 
@@ -104,16 +107,7 @@ initialMatrix top = do
 
     let k = maximum $ top ^. gates <&> view number
 
-    let padCells
-          = imap (set number . (k +))
-          $ fmap (set virtual True)
-          $ fromListN (top ^. supercell . pins . to length)
-          $ toList
-          $ top ^. supercell . pins <&> \ p -> def &~ do
-              identifier .= p ^. identifier
-              wires .= Map.singleton (p ^. identifier) (p ^. identifier)
-
-    let vector = top ^. gates <> padCells
+    let vector = top ^. gates
 
     let (w, h) : _ = dropWhile (\ (x, y) -> x * y < length vector)
                    $ iterate (bimap (2*) (2*)) (1, 1)
