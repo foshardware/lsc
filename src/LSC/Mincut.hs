@@ -13,10 +13,9 @@ import Control.Monad.State (execStateT, get, put)
 import Data.Default
 import Data.Foldable hiding (concat)
 import Data.Function
-import Data.List (permutations, intersect)
-import qualified Data.List as L
+import Data.List (permutations)
 import Data.Maybe
-import Data.IntSet (singleton, size, elems)
+import Data.IntSet (size, elems)
 import Data.Map (Map, assocs)
 import qualified Data.Map as Map
 import qualified Data.Set as S
@@ -24,7 +23,7 @@ import qualified Data.IntMap as IntMap
 import Data.STRef
 import Data.Semigroup
 import Data.Matrix hiding (toList, (!))
-import Data.Vector (Vector, fromListN, (!))
+import Data.Vector (Vector, fromListN, partition, (!))
 import qualified Data.Vector as V
 import Prelude hiding (concat, lookup, read, unzip)
 
@@ -67,14 +66,9 @@ placeQuad top = do
 
     let std = (20000, 20000)
 
-    estimationsMatrix =<< initialMatrix top
-    m <- placeMatrix  =<< initialMatrix top
+    m <- placeMatrix  . transpose . centerColumns . transpose =<< initialMatrix top
 
     estimationsMatrix m
-    estimationsMatrix $ virtualPins
-      $   matrix 2 (ncols m + 4) (const def)
-      <-> (matrix (nrows m) 2 (const def) <|> m <|> matrix (nrows m) 2 (const def))
-      <-> matrix 2 (ncols m + 4) (const def)
 
     cells <- view stdCells <$> technology
 
@@ -105,8 +99,6 @@ placeQuad top = do
 initialMatrix :: NetGraph -> LSC (Matrix Gate)
 initialMatrix top = do
 
-    let k = maximum $ top ^. gates <&> view number
-
     let vector = top ^. gates
 
     let (w, h) : _ = dropWhile (\ (x, y) -> x * y < length vector)
@@ -114,6 +106,17 @@ initialMatrix top = do
         result = matrix w h $ \ (x, y) -> maybe def id $ vector ^? ix (pred x * w + pred y)
 
     pure result
+
+
+
+centerColumns :: Matrix Gate -> Matrix Gate
+centerColumns m = ala Endo foldMap
+  [ mapRow (\ j _ -> result ! pred j) i
+  | i <- [1 .. nrows m]
+  , let (rp, rf) = partition ((< 0) . view number) $ getRow i m
+  , let (rp1, rp2) = V.splitAt (length rp `div` 2) rp
+  , let result = rp1 <> rf <> rp2
+  ] m
 
 
 
