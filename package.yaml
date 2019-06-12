@@ -1,5 +1,5 @@
 name:                lsc
-version:             0.1.5.0
+version:             0.1.5.1
 github:              "foshardware/lsc"
 license:             GPL-3
 author:              "Andreas Westerwick"
@@ -30,7 +30,6 @@ dependencies:
 - entropy
 - file-embed
 - firrtl
-- gloss
 - hashable
 - hashtables
 - kan-extensions

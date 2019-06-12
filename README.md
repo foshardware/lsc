@@ -10,7 +10,6 @@
 ### Runtime dependencies
 
 - [yices-smt2](http://yices.csl.sri.com/)
-- [freeglut](http://freeglut.sourceforge.net/)
 
 
 ## Installation

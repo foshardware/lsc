@@ -10,7 +10,6 @@ module LSC.Force where
 import Control.Lens
 import Control.Monad
 import Control.Monad.ST
-import Control.Monad.IO.Class
 import Data.Default
 import Data.Foldable
 import Data.Map (keys)
@@ -25,7 +24,6 @@ import Linear.Vector
 import Linear.V2
 import Prelude hiding (lookup)
 
-import LSC.Animation
 import LSC.Types
 
 
@@ -69,35 +67,15 @@ placeForce top = do
   let particleVector = center tech <$> view gates top
 
   it <- view iterations <$> environment
-  ui <- view enableVisuals <$> environment
 
   let e = Step [(edges, hooke 1 4), (nodes, coulomb 0.1)] particleVector
   let v = fromListN it $ simulate 0.001 e
-
-  when ui
-    $ liftIO $ do
-      runAnimation (0, v ^? ix 0) (maybe mempty renderStep . snd)
-        $ \ _ _ (i, _) -> (succ i, v ^? ix (mod i it))
 
   let ps = maybe mempty id $ v ^? ix (pred it) . particles
 
   pure $ top
     & gates %~ fmap (\ g -> g & geometry .~ toList (layered ps (g ^. number) <$> lookupDims g tech))
 
-
-renderStep :: Step V2 R -> Frame
-renderStep = foldMap rectangle . view particles
-
-rectangle :: Particle V2 R -> Frame
-rectangle p = poly $ bimap (/ scale) (/ scale) <$>
-  [ (x - w / 2, y - h / 2)
-  , (x - w / 2, y + h / 2)
-  , (x + w / 2, y + h / 2)
-  , (x + w / 2, y - h / 2)
-  ]
-  where
-    (w, h) = bimap fromIntegral fromIntegral $ p ^. dims
-    V2 x y = unP $ p ^. pos
 
 
 center :: Technology -> Gate -> Particle V2 R
