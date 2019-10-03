@@ -13,6 +13,7 @@ import Data.Either
 import qualified Data.Text.IO as Text
 import System.Console.GetOpt
 import System.Environment
+import System.FilePath
 import System.IO
 import Text.Parsec (parse)
 import Text.ParserCombinators.Parsec.Number (decimal)
@@ -60,12 +61,14 @@ program = do
       tech <- liftIO $ either (ioError . userError . show) (pure . fromLEF) . parseLEF
           =<< Text.readFile (head $ list Lef)
 
-      netlist <- liftIO $ case inputs of
-          path : _ -> do
-              file <- Text.readFile path
-              either (ioError . userError . show) pure $ head
-                 $ [ blif | let blif = fromBLIF <$> parseBLIF file, isRight blif ]
-                ++ [ def_ | let def_ = fromDEF <$> parseDEF file, isRight def_ ]
+      netlist <- liftIO $ case splitExtension <$> inputs of
+          (path, extension) : _ -> do
+            file <- Text.readFile $ path ++ extension
+            case extension of
+              ".blif" -> either (ioError . userError . show) pure $ fromBLIF <$> parseBLIF file
+              ".def"  -> either (ioError . userError . show) pure $ fromDEF  <$> parseDEF file
+              ""      -> ioError $ userError $ "no file extension: "++ path
+              _       -> ioError $ userError $ "unknown file extension: "++ extension
           _ -> ioError $ userError "no input given"
 
       when (arg LayoutEstimation)

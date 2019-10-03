@@ -29,6 +29,7 @@ dependencies:
 - def
 - entropy
 - file-embed
+- filepath
 - firrtl
 - hashable
 - hashtables

@@ -4,6 +4,8 @@ dist/
 *.prof
 *.sh
 
+stack.yaml.lock
+
 .stack-work/
 lsc.cabal
 rocket-chip/
