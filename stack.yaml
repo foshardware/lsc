@@ -6,15 +6,15 @@ extra-deps:
 - git: https://git.libresilicon.com/git/repositories/redmine/lsc/verilog.git
   commit: 8415f16e62e7eb3e4d2269e0838ac60ff34e9605
 - git: https://git.libresilicon.com/git/repositories/redmine/lsc/arrowgant.git
-  commit: 8ffe39268fad48da014e1251d98d168330fadff7
+  commit: f415cd3f2cae5c93f539e12aa029dbb4a37823f1
 - git: https://git.libresilicon.com/git/repositories/redmine/lsc/firrtl.git
   commit: f9f4ed5cc1b46ea23a346e4f9c2c591a0d585a8b
 - git: https://git.libresilicon.com/git/repositories/redmine/lsc/blif.git
-  commit: 1ed16defa366af690147086a7cd929531c59a802
+  commit: 99a18e8584055a3e7cdcc7e373ea7c4e71084293 
 - git: https://git.libresilicon.com/git/repositories/redmine/lsc/def.git
-  commit: 5dba3038dba7944ae0fa2250617a667b63713c7e
+  commit: 1ead9ef5378c8935f4a4c1506d4bfd50746ed4e6
 - git: https://git.libresilicon.com/git/repositories/redmine/lsc/lef.git
-  commit: a4dadcd820a6331c0ec3372e7039da55535163db
+  commit: 14d5fc2dd01c000adeaafbbcae96181e5c48e0f3
 - arrows-0.4.4.2@sha256:a260222b766da922657e302aa7c0409451913e1e503798a47a213a61ba382460
 - parsec-numbers-0.1.0@sha256:60fa05b1c16050dffd0e28cecb682a021eeec1be6f34dc9d901a38c90182f289
 - Stream-0.4.7.2@sha256:ed78165aa34c4e23dc53c9072f8715d414a585037f2145ea0eb2b38300354c53
