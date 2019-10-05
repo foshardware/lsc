@@ -1,6 +1,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE TypeApplications #-}
 
 module LSC.Mincut where
 
@@ -66,8 +67,7 @@ placeQuad top = do
 
     let std = (20000, 20000)
 
-    m <- placeMatrix  . transpose . centerColumns . transpose =<< initialMatrix top
-
+    m <- initialMatrix top
     estimationsMatrix m
 
     cells <- view stdCells <$> technology
@@ -99,11 +99,25 @@ placeQuad top = do
 initialMatrix :: NetGraph -> LSC (Matrix Gate)
 initialMatrix top = do
 
-    let vector = top ^. gates
+    let v = top ^. gates
 
-    let (w, h) : _ = dropWhile (\ (x, y) -> x * y < length vector)
-                   $ iterate (bimap (2*) (2*)) (1, 1)
-        result = matrix w h $ \ (x, y) -> maybe def id $ vector ^? ix (pred x * w + pred y)
+    let (w, h) = head
+               $ dropWhile (\ (x, y) -> x * y < length v)
+               $ iterate (bimap (2*) (2*)) (1, 1)
+
+    let d = ceiling $ sqrt (fromIntegral $ length v :: Float)
+
+    let wd = div (w - d) 2
+        hd = div (h - d) 2
+
+    let f x y = (pred x - wd) * w + (pred y - hd) - (max 0 $ pred x - wd) * 2 * wd
+
+    let result = matrix w h $ \ pos -> case pos of
+                 (x, _) | pred x < wd -> def & number .~ (-2)
+                 (_, y) | pred y < hd -> def & number .~ (-2)
+                 (x, _) | w - x < wd -> def & number .~ (-3)
+                 (_, y) | h - y < hd -> def & number .~ (-3)
+                 (x, y) -> maybe def id $ v ^? ix (f x y)
 
     pure result
 

@@ -145,7 +145,7 @@ estimationsMatrix m = do
     , unwords [show $ nrows m, "x", show $ ncols m]
     , unwords ["gate count:", show $ length $ flattenGateMatrix m]
     , unwords [" net count:", show $ length $ rebuildEdges $ flattenGateMatrix m]
-    , unwords ["sum of hpwl:", show $ sumOfHpwlMatrix m]
+    -- , unwords ["sum of hpwl:", show $ sumOfHpwlMatrix m]
     ]
 
 
