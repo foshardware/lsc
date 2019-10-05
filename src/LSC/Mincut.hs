@@ -79,14 +79,17 @@ placeQuad top = do
         padCell g = region ^? ix (g ^. number)
             <&> \ (x, y) -> Layered x y (x + fst std) (y + snd std) [Metal1] N
 
-        region = IntMap.fromList
-            [ (g ^. number, (fromIntegral j * (w + div w 2), fromIntegral i * (h + div h 2)))
-            | i <- [1 .. nrows m]
-            , j <- [1 .. ncols m]
-            , let g = getElem i j m
-            , let (w, h) = std
-            , g ^. number >= 0
-            ]
+        region = runST $ do
+            u <- new $ succ $ maximum $ view number <$> m
+            sequence_
+              [ write u g (fromIntegral j * (w + div w 2), fromIntegral i * (h + div h 2))
+              | i <- [1 .. nrows m]
+              , j <- [1 .. ncols m]
+              , let g = getElem i j m ^. number
+              , let (w, h) = std
+              , g >= 0
+              ]
+            unsafeFreeze u
 
     pure $ top &~ do
         gates .= fmap geo (flattenGateMatrix m)
