@@ -19,10 +19,11 @@ import Data.Maybe
 import Data.IntSet (size, elems)
 import Data.Map (Map, assocs)
 import qualified Data.Map as Map
-import qualified Data.IntMap as IntMap
 import Data.Semigroup
 import Data.Matrix hiding (toList, (!))
 import Data.Vector (Vector, fromListN, (!))
+import Data.Vector (unsafeFreeze)
+import Data.Vector.Mutable (new, write)
 import qualified Data.Vector as V
 import Prelude hiding (concat, lookup, read, unzip)
 
@@ -65,7 +66,7 @@ placeQuad top = do
 
     let std = (20000, 20000)
 
-    m <- initialMatrix top
+    m <- placeMatrix =<< initialMatrix top
     estimationsMatrix m
 
     cells <- view stdCells <$> technology

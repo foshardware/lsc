@@ -245,7 +245,7 @@ fmMultiLevel (v, e) lock t r = do
 
       st $ do
 
-        modifySTRef' i succ
+        modifySTRef i succ
 
         -- interim clustering
         (pk, lk) <- match hi lock r u
@@ -653,5 +653,6 @@ inputRoutine n c xs = do
   for_ xs $ \ (x, y) -> do
     modify ns (insert y) x
     modify cs (insert x) y
-  (,) <$> freeze cs <*> freeze ns
+  (,) <$> unsafeFreeze cs <*> unsafeFreeze ns
+{-# SPECIALIZE inputRoutine :: Int -> Int -> [(Int, Int)] -> ST s (V, E) #-}
 
