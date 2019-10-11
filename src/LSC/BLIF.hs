@@ -9,12 +9,11 @@ module LSC.BLIF
   , toSubcircuit
   ) where
 
-import Control.Lens
+import Control.Lens hiding (imap)
 import Data.Default
-import Data.Foldable
 import Data.Map (assocs, elems, fromList)
-import Data.Maybe
-import qualified Data.Vector as Vector
+import Data.Maybe hiding (mapMaybe)
+import Data.Vector (mapMaybe, imap)
 import Prelude hiding (lookup)
 
 import Language.BLIF.Parser (parseBLIF)
@@ -39,7 +38,7 @@ toModel top = Model
   [ p ^. identifier | p <- top ^. supercell . pins . to elems, p ^. dir == Just Out ]
   []
 
-  [ Subcircuit (g ^. identifier) (g ^. wires . to assocs) | g <- toList $ top ^. gates ]
+  $ fmap (\ g -> Subcircuit (g ^. identifier) (g ^. wires . to assocs)) (top ^. gates)
 
 
 fromBLIF :: BLIF -> NetGraph
@@ -60,11 +59,7 @@ fromModel (Model name inputs outputs clocks commands)
 
   where  
 
-    nodes = Vector.fromList
-        [ c & number .~ i
-        | i <- [0.. ]
-        | c <- catMaybes $ fromNetlist <$> commands
-        ]
+    nodes = set number `imap` mapMaybe fromNetlist commands
 
     edges = rebuildEdges nodes
 

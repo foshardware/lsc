@@ -1,6 +1,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE TypeApplications #-}
 
 module LSC.Mincut where
 
@@ -18,12 +19,11 @@ import Data.Maybe
 import Data.IntSet (size, elems)
 import Data.Map (Map, assocs)
 import qualified Data.Map as Map
-import qualified Data.Set as S
-import qualified Data.IntMap as IntMap
-import Data.STRef
 import Data.Semigroup
 import Data.Matrix hiding (toList, (!))
-import Data.Vector (Vector, fromListN, partition, (!))
+import Data.Vector (Vector, fromListN, (!))
+import Data.Vector (unsafeFreeze)
+import Data.Vector.Mutable (new, write)
 import qualified Data.Vector as V
 import Prelude hiding (concat, lookup, read, unzip)
 
@@ -66,8 +66,7 @@ placeQuad top = do
 
     let std = (20000, 20000)
 
-    m <- placeMatrix  . transpose . centerColumns . transpose =<< initialMatrix top
-
+    m <- placeMatrix =<< initialMatrix top
     estimationsMatrix m
 
     cells <- view stdCells <$> technology
@@ -81,14 +80,17 @@ placeQuad top = do
         padCell g = region ^? ix (g ^. number)
             <&> \ (x, y) -> Layered x y (x + fst std) (y + snd std) [Metal1] N
 
-        region = IntMap.fromList
-            [ (g ^. number, (fromIntegral j * (w + div w 2), fromIntegral i * (h + div h 2)))
-            | i <- [1 .. nrows m]
-            , j <- [1 .. ncols m]
-            , let g = getElem i j m
-            , let (w, h) = std
-            , g ^. number >= 0
-            ]
+        region = runST $ do
+            u <- new $ succ $ maximum $ view number <$> m
+            sequence_
+              [ write u g (fromIntegral j * (w + div w 2), fromIntegral i * (h + div h 2))
+              | i <- [1 .. nrows m]
+              , j <- [1 .. ncols m]
+              , let g = getElem i j m ^. number
+              , let (w, h) = std
+              , g >= 0
+              ]
+            unsafeFreeze u
 
     pure $ top &~ do
         gates .= fmap geo (flattenGateMatrix m)
@@ -99,42 +101,27 @@ placeQuad top = do
 initialMatrix :: NetGraph -> LSC (Matrix Gate)
 initialMatrix top = do
 
-    let vector = top ^. gates
+    let v = top ^. gates
 
-    let (w, h) : _ = dropWhile (\ (x, y) -> x * y < length vector)
-                   $ iterate (bimap (2*) (2*)) (1, 1)
-        result = matrix w h $ \ (x, y) -> maybe def id $ vector ^? ix (pred x * w + pred y)
+    let (w, h) = head
+               $ dropWhile (\ (x, y) -> x * y < length v)
+               $ iterate (bimap (2*) (2*)) (1, 1)
+
+    let d = ceiling $ sqrt (fromIntegral $ length v :: Float)
+
+    let wd = div (w - d) 2
+        hd = div (h - d) 2
+
+    let f x y = (pred x - wd) * w + (pred y - hd) - (max 0 $ pred x - wd) * 2 * wd
+
+    let result = matrix w h $ \ pos -> case pos of
+                 (x, _) | pred x < wd -> def
+                 (_, y) | pred y < hd -> def
+                 (x, _) | w - x < wd -> def
+                 (_, y) | h - y < hd -> def
+                 (x, y) -> maybe def id $ v ^? ix (f x y)
 
     pure result
-
-
-
-centerColumns :: Matrix Gate -> Matrix Gate
-centerColumns m = ala Endo foldMap
-  [ mapRow (\ j _ -> result ! pred j) i
-  | i <- [1 .. nrows m]
-  , let (rp, rf) = partition ((< 0) . view number) $ getRow i m
-  , let (rp1, rp2) = V.splitAt (length rp `div` 2) rp
-  , let result = rp1 <> rf <> rp2
-  ] m
-
-
-
-virtualPins :: Matrix Gate -> Matrix Gate
-virtualPins m = runST $ do
-  s <- newSTRef m
-  for_ (toList $ ps S.\\ rs) $ \ (x, y) -> do
-
-    ms <- readSTRef s
-    let f (i, j) = sum $ hpwlMatrix (swapElem (x, y) (i, j) ms)
-          <$> rebuildEdges (fromListN 2 [getElem x y ms, getElem i j ms])
-    modifySTRef s $ swapElem (x, y) $ minimumBy (compare `on` f) (rs S.\\ ps)
-
-  readSTRef s
-
-  where
-      ps = S.fromList [ (i, j) | i <- [1 .. nrows m], j <- [1 .. ncols m], getElem i j m ^. virtual ]
-      rs = S.fromList $ rim 1 (nrows m) <> rim 2 (nrows m)
 
 
 
@@ -154,7 +141,7 @@ rotateBins m = ala Endo foldMap
 
 
 subHpwl :: Matrix Gate -> Matrix Gate -> Int
-subHpwl m n = sum $ hpwlMatrix m <$> rebuildEdges (getMatrixAsVector n)
+subHpwl m n = sum $ hpwlMatrix (coordsVector m) <$> rebuildEdges n
 
 
 

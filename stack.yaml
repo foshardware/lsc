@@ -10,7 +10,7 @@ extra-deps:
 - git: https://git.libresilicon.com/git/repositories/redmine/lsc/firrtl.git
   commit: f9f4ed5cc1b46ea23a346e4f9c2c591a0d585a8b
 - git: https://git.libresilicon.com/git/repositories/redmine/lsc/blif.git
-  commit: 99a18e8584055a3e7cdcc7e373ea7c4e71084293 
+  commit: a2e87b4ea13f40873fcb18cce5c9382c65379b6a
 - git: https://git.libresilicon.com/git/repositories/redmine/lsc/def.git
   commit: 1ead9ef5378c8935f4a4c1506d4bfd50746ed4e6
 - git: https://git.libresilicon.com/git/repositories/redmine/lsc/lef.git

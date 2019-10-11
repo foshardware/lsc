@@ -26,6 +26,7 @@ import Data.Matrix (Matrix, nrows, ncols, getElem, getMatrixAsVector)
 import Data.Vector (Vector, imap, filter)
 import Data.Vector.Unboxed (unsafeFreeze)
 import Data.Vector.Unboxed.Mutable (new, write)
+import qualified Data.Vector.Unboxed as U
 import qualified Data.Vector as V
 import Prelude hiding (lookup, filter)
 
@@ -33,42 +34,40 @@ import LSC.Types
 
 
 
-boundingBox :: Ord n => [Component l n] -> Component l n
+boundingBox :: (Foldable f, Functor f, Ord n) => f (Component l n) -> Component l n
 boundingBox xs = Rect
     (minimum $ view l <$> xs)
     (minimum $ view b <$> xs)
     (maximum $ view r <$> xs)
     (maximum $ view t <$> xs)
+{-# SPECIALIZE boundingBox ::        [Component l Int] -> Component l Int #-}
+{-# SPECIALIZE boundingBox :: Vector (Component l Int) -> Component l Int #-}
 
 
 
-hpwlMatrix :: Matrix Gate -> Net -> Int
+hpwlMatrix :: U.Vector (Int, Int) -> Net -> Int
 hpwlMatrix _ n | elem (n ^. identifier) ["clk"] = 1
 hpwlMatrix m n = width p + height p
-
   where
-
-    p = boundingBox nodes
-
-    v = flattenGateMatrix m
-    coords = runST $ do
-        u <- new $ succ $ maximum $ view number <$> v 
-        sequence_
-            [ write u g (i, j)
-            | i <- [1 .. nrows m]
-            , j <- [1 .. ncols m]
-            , let g = getElem i j m ^. number
-            , g >= 0
-            ]
-
-        unsafeFreeze u
-
-    nodes =
+    p = boundingBox
       [ Rect x y (succ x) (succ y)
       | (i, _) <- n ^. contacts . to assocs
-      , (x, y) <- toList $ coords ^? ix i
+      , (x, y) <- toList $ m ^? ix i
       ]
 
+
+
+coordsVector :: Matrix Gate -> U.Vector (Int, Int)
+coordsVector m = runST $ do
+    u <- new $ succ $ maximum $ view number <$> m
+    sequence_
+        [ write u g (i, j)
+        | i <- [1 .. nrows m]
+        , j <- [1 .. ncols m]
+        , let g = getElem i j m ^. number
+        , g >= 0
+        ]
+    unsafeFreeze u
 
 
 
@@ -128,12 +127,7 @@ flattenGateMatrix = filter (\ g -> g ^. number >= 0) . getMatrixAsVector
 
 
 sumOfHpwlMatrix :: Matrix Gate -> Int
-sumOfHpwlMatrix m = do
-
-  let v = flattenGateMatrix m
-      e = rebuildEdges v
-
-  sum $ hpwlMatrix m <$> e
+sumOfHpwlMatrix m = sum $ hpwlMatrix (coordsVector m) <$> rebuildEdges m
 
 
 
@@ -143,8 +137,8 @@ estimationsMatrix m = do
   debug
     [ show $ view number <$> m
     , unwords [show $ nrows m, "x", show $ ncols m]
-    , unwords ["gate count:", show $ length $ flattenGateMatrix m]
-    , unwords [" net count:", show $ length $ rebuildEdges $ flattenGateMatrix m]
+    , unwords ["gate count:", show $ foldl' (\ a g -> if g ^. number < 0 then a else succ a :: Int) 0 m]
+    , unwords [" net count:", show $ length $ rebuildEdges m]
     , unwords ["sum of hpwl:", show $ sumOfHpwlMatrix m]
     ]
 
@@ -288,13 +282,15 @@ gateGoedel ns g = hash [ (lookup w ns, view identifier g) | w <- g ^. wires . to
 
 
 
-rebuildEdges :: Vector Gate -> Map Identifier Net
+rebuildEdges :: Foldable f => f Gate -> Map Identifier Net
 rebuildEdges nodes = fromListWith (<>)
     [ (net, Net net mempty (singleton (gate ^. number) [pin]))
     | gate <- toList nodes
     , (contact, net) <- gate ^. wires & assocs
     , let pin = def & identifier .~ contact
     ]
+{-# SPECIALIZE rebuildEdges :: Matrix Gate -> Map Identifier Net #-}
+{-# SPECIALIZE rebuildEdges :: Vector Gate -> Map Identifier Net #-}
 
 
 leaves :: NetGraph -> [NetGraph]
