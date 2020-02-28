@@ -61,15 +61,7 @@ program = do
       tech <- liftIO $ either (ioError . userError . show) (pure . fromLEF) . parseLEF
           =<< Text.readFile (head $ list Lef)
 
-      netlist <- liftIO $ case splitExtension <$> inputs of
-          (path, extension) : _ -> do
-            file <- Text.readFile $ path ++ extension
-            case extension of
-              ".blif" -> either (ioError . userError . show) pure $ fromBLIF <$> parseBLIF file
-              ".def"  -> either (ioError . userError . show) pure $ fromDEF  <$> parseDEF file
-              ""      -> ioError $ userError $ "no file extension: "++ path
-              _       -> ioError $ userError $ "unknown file extension: "++ extension
-          _ -> ioError $ userError "no input given"
+      netlist <- liftIO $ readNetGraph inputs
 
       when (arg LayoutEstimation)
         $ do
@@ -93,10 +85,29 @@ program = do
       void $ liftIO $ ioError $ userError "no inputs given"
       exit
 
+  unless (null inputs)
+    $ do
+      netlist <- liftIO $ readNetGraph inputs
+      liftIO $ printStdout netlist $ list Output
+      exit
+
   unless (arg Lef)
     $ do
       void $ liftIO $ ioError $ userError "no library given"
       exit
+
+
+
+readNetGraph :: [FilePath] -> IO NetGraph
+readNetGraph inputs = case splitExtension <$> inputs of
+      (path, extension) : _ -> do
+            file <- Text.readFile $ path ++ extension
+            case extension of
+              ".blif" -> either (ioError . userError . show) pure $ fromBLIF <$> parseBLIF file
+              ".def"  -> either (ioError . userError . show) pure $ fromDEF  <$> parseDEF file
+              ""      -> ioError $ userError $ "no file extension: "++ path
+              _       -> ioError $ userError $ "unknown file extension: "++ extension
+      _ -> ioError $ userError "no input given"
 
 
 

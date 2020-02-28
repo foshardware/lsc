@@ -138,9 +138,8 @@ enumeratedGate g = g ^. identifier <> "_" <> pack (g ^. number . to show)
 
 
 toComponent :: Gate -> DEF.Component
-toComponent g = Component (enumeratedGate g) (g ^. identifier) (Just $ Placed p "N")
-  where
-      p = maybe (0, 0) (\x -> (scaleDown $ x^.l, scaleDown $ x^.b)) $ g ^. geometry . to listToMaybe
+toComponent g = Component (enumeratedGate g) (g ^. identifier) (listToMaybe p)
+  where p = g ^. geometry <&> \ x -> Placed (scaleDown $ x^.l, scaleDown $ x^.b) "N"
 
 
 
