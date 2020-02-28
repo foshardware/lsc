@@ -19,7 +19,7 @@ import LSC.Types
 
 
 fromLEF :: LEF -> Bootstrap ()
-fromLEF (LEF options _ _ _ _ macros) = do
+fromLEF (LEF options _ _ _ _ _ macros) = do
 
   bootstrap $ set scaleFactor $ fromIntegral $ databaseUnits options
 
@@ -36,14 +36,14 @@ fromLEF (LEF options _ _ _ _ macros) = do
 macroVdd :: Technology -> [MacroOption] -> Maybe Pin
 macroVdd tech (MacroPin ident options _ : _)
   | MacroPinUse Power `elem` options
-  = Just $ def & identifier .~ ident & dir .~ direction options & ports .~ macroPorts tech options
+  = Just $ def & identifier .~ ident & dir .~ direction options & geometry .~ macroPorts tech options
 macroVdd tech (_ : rest) = macroVdd tech rest
 macroVdd _ _ = Nothing
 
 macroGnd :: Technology -> [MacroOption] -> Maybe Pin
 macroGnd tech (MacroPin ident options _ : _)
   | MacroPinUse Ground `elem` options
-  = Just $ def & identifier .~ ident & dir .~ direction options & ports .~ macroPorts tech options
+  = Just $ def & identifier .~ ident & dir .~ direction options & geometry .~ macroPorts tech options
 macroGnd tech (_ : rest) = macroVdd tech rest
 macroGnd _ _ = Nothing
 
@@ -51,12 +51,12 @@ macroPins :: Technology -> [MacroOption] -> [(Identifier, Pin)]
 macroPins tech (MacroPin ident options _ : rest)
   | not $ MacroPinUse Power `elem` options
   , not $ MacroPinUse Ground `elem` options
-  = (ident, def & identifier .~ ident & dir .~ direction options & ports .~ macroPorts tech options)
+  = (ident, def & identifier .~ ident & dir .~ direction options & geometry .~ macroPorts tech options)
   : macroPins tech rest
 macroPins tech (_ : rest) = macroPins tech rest
 macroPins _ [] = []
 
-macroPorts tech (MacroPinPort (MacroPinPortLayer ident : rest) : _) = portRectangles tech ident rest
+macroPorts tech (MacroPinPort (MacroPinPortLayer ident _ : rest) : _) = portRectangles tech ident rest
 macroPorts tech (_ : rest) = macroPorts tech rest
 macroPorts _ [] = []
 

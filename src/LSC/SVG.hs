@@ -36,6 +36,10 @@ type Arg = S.AttributeValue
 type Args = (Arg, Arg)
 
 
+scaleFactor' :: Integer
+scaleFactor' = 10
+
+
 m_, l_:: Integer -> Integer -> S.Path
 z_ :: S.Path
 m_ = S.m
@@ -48,14 +52,14 @@ plotStdout = Lazy.putStr . plot
 
 
 plot :: NetGraph -> Lazy.Text
-plot = renderSvg . svgDoc . scaleDown 100 . svgPaths
+plot = renderSvg . svgDoc . scaleDown scaleFactor' . svgPaths
 
 
 svgDoc :: Circuit -> Svg
 svgDoc (Circuit2D nodes edges, markers) = S.docTypeSvg
   ! A.version "1.1"
-  ! A.width "100000"
-  ! A.height "100000"
+  ! A.width "10000000"
+  ! A.height "10000000"
   $ do
     place `mapM_` nodes
     route `mapM_` edges
@@ -145,7 +149,7 @@ svgPaths netlist = (Circuit2D gs ns, if null $ netlist ^. nets then markRouting 
 
     ns =
       [ (net, (outerPins net ++) . inducePins =<< net ^. contacts . to assocs, net ^. geometry)
-      | net <- set geometry (netlist ^. supercell . mappend (vdd . ports) (gnd . ports)) mempty
+      | net <- set geometry (netlist ^. supercell . mappend (vdd . geometry) (gnd . geometry)) mempty
       : toList (netlist ^. nets)
       ]
 
@@ -159,7 +163,7 @@ svgPaths netlist = (Circuit2D gs ns, if null $ netlist ^. nets then markRouting 
       [ port
       | pin <- toList $ netlist ^. supercell . pins
       , view identifier pin == view identifier net
-      , port <- pin ^. ports
+      , port <- pin ^. geometry
       ]
 
     inducePins :: (Number, [Pin]) -> Path
@@ -167,7 +171,7 @@ svgPaths netlist = (Circuit2D gs ns, if null $ netlist ^. nets then markRouting 
       [ q & l +~ p^.l & b +~ p^.b & r +~ p^.l & t +~ p^.b & integrate mempty
       | pin <- ps
       , p <- toList $ join $ netlist ^. gates ^? ix i . geometry . to listToMaybe
-      , q <- take 1 $ pin ^. ports
+      , q <- take 1 $ pin ^. geometry
       ]
 
 

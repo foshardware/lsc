@@ -34,7 +34,8 @@ import LSC.Types
 
 
 
-boundingBox :: (Foldable f, Functor f, Ord n) => f (Component l n) -> Component l n
+boundingBox :: (Foldable f, Functor f, Num n, Ord n) => f (Component l n) -> Component l n
+boundingBox xs | null xs = Rect 0 0 0 0
 boundingBox xs = Rect
     (minimum $ view l <$> xs)
     (minimum $ view b <$> xs)
@@ -75,16 +76,33 @@ hpwl :: Vector Gate -> Net -> Integer
 hpwl  _ n | elem (n ^. identifier) ["clk"] = 0
 hpwl gs n = width p + height p
   where
-    p = boundingBox nodes
-    nodes = catMaybes
+    p = boundingBox $ catMaybes
       [ join $ gs ^? ix i . geometry . to listToMaybe
       | (i, _) <- n ^. contacts . to assocs
       ]
 
 
+hpwlIncrease :: NetGraph -> Gate -> Integer
+hpwlIncrease top g = width q - width p + height q - height p
+  where
+    p = boundingBox $ catMaybes $
+      [ join $ top ^. gates ^? ix i . geometry . to listToMaybe
+      | k <- views wires elems g
+      , n <- maybeToList $ top ^. nets ^? ix k
+      , i <- views contacts keys n
+      ]
+    q = boundingBox $ catMaybes $ 
+      [ g ^. geometry . to listToMaybe ] ++
+      [ join $ top ^. gates ^? ix i . geometry . to listToMaybe
+      | k <- views wires elems g
+      , n <- maybeToList $ top ^. nets ^? ix k
+      , i <- views contacts keys n
+      , i /= g ^. number
+      ]
+
 
 markRouting :: NetGraph -> [Line Integer]
-markRouting top = join [ either horizontal vertical track | track <- top ^. supercell . routing ]
+markRouting top = join [ either horizontal vertical track | track <- top ^. supercell . tracks ]
 
   where
 
@@ -115,8 +133,8 @@ markEdges top =
     , i /= j
     , p <- join $ toList $ top ^. gates ^? ix i . geometry . to (take 1)
     , q <- join $ toList $ top ^. gates ^? ix j . geometry . to (take 1)
-    , po <- join $ take 1 src <&> view ports
-    , qo <- join $ take 1 snk <&> view ports
+    , po <- join $ take 1 src <&> view geometry
+    , qo <- join $ take 1 snk <&> view geometry
     ]
 
 
@@ -187,7 +205,9 @@ gateGeometry netlist = do
   cells <- view stdCells <$> technology
 
   let expand g = g & geometry %~ maybe id (fmap . drag) (cells ^? ix (g ^. identifier) . dims)
-      drag (w, h) p = p & t +~ h & r +~ w
+      drag (w, h) p = p &~ do
+          r .= view l p + w
+          t .= view b p + h
 
   pure $ netlist &~ do
       gates %= fmap expand

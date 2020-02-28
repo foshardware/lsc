@@ -23,9 +23,10 @@
 `lsc -h`  
 
 
-### Place and route a small component
+### Create a legalized placement with replace
 
-`lsc -l sample/osu035.lef -c -d --output=svg sample/fulladder.blif > result.svg`  
+`replace < gcd_nontd_test.tcl`
+`lsc -dy -llibrary/nangate45/NangateOpenCellLibrary.lef gcd_nan45_nontd.def -odef > legalized.def`
 
 
 ### Create graphics from def file
@@ -44,6 +45,10 @@
 
 - Fiduccia, et. al. (1982): A Linear-Time Heuristic for Improving Network Partitions [10.1109/dac.1982.1585498](https://doi.org/10.1109/dac.1982.1585498)
 - Alpert, Huang, Kahng (1998): Multilevel Circuit Partitioning, [10.1109/dac.1997.597204](https://doi.org/10.1109/dac.1997.597204)
+
+### LSC.Legalize
+
+- Kahng, Markov, Reda (2004): On Legalization of Row-Based Placements [10.1145/988952.989004](https://doi.org/10.1145/988952.989004)
 
 ### LSC.SuffixTree
 

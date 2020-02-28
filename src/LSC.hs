@@ -18,14 +18,16 @@ import Control.Monad.Trans
 import Control.Monad.Codensity hiding (improve)
 import Prelude hiding ((.), id)
 
-import LSC.Easy
-import LSC.Force
 import LSC.Improve
-import LSC.Integer
+import LSC.Legalize
 import LSC.Mincut
-import LSC.NetGraph
 import LSC.Types
 import LSC.Version
+
+
+
+stage0 :: Compiler' NetGraph
+stage0 = legalization
 
 
 
@@ -37,7 +39,6 @@ stage1 = globalPlacement
 
 stage4 :: Compiler' NetGraph
 stage4 = zeroArrow
-    <+> dag netGraph (env_ rowSize 21000 route <+> route)
 
 
 
@@ -53,24 +54,9 @@ detailedPlacement = id
 
 legalization :: Compiler' NetGraph
 legalization = id
-    >>> dag netGraph (remote placeColumn)
-    >>> remote placeRows
-    >>> remote inlineGeometry
-    >>> remote contactGeometry
+    >>> remote legalize
 
 
-
-animatePlacement :: Compiler' NetGraph
-animatePlacement = zeroArrow
-    <+> local placeEasy >>> local placeForce
-
-
-
-route :: Compiler' NetGraph
-route = local routeInteger
-
-place :: Compiler' NetGraph
-place = local placeEasy
 
 
 

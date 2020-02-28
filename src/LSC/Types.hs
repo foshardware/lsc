@@ -130,7 +130,7 @@ data Gate = Gate
   , _gnd        :: Pin
   , _wires      :: Map Identifier Identifier
   , _number     :: Number
-  , _virtual    :: Bool
+  , _fixed      :: Bool
   } deriving (Generic, Show)
 
 instance ToJSON Gate
@@ -155,9 +155,27 @@ instance Hashable Track
 
 
 
+data Row = Row
+  { _number      :: Number
+  , _identifier  :: Identifier
+  , _l           :: Integer
+  , _b           :: Integer
+  , _orientation :: Orientation
+  , _cardinality :: Integer
+  , _granularity :: Integer
+  } deriving (Generic, Show)
+
+instance ToJSON Row
+instance FromJSON Row
+
+instance Hashable Row
+
+
+
 data AbstractCell = AbstractCell
   { _geometry  :: Path
-  , _routing   :: [Either Track Track]
+  , _tracks    :: [Either Track Track]
+  , _rows      :: Vector Row
   , _vdd       :: Pin
   , _gnd       :: Pin
   , _pins      :: Map Identifier Pin
@@ -187,7 +205,7 @@ instance Hashable Cell where
 data Pin = Pin
   { _identifier :: Identifier
   , _dir        :: Maybe Dir
-  , _ports      :: [Port]
+  , _geometry   :: Path
   } deriving (Generic, Show)
 
 instance ToJSON Pin
@@ -213,6 +231,13 @@ data Layer
   | Metal1
   | Metal2
   | Metal3
+  | Metal4
+  | Metal5
+  | Metal6
+  | Metal7
+  | Metal8
+  | Metal9
+  | Metal10
   deriving (Eq, Ord, Enum, Read, Generic, Show)
 
 instance ToJSON Layer
@@ -264,7 +289,7 @@ gnostic b a = a `runReader` freeze b
 
 data CompilerOpts = CompilerOpts
   { _jogs          :: Int
-  , _rowSize       :: Integer
+  , _rowCapacity   :: Double
   , _halt          :: Int
   , _enableDebug   :: Bool
   , _enableVisuals :: Bool
@@ -438,7 +463,15 @@ instance (FromJSON l, FromJSON a) => FromJSON (Component l a)
 
 instance (Hashable l, Hashable a) => Hashable (Component l a)
 
+
 makeFieldsNoPrefix ''Component
+
+
+instance (Eq l, Ord a) => Ord (Component l a) where
+  compare x y | x ^. l == y ^. l && x ^. b == y ^. b && x ^. r == y ^. r = compare (x ^. t) (y ^. t)
+  compare x y | x ^. l == y ^. l && x ^. b == y ^. b = compare (x ^. r) (y ^. r)
+  compare x y | x ^. l == y ^. l = compare (x ^. b) (y ^. b)
+  compare x y = compare (x ^. l) (y ^. l)
 
 
 
@@ -452,6 +485,14 @@ instance Hashable a => Hashable (Line a)
 
 makeFieldsNoPrefix ''Line
 
+
+relocateX :: Num a => a -> Component l a -> Component l a
+relocateX f p = p & l +~ f-x & r +~ f-x
+    where x = p ^. l
+
+relocateY :: Num a => a -> Component l a -> Component l a
+relocateY f p = p & b +~ f-y & t +~ f-y
+    where y = p ^. b
 
 
 projectNorth :: Component l a -> Component l a
@@ -510,11 +551,12 @@ instance Default NetGraph where
 
 makeFieldsNoPrefix ''Track
 
+makeFieldsNoPrefix ''Row
 
 makeFieldsNoPrefix ''AbstractCell
 
 instance Default AbstractCell where
-  def = AbstractCell mempty mempty def def mempty
+  def = AbstractCell mempty mempty mempty def def mempty
 
 
 makeFieldsNoPrefix ''Net
@@ -534,6 +576,22 @@ instance Monoid Net where
 
 
 makeFieldsNoPrefix ''Gate
+
+
+gateWidth, gateHeight :: Gate -> Integer
+gateWidth g
+    | views geometry null g
+    = 0
+gateWidth g
+    = maximum (g ^. geometry <&> view r)
+    - minimum (g ^. geometry <&> view l)
+gateHeight g
+    | views geometry null g
+    = 0
+gateHeight g
+    = maximum (g ^. geometry <&> view t)
+    - minimum (g ^. geometry <&> view b)
+
 
 instance Eq Gate where
   (==) = (==) `on` view number
@@ -612,15 +670,6 @@ lookupDims g tech = view dims <$> lookup (g ^. identifier) (tech ^. stdCells)
 
 lambda :: Technology -> Integer
 lambda tech = ceiling $ view scaleFactor tech * view featureSize tech
-
-
-divideArea :: Foldable f => f a -> LSC [Integer]
-divideArea xs = do
-  size <- view rowSize <$> environment
-  tech <- technology
-  let x = tech ^. standardPin . _1 & (* 2)
-  pure $ take n $ x : fmap (size*) [1..]
-  where n = ceiling $ sqrt $ fromIntegral $ length xs
 
 
 distinctPairs :: [a] -> [(a, a)]
