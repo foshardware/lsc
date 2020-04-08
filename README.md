@@ -25,7 +25,7 @@
 
 ### Create a legalized placement with replace
 
-`replace < gcd_nontd_test.tcl`
+`replace < gcd_nontd_test.tcl`  
 `lsc -dy -llibrary/nangate45/NangateOpenCellLibrary.lef gcd_nan45_nontd.def -odef > legalized.def`
 
 
