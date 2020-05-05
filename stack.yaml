@@ -1,8 +1,6 @@
 packages:
 - .
 extra-deps:
-- git: https://github.com/foshardware/milp.git
-  commit: 2c8b204bb28425a4eb0b120268e6245c2f1d4287
 - git: https://github.com/foshardware/verilog.git
   commit: 8415f16e62e7eb3e4d2269e0838ac60ff34e9605
 - git: https://github.com/foshardware/arrowgant.git

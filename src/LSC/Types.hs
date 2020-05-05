@@ -31,9 +31,6 @@ import Data.Vector (Vector)
 
 import Data.Aeson (encode, FromJSON, ToJSON)
 
-import Control.MILP
-import Control.MILP.Types hiding (literal)
-
 import Control.Monad.Codensity
 import Control.Monad.Morph
 import Control.Monad.Fail
@@ -321,16 +318,8 @@ type LSC = Codensity (LST IO)
 choice :: Alternative m => [m a] -> m a
 choice = foldr (<|>) empty
 
-liftInteger :: LP a -> LSC a
-liftInteger = lift . LST . lift . lift . hoist generalize
 
-satisfyInteger, minimizeInteger, maximizeInteger :: LSC Result
-satisfyInteger = lift $ LST $ lift $ lift satLPT
-minimizeInteger = lift $ LST $ lift $ lift minimizeIO
-maximizeInteger = lift $ LST $ lift $ lift maximizeIO
-
-
-newtype LST m a = LST { unLST :: EnvT (GnosticT (LPT m)) a }
+newtype LST m a = LST { unLST :: EnvT (GnosticT m) a }
 
 instance Functor m => Functor (LST m) where
   fmap f (LST a) = LST (fmap f a)
@@ -434,21 +423,6 @@ instance Monoid Orientation where
 type Path = [Component Layer Integer]
 
 type Ring l a = Component l (Component l a)
-
-
-type IComponent = Component ILayer Var
-
-type ILayer = Layer
-
-type IPath = [IComponent]
-
-type IRing = Ring ILayer Var
-
-type INodes = Vector (Gate, IComponent)
-
-type IEdges = Map Identifier (Net, IPath)
-
-type IPins = Map Identifier (Pin, IComponent)
 
 
 
@@ -640,8 +614,7 @@ instance Default CompilerOpts where
 
 runLSC :: Environment -> Bootstrap () -> LSC a -> IO a
 runLSC opts tech
-  = evalLP start
-  . flip runGnosticT (freeze tech)
+  = flip runGnosticT (freeze tech)
   . flip runEnvT opts
   . unLST
   . lowerCodensity
