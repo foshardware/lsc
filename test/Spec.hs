@@ -73,7 +73,7 @@ fmML :: TestTree
 fmML = testGroup "Multi level"
   [ testCase "Random permutation" fmRandomPermutation
   , testCase "Match" fmMatch
-  , testCase "Rebalance" fmRebalance
+  , testCase "Rebalance" $ sequence_ $ replicate 100 $ fmRebalance
   , fmRealWorld
   ]
 
