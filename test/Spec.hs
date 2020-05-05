@@ -37,14 +37,16 @@ import LSC.KGGGP as KGGGP
 
 
 main :: IO ()
-main = defaultMain lsc
+main = do
+  j <- getNumCapabilities
+  defaultMain $ lsc j
 
 
-lsc :: TestTree
-lsc = testGroup "LSC"
+lsc :: Int -> TestTree
+lsc j = testGroup "LSC"
   [ gggp
   , fm
-  , concurrency
+  , concurrency j
   ]
 
 
@@ -91,19 +93,23 @@ fmLocks = testGroup "Locks"
 
 
 
-concurrency :: TestTree
-concurrency = testGroup "Concurrency" $
+concurrency :: Int -> TestTree
+concurrency j = testGroup "Concurrency" $
   [ testCase "Dual core" $ dualCore n
   | n <- take 4 $ drop 2 $ iterate (`shiftR` 1) (shiftL 1 20)
+  , j >= 2
   ] ++
   [ testCase "Quad core" $ quadCore n
   | n <- take 4 $ drop 2 $ iterate (`shiftR` 1) (shiftL 1 20)
+  , j >= 4
   ] ++
   [ testCase "Stream processor" $ stream n
   | n <- take 4 $ drop 2 $ iterate (`shiftR` 1) (shiftL 1 20)
+  , j >= 4
   ] ++
   [ testCase "Remote procedure" $ remoteProcess n
   | n <- take 4 $ drop 2 $ iterate (`shiftR` 1) (shiftL 1 20)
+  , j >= 2
   ] ++
   [ testCase "Race condition" $ raceCondition n
   | n <- take 4 $ drop 2 $ iterate (`shiftR` 1) (shiftL 1 20)
@@ -394,7 +400,7 @@ raceCondition n = do
   counter <- newMVar 0
   ws <- createWorkers 4
   let inc k = local_ $ incrementWithDelay (2*k*n) counter
-      act = inc 1 \\\ inc 3 \\\ inc 3 \\\ inc 4 \\\ inc 5 \\\ inc 6
+      act = inc 1 \\\ inc 2 \\\ inc 3 \\\ inc 4 \\\ inc 5 \\\ inc 6
       tech = thaw def
       opts = def & workers .~ ws
   runLSC opts tech $ compiler act mempty
