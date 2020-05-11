@@ -38,6 +38,11 @@
 
 `stack test`  
 
+### Enable concurrency tests
+
+Pass the argument `-j4` for enabling concurrency tests with 4 jobs to run simultaneosly.
+
+`stack test --test-arguments -j4`
 
 ## References
 

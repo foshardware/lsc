@@ -15,6 +15,7 @@ import Data.Default
 import Data.FileEmbed
 import Data.Foldable
 import Data.IntSet (fromList, fromAscList, size)
+import Data.List (isPrefixOf)
 import Data.Map (assocs)
 import Data.Ratio
 import Data.Text (Text)
@@ -23,6 +24,8 @@ import Data.Vector (replicate, (!))
 import qualified Data.Vector as V
 import qualified Data.Vector.Algorithms.Intro as V
 import Prelude hiding (id, replicate, (.))
+
+import System.Environment
 
 import Test.Tasty
 import Test.Tasty.HUnit
@@ -38,16 +41,15 @@ import LSC.KGGGP as KGGGP
 
 main :: IO ()
 main = do
-  j <- getNumCapabilities
-  defaultMain $ lsc j
+  a <- getArgs
+  defaultMain $ lsc a
 
 
-lsc :: Int -> TestTree
-lsc j = testGroup "LSC"
+lsc :: [String] -> TestTree
+lsc args = testGroup "LSC" $
   [ gggp
   , fm
-  , concurrency j
-  ]
+  ] ++ [ concurrency | isPrefixOf "-j" `any` args ]
 
 
 gggp :: TestTree
@@ -93,23 +95,19 @@ fmLocks = testGroup "Locks"
 
 
 
-concurrency :: Int -> TestTree
-concurrency j = testGroup "Concurrency" $
+concurrency :: TestTree
+concurrency = testGroup "Concurrency" $
   [ testCase "Dual core" $ dualCore n
   | n <- take 4 $ drop 2 $ iterate (`shiftR` 1) (shiftL 1 20)
-  , j >= 2
   ] ++
   [ testCase "Quad core" $ quadCore n
   | n <- take 4 $ drop 2 $ iterate (`shiftR` 1) (shiftL 1 20)
-  , j >= 4
   ] ++
   [ testCase "Stream processor" $ stream n
   | n <- take 4 $ drop 2 $ iterate (`shiftR` 1) (shiftL 1 20)
-  , j >= 4
   ] ++
   [ testCase "Remote procedure" $ remoteProcess n
   | n <- take 4 $ drop 2 $ iterate (`shiftR` 1) (shiftL 1 20)
-  , j >= 2
   ] ++
   [ testCase "Race condition" $ raceCondition n
   | n <- take 4 $ drop 2 $ iterate (`shiftR` 1) (shiftL 1 20)
