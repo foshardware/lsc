@@ -13,10 +13,10 @@ import Control.Monad
 import Data.Default
 import Data.Either
 import Data.Foldable
+import qualified Data.HashMap.Lazy as HashMap
 import Data.Maybe
-import Data.Map (fromList, fromListWith, lookup, insert, assocs, withoutKeys)
-import Data.Set (Set)
-import qualified Data.Set as Set
+import Data.Map (fromList, fromListWith, lookup, insert, assocs)
+import Data.Monoid
 import Data.Text (pack)
 import qualified Data.Vector as V
 import Prelude hiding (lookup)
@@ -25,6 +25,7 @@ import Language.DEF.Builder
 import Language.DEF.Parser (parseDEF)
 import Language.DEF.Syntax as DEF
 
+import LSC.NetGraph (power)
 import LSC.Types as Rect
 
 
@@ -47,7 +48,7 @@ fromDEF (DEF options area rs ts cs ps ns _) = def &~ do
 
       nodes = set number `imap` V.fromList (fromComponent <$> cs)
 
-      edges = fromList [ (n ^. identifier, n) | n <- fromNet gateNumber <$> ns ]
+      edges = HashMap.fromList [ (n ^. identifier, n) | n <- fromNet gateNumber <$> ns ]
 
       gateNumber y = maybe (-1) id $ lookup y $ fromList [ (x, i) | (i, Component x _ _) <- zip [0..] cs ]
 
@@ -86,13 +87,13 @@ fromPin :: DEF.Pin -> Rect.Pin
 fromPin (DEF.Pin p _ d layer placed) = def &~ do
     identifier .= p
     dir .= fmap fromDirection d
-    geometry .= join
+    geometry .=
       [ fromPlaced f
-        <&> l +~ x1
-        <&> b +~ y1
-        <&> r +~ x2
-        <&> t +~ y2
-        <&> z .~ [fromLayer q]
+        & l +~ x1
+        & b +~ y1
+        & r +~ x2
+        & t +~ y2
+        & z .~ [fromLayer q]
       | (Layer q (x1, y1) (x2, y2), f) <- maybeToList $ (,) <$> layer <*> placed
       ]
 
@@ -121,24 +122,20 @@ fromRow (DEF.Row _ i x y o ss _ w _)
 fromComponent :: DEF.Component -> Gate
 fromComponent (Component _ j placed@(Just (Fixed _ _))) = def &~ do
     identifier .= j
-    geometry .= maybe mempty fromPlaced placed
+    space .= maybe def fromPlaced placed
     fixed .= True
 fromComponent (Component _ j placed) = def &~ do
     identifier .= j
-    geometry .= maybe mempty fromPlaced placed
+    space .= maybe def fromPlaced placed
 
 
 
-fromPlaced :: Placed -> Path
-fromPlaced (Placed (x, y) ori) =
-  [ Layered (ceiling x) (ceiling y) (ceiling x) (ceiling y)
-    [Metal2, Metal3] (fromOrientation ori)
-  ]
-fromPlaced (Fixed (x, y) ori) =
-  [ Layered (ceiling x) (ceiling y) (ceiling x) (ceiling y)
-    [Metal2, Metal3] (fromOrientation ori)
-  ]
-fromPlaced _ = mempty
+fromPlaced :: Placed -> Rect.Component Rect.Layer Integer
+fromPlaced (Placed (x, y) ori)
+    = Layered (ceiling x) (ceiling y) (ceiling x) (ceiling y) [Metal2, Metal3] (fromOrientation ori)
+fromPlaced (Fixed (x, y) ori)
+    = Layered (ceiling x) (ceiling y) (ceiling x) (ceiling y) [Metal2, Metal3] (fromOrientation ori)
+fromPlaced _ = def
 
 
 
@@ -170,7 +167,7 @@ toDEF scale top = DEF
   (toList $ top ^. supercell . tracks <&> toTrack)
   (toList $ set number `imap` view gates top <&> toComponent)
   (toList $ top ^. supercell . pins <&> toPin)
-  (toList $ withoutKeys (top ^. nets) power <&> toNet top)
+  (toList $ ala Endo foldMap (HashMap.delete <$> toList power) (top ^. nets) <&> toNet top)
   mempty
 
   where
@@ -207,10 +204,6 @@ dieArea _ = DieArea (0, 0) (0, 0)
 
 
 
-power :: Set Identifier
-power = Set.fromList ["gnd", "vdd"]
-
-
 enumeratedGate :: Gate -> Identifier
 enumeratedGate g = view identifier g <> "_" <> pack (views number show g)
 
@@ -219,7 +212,7 @@ enumeratedRow x = "ROW_" <> pack (views number show x)
 
 
 toComponent :: Gate -> DEF.Component
-toComponent g = Component (enumeratedGate g) (g ^. identifier) (listToMaybe $ g ^. geometry <&> place)
+toComponent g = Component (enumeratedGate g) (g ^. identifier) (Just $ place $ g ^. space)
   where
     place x | g ^. fixed = Fixed (fromIntegral $ x^.l, fromIntegral $ x^.b) "N"
     place x = Placed (fromIntegral $ x^.l, fromIntegral $ x^.b) "N"

@@ -18,23 +18,31 @@ import Control.Monad.Trans
 import Control.Monad.Codensity hiding (improve)
 import Prelude hiding ((.), id)
 
+import LSC.FastDP
 import LSC.Improve
 import LSC.Legalize
 import LSC.Mincut
+import LSC.NetGraph
 import LSC.Types
 import LSC.Version
 
 
 
 stage0 :: Compiler' NetGraph
-stage0 = legalization
-
+stage0 = id
+    >>> legalization
+    >>> estimate
 
 
 stage1 :: Compiler' NetGraph
-stage1 = globalPlacement
-    >>> detailedPlacement
+stage1 = zeroArrow
 
+
+stage2 :: Compiler' NetGraph
+stage2 = id
+    >>> stage0
+    >>> detailedPlacement
+    >>> stage0
 
 
 stage4 :: Compiler' NetGraph
@@ -49,13 +57,26 @@ globalPlacement = local placeQuad
 
 detailedPlacement :: Compiler' NetGraph
 detailedPlacement = id
+    >>> local singleSegmentClustering >>> estimate
+    >>> improveBy significantHpwl
+        (local globalSwap >>> local verticalSwap >>> legalization >>> local localReordering >>> legalization >>> estimate)
+    >>> improveBy significantHpwl
+        (local singleSegmentClustering >>> estimate)
 
 
 
 legalization :: Compiler' NetGraph
 legalization = id
-    >>> remote legalize
+    >>> local gateGeometry
+    >>> local assignCellsToRows
+    >>> local juggleCells
+    >>> local legalizeRows
 
+
+estimate :: Compiler' NetGraph
+estimate = proc top -> do
+    () <- local estimations -< top
+    returnA -< top
 
 
 
@@ -76,11 +97,6 @@ type Compiler = LSR LS
 compiler :: Compiler a b -> a -> LSC b
 compiler = unLS . reduce
 
-
-improving :: Compiler' a -> (a -> a -> Ordering) -> Compiler' a
-improving f p = remote $ \ x -> do
-    k <- view iterations <$> environment
-    improve k p x $ compiler f
 
 
 expensive :: (a -> b) -> Compiler a b

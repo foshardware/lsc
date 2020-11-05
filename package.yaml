@@ -47,10 +47,12 @@ dependencies:
 - primitive
 - random
 - SafeSemaphore
+- split
 - template-haskell
 - text
 - time
 - transformers
+- unordered-containers
 - vector
 - vector-algorithms
 - verilog

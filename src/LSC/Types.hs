@@ -24,6 +24,7 @@ import Data.Foldable
 import Data.Function (on)
 import Data.IntSet (IntSet)
 import Data.Map (Map, unionWith, lookup)
+import Data.HashMap.Lazy (HashMap)
 import Data.Semigroup
 import Data.Hashable
 import Data.Text (Text)
@@ -34,14 +35,14 @@ import Data.Aeson (encode, FromJSON, ToJSON)
 import Control.Monad.Codensity
 import Control.Monad.Morph
 import Control.Monad.Fail
-import Control.Monad.Reader
-import Control.Monad.State
+import Control.Monad.Reader hiding (fail)
+import Control.Monad.State hiding (fail)
 
 import Data.Time.Clock.POSIX
 import System.Console.Concurrent
 
 import GHC.Generics
-import Prelude hiding (lookup)
+import Prelude hiding (lookup, fail)
 
 
 
@@ -91,7 +92,7 @@ data NetGraph = NetGraph
   , _supercell   :: AbstractCell
   , _subcells    :: Map Identifier NetGraph
   , _gates       :: Vector Gate
-  , _nets        :: Map Identifier Net
+  , _nets        :: HashMap Identifier Net
   } deriving (Generic, Show)
 
 instance ToJSON NetGraph
@@ -122,7 +123,7 @@ type Identifier = Text
 
 data Gate = Gate
   { _identifier :: Identifier
-  , _geometry   :: Path
+  , _space      :: Component Layer Integer
   , _vdd        :: Pin
   , _gnd        :: Pin
   , _wires      :: Map Identifier Identifier
@@ -202,7 +203,7 @@ instance Hashable Cell where
 data Pin = Pin
   { _identifier :: Identifier
   , _dir        :: Maybe Dir
-  , _geometry   :: Path
+  , _geometry   :: [Component Layer Integer]
   } deriving (Generic, Show)
 
 instance ToJSON Pin
@@ -313,6 +314,11 @@ evalEnvT = runReaderT
 
 
 type LSC = Codensity (LST IO)
+
+
+assert :: MonadFail m => String -> Bool -> m ()
+assert _ True = pure ()
+assert msg  _ = fail msg
 
 
 choice :: Alternative m => [m a] -> m a
@@ -460,13 +466,43 @@ instance Hashable a => Hashable (Line a)
 makeFieldsNoPrefix ''Line
 
 
-relocateX :: Num a => a -> Component l a -> Component l a
-relocateX f p = p & l +~ f-x & r +~ f-x
-    where x = p ^. l
+centerX :: Integral a => Component l a -> a
+centerX p = div (p ^. r + p ^. l) 2
+{-# SPECIALIZE centerX :: Component Layer Integer -> Integer #-}
 
-relocateY :: Num a => a -> Component l a -> Component l a
-relocateY f p = p & b +~ f-y & t +~ f-y
+
+centerY :: Integral a => Component l a -> a
+centerY p = div (p ^. t + p ^. b) 2
+{-# SPECIALIZE centerY :: Component Layer Integer -> Integer #-}
+
+
+relocateL :: Num a => a -> Component l a -> Component l a
+relocateL f p = p & l +~ f-x & r +~ f-x
+    where x = p ^. l
+{-# SPECIALIZE relocateL :: Integer -> Component Layer Integer -> Component Layer Integer #-}
+
+relocateR :: Num a => a -> Component l a -> Component l a
+relocateR f p = p & l +~ f-x & r +~ f-x
+    where x = p ^. r
+{-# SPECIALIZE relocateL :: Integer -> Component Layer Integer -> Component Layer Integer #-}
+
+
+relocateB :: Num a => a -> Component l a -> Component l a
+relocateB f p = p & b +~ f-y & t +~ f-y
     where y = p ^. b
+{-# SPECIALIZE relocateB :: Integer -> Component Layer Integer -> Component Layer Integer #-}
+
+
+relocateX :: Integral a => a -> Component l a -> Component l a
+relocateX f p = p & l +~ f-x & r +~ f-x
+    where x = centerX p
+{-# SPECIALIZE relocateL :: Integer -> Component Layer Integer -> Component Layer Integer #-}
+
+
+relocateY :: Integral a => a -> Component l a -> Component l a
+relocateY f p = p & b +~ f-y & t +~ f-y
+    where y = centerY p
+{-# SPECIALIZE relocateL :: Integer -> Component Layer Integer -> Component Layer Integer #-}
 
 
 projectNorth :: Component l a -> Component l a
@@ -553,18 +589,8 @@ makeFieldsNoPrefix ''Gate
 
 
 gateWidth, gateHeight :: Gate -> Integer
-gateWidth g
-    | views geometry null g
-    = 0
-gateWidth g
-    = maximum (g ^. geometry <&> view r)
-    - minimum (g ^. geometry <&> view l)
-gateHeight g
-    | views geometry null g
-    = 0
-gateHeight g
-    = maximum (g ^. geometry <&> view t)
-    - minimum (g ^. geometry <&> view b)
+gateWidth  = width  . view space
+gateHeight = height . view space
 
 
 instance Eq Gate where
@@ -574,7 +600,7 @@ instance Ord Gate where
   compare = compare `on` view number
 
 instance Default Gate where
-  def = Gate mempty mempty def def mempty (-1) False
+  def = Gate mempty def def def mempty (-1) False
 
 
 type Arboresence a = (Net, a, a)
@@ -648,3 +674,21 @@ lambda tech = ceiling $ view scaleFactor tech * view featureSize tech
 distinctPairs :: [a] -> [(a, a)]
 distinctPairs (x : xs) = fmap (x, ) xs ++ distinctPairs xs
 distinctPairs _ = []
+
+
+median :: (Ord a, Integral a) => [a] -> a
+median [] = error "median: empty list"
+median zs = go zs zs
+    where go (x:_)   (_:  []) = x
+          go (x:y:_) (_:_:[]) = div (x + y) 2
+          go (_:xs)  (_:_:ys) = go xs ys
+          go _ _ = error "median: this does not happen"
+{-# SPECIALIZE median :: [Integer] -> Integer #-}
+{-# SPECIALIZE median :: [Int] -> Int #-}
+
+-- median :: [Integer] -> Maybe Integer
+-- median [x] = Just x
+-- median [x, y] = Just $ div (x + y) 2
+-- median (_:xs) = median (init xs)
+-- median _ = Nothing
+

@@ -5,15 +5,15 @@ module LSC.SVG where
 import Control.Lens
 import Control.Monad
 import Data.Foldable
-import Data.String
 import Data.Map (assocs)
-import Data.Maybe
-import Data.Text hiding (take, null)
-import qualified Data.Text as Text
+import Data.String
 import qualified Data.Text.Lazy    as Lazy
 import qualified Data.Text.Lazy.IO as Lazy
 
-import Text.Blaze.Svg11 ((!), mkPath)
+import Data.Text.Lazy.Builder (toLazyText, fromText)
+import Data.Text.Lazy.Builder.Int
+
+import Text.Blaze.Svg11 ((!), mkPath, toSvg)
 import qualified Text.Blaze.Svg11 as S
 import qualified Text.Blaze.Svg11.Attributes as A
 import Text.Blaze.Svg.Renderer.Text (renderSvg)
@@ -91,7 +91,7 @@ place (g, path@(p : _)) = do
     ! A.fontSize "24"
     ! A.fontFamily "monospace"
     ! A.transform (fromString $ "rotate(90 "++ show (x + 8) ++","++ show (y + 24)  ++")")
-    $ renderText $ g ^. identifier
+    $ renderText $ toLazyText $ decimal (view number g) <> ": " <> fromText (view identifier g)
 
   follow path
 
@@ -154,7 +154,7 @@ svgPaths netlist = (Circuit2D gs ns, if null $ netlist ^. nets then markRouting 
       ]
 
     gs =
-      [ (gate, gate ^. geometry <&> projectNorth)
+      [ (gate, pure $ gate ^. space . to projectNorth)
       | gate <- toList $ netlist ^. gates
       ]
 
@@ -170,7 +170,7 @@ svgPaths netlist = (Circuit2D gs ns, if null $ netlist ^. nets then markRouting 
     inducePins (i, ps) =
       [ q & l +~ p^.l & b +~ p^.b & r +~ p^.l & t +~ p^.b & integrate mempty
       | pin <- ps
-      , p <- toList $ join $ netlist ^. gates ^? ix i . geometry . to listToMaybe
+      , p <- toList $ netlist ^. gates ^? ix i . space
       , q <- take 1 $ pin ^. geometry
       ]
 
@@ -191,11 +191,10 @@ scaleDown n (Circuit2D nodes edges, markers) = (Circuit2D
   , fmap (`div` n) <$> markers)
 
 
-renderText :: Text -> Svg
+renderText :: Lazy.Text -> Svg
 renderText string
-    | Text.length string > 8
-    -- = renderText $ Text.take 5 string <> "..."
-    = renderText $ ".." <> Text.drop (Text.length string - 6) string
+    | Lazy.length string > 14
+    = renderText $ ".." <> Lazy.drop (Lazy.length string - 12) string
 renderText string
-    = fromString $ Text.unpack string
+    = toSvg string
 

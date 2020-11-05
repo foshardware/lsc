@@ -14,10 +14,11 @@ import Control.Monad.State (execStateT, get, put)
 import Data.Default
 import Data.Foldable hiding (concat)
 import Data.Function
+import Data.HashMap.Lazy (HashMap)
 import Data.List (permutations)
 import Data.Maybe
 import Data.IntSet (size, elems)
-import Data.Map (Map, assocs)
+import Data.Map (assocs)
 import qualified Data.Map as Map
 import Data.Semigroup
 import Data.Matrix hiding (toList, (!))
@@ -71,8 +72,7 @@ placeQuad top = do
 
     cells <- view stdCells <$> technology
 
-    let geo g = g &~ do
-            geometry .= toList (maybe (padCell g) (gate g) $ cells ^? ix (g ^. identifier) . dims)
+    let geo g = g & space .~ maybe def id (maybe (padCell g) (gate g) $ cells ^? ix (g ^. identifier) . dims)
 
         gate g (w, h) = region ^? ix (g ^. number)
             <&> \ (x, y) -> Layered x y (x + w) (y + h) [Metal2, Metal3] N
@@ -246,7 +246,7 @@ placeMatrix m = do
 
 
 
-hypergraph :: Vector Gate -> Map Identifier Net -> ST s (V, E)
+hypergraph :: Vector Gate -> HashMap Identifier Net -> ST s (V, E)
 hypergraph v e = inputRoutine (length e) (length v)
     [ (n, c)
     | (n, w) <- zip [0..] $ toList e
