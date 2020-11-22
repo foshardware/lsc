@@ -12,14 +12,12 @@ import Data.Default
 import Data.Foldable
 import Data.Function
 import Data.Graph
-import Data.IntSet (lookupGE, lookupLE) 
 import qualified Data.IntMap as IntMap
-import qualified Data.IntSet as IntSet
 import Data.List (sortOn, groupBy)
 import Data.Maybe
 import Data.STRef
-import Data.Vector ((!), unsafeFreeze, unsafeThaw)
-import Data.Vector.Mutable (new, read, write, modify)
+import Data.Vector ((!), (//), unsafeFreeze, unsafeThaw)
+import Data.Vector.Mutable (read, modify)
 import qualified Data.Vector.Algorithms.Intro as Intro
 import qualified Data.Vector as Vector
 import qualified Data.Vector.Unboxed.Mutable as ST
@@ -30,38 +28,33 @@ import LSC.NetGraph
 import LSC.Types
 
 
-legalize :: NetGraph -> LSC NetGraph
-legalize top = legalizeRows =<< juggleCells =<< assignCellsToRows =<< gateGeometry top
-
 
 legalizeRows :: NetGraph -> LSC NetGraph
 legalizeRows top = do
 
+    assert "legalizeRows: gate vector indices do not match gate numbers"
+        $ and $ imap (==) $ view number <$> view gates top
+
     let resolution = minimum $ top ^. supercell . rows <&> views granularity fromIntegral
 
-    groups <- sequence
+    groups <- liftIO . stToIO
+        $ sequence
         $ rowLegalization resolution top
-        . sortOn (view geometry) <$> IntMap.fromListWith (++)
-        [ (fromIntegral $ p ^. b, [ g ])
-        | g <- toList $ set number `imap` view gates top
-        , p <- g ^. geometry
+        . sortOn (view space) <$> IntMap.fromListWith (++)
+        [ (fromIntegral $ g ^. space . b, [ g ])
+        | g <- toList $ view gates top
         ]
 
-    gateVector <- liftIO $ stToIO $ do
-        v <- new $ top ^. gates . to length
-        sequence_ [ write v (g ^. number) g | g <- foldMap id groups ]
-        unsafeFreeze v
-
     pure $ top &~ do
-        gates .= gateVector
+        gates %= (// [ (g ^. number, g) | g <- foldMap id groups ])
 
 
-rowLegalization :: Int -> NetGraph -> [Gate] -> LSC [Gate]
+rowLegalization :: Int -> NetGraph -> [Gate] -> ST s [Gate]
 rowLegalization res top gs = do
 
     let gateVector = Vector.fromList gs
 
-    let bySites f g = maybe 0 (`div` res) $ listToMaybe $ g ^. geometry <&> f <&> fromIntegral
+    let bySites f g = g ^. space . to ((`div` res) . fromIntegral . f)
         bySites :: (Component Layer Integer -> Integer) -> Gate -> Int
 
     let n = maybe 0 (`div` res) $ listToMaybe $ top ^. supercell . geometry <&> width <&> fromIntegral
@@ -90,12 +83,15 @@ rowLegalization res top gs = do
         minPERB (u, _) | (j, k) <- site u, x ! j /= k, gateVector ! j ^. fixed = div maxBound 2
         minPERB (u, _) | (j, k) <- site u = abs $ x ! j - k
 
-    shortestPath <- liftIO $ stToIO $ topologicalShortestPath minPERB count graph
+    shortestPath <- topologicalShortestPath minPERB count graph
 
     let leftMost = fmap (* res) $ fmap snd $ fmap last $ groupBy (on (==) fst) $ fmap site shortestPath
 
+    assert "cannot legalize row: try reducing the row capacity, e. g. lsc --row-capacity=0.5"
+        $ length leftMost >= length gateVector
+
     pure
-      [ g & geometry %~ fmap (relocateX $ fromIntegral u)
+      [ g & space %~ relocateL (fromIntegral u)
       | (u, g) <- leftMost `zip` toList gateVector
       ]
 
@@ -147,11 +143,13 @@ juggleCells top = do
 rowJuggling :: Double -> NetGraph -> ST s NetGraph
 rowJuggling rc top = do
 
+    assert "rowJuggling: gate vector indices do not match gate numbers"
+        $ and $ imap (==) $ view number <$> view gates top
+
     let rs = top ^. supercell . rows
         gs = top ^. gates
 
-    let groups = IntMap.fromListWith (++)
-          [ (fromIntegral $ p ^. b, [ g ]) | g <- toList $ set number `imap` gs, p <- g ^. geometry ]
+    let groups = IntMap.fromListWith (++) [ (fromIntegral $ g ^. space . b, [ g ]) | g <- toList gs ]
 
     let widths = rs <&> (*) <$> view granularity <*> view cardinality
     let table  = rs <&> maybe mempty id . flip preview groups . ix . views b fromIntegral
@@ -180,8 +178,8 @@ rowJuggling rc top = do
           for_ cs $ \ c -> do
             for_ [ 0 .. length table - 1 ] $ \ k -> do
 
-              let g = c & geometry %~ fmap (relocateY $ rs!k ^. b)
-              let delta = fromIntegral $ hpwlIncrease top g
+              let g = c & space %~ relocateB (rs!k ^. b)
+              let delta = fromIntegral $ hpwlDelta top [g]
 
               s <- read surplus k
               d <- readSTRef bestHpwl
@@ -195,7 +193,7 @@ rowJuggling rc top = do
           k <- readSTRef bestRow
           c <- readSTRef bestCell
 
-          when (k < 0) $ fail "no space left to juggle - increase row capacity!"
+          assert "no space left to juggle - increase row capacity!" $ k >= 0
 
           modify matrix (filter (/= c)) i
           modify matrix (c : ) k
@@ -205,11 +203,9 @@ rowJuggling rc top = do
 
     grouped <- unsafeFreeze matrix
 
-    v <- new $ length gs
-    sequence_ [ write v (g ^. number) g | xs <- toList grouped, g <- xs ]
-    gateVector <- unsafeFreeze v
+    pure $ top &~ do
+        gates %= (// [ (g ^. number, g) | g <- foldMap id grouped ])
 
-    pure $ top & gates .~ gateVector
 
 
 debugRowCapacities :: NetGraph -> LSC ()
@@ -219,8 +215,7 @@ debugRowCapacities top = do
 
     rc <- view rowCapacity <$> environment
 
-    let groups = IntMap.fromListWith (++)
-          [ (fromIntegral $ p ^. b, [ g ]) | g <- toList $ top ^. gates, p <- g ^. geometry ]
+    let groups = IntMap.fromListWith (++) [ (fromIntegral $ g ^. space . b, [ g ]) | g <- toList $ top ^. gates ]
 
     let widths = rs <&> (*) <$> view granularity <*> view cardinality
     let table  = rs <&> maybe mempty id . flip preview groups . ix . views b fromIntegral
@@ -234,16 +229,4 @@ debugRowCapacities top = do
         , f > rc * 10
         , rw > (0 :: Integer)
         ]
-
-
-
-assignCellsToRows :: NetGraph -> LSC NetGraph
-assignCellsToRows top = do
-
-    let rs = IntSet.fromList $ toList $ top ^. supercell . rows <&> views b fromIntegral
-
-    let closest x = minimumBy (compare `on` \ y -> abs (x - y)) $ catMaybes [lookupGE x rs, lookupLE x rs]
-
-    pure $ top &~ do
-        gates %= fmap (geometry %~ fmap (relocateY =<< fromIntegral . closest . fromIntegral . view b))
 

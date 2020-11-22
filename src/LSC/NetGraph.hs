@@ -15,6 +15,10 @@ import Data.Default
 import Data.Foldable
 import Data.Function
 import Data.Hashable
+import Data.HashSet (HashSet)
+import qualified Data.HashSet as HashSet
+import Data.HashMap.Lazy (HashMap)
+import qualified Data.HashMap.Lazy as HashMap
 import qualified Data.IntSet as S
 import Data.List (sortBy)
 import Data.Map hiding (null, toList, foldl', foldr, take, filter)
@@ -33,16 +37,30 @@ import Prelude hiding (lookup, filter)
 import LSC.Types
 
 
-
-boundingBox :: (Foldable f, Functor f, Num n, Ord n) => f (Component l n) -> Component l n
-boundingBox xs | null xs = Rect 0 0 0 0
-boundingBox xs = Rect
-    (minimum $ view l <$> xs)
-    (minimum $ view b <$> xs)
-    (maximum $ view r <$> xs)
-    (maximum $ view t <$> xs)
+boundingBox :: (Foldable f, Functor f, Integral n) => f (Component l n) -> Component l n
+boundingBox cs | null cs = error "boundingBox: no components"
+boundingBox cs = Rect (minimum x) (minimum y) (maximum x) (maximum y)
+    where
+        x = fmap (\ c -> div (view r c + view l c) 2) cs
+        y = fmap (\ c -> div (view t c + view b c) 2) cs
 {-# SPECIALIZE boundingBox ::        [Component l Int] -> Component l Int #-}
 {-# SPECIALIZE boundingBox :: Vector (Component l Int) -> Component l Int #-}
+{-# SPECIALIZE boundingBox ::        [Component l Integer] -> Component l Integer #-}
+{-# SPECIALIZE boundingBox :: Vector (Component l Integer) -> Component l Integer #-}
+
+
+
+coarseBoundingBox :: (Foldable f, Functor f, Ord n) => f (Component l n) -> Component l n
+coarseBoundingBox cs | null cs = error "coarseBoundingBox: no components"
+coarseBoundingBox cs = Rect
+    (minimum $ view l <$> cs)
+    (minimum $ view b <$> cs)
+    (maximum $ view r <$> cs)
+    (maximum $ view t <$> cs)
+{-# SPECIALIZE coarseBoundingBox ::        [Component l Int] -> Component l Int #-}
+{-# SPECIALIZE coarseBoundingBox :: Vector (Component l Int) -> Component l Int #-}
+{-# SPECIALIZE coarseBoundingBox ::        [Component l Integer] -> Component l Integer #-}
+{-# SPECIALIZE coarseBoundingBox :: Vector (Component l Integer) -> Component l Integer #-}
 
 
 
@@ -73,32 +91,39 @@ coordsVector m = runST $ do
 
 
 hpwl :: Vector Gate -> Net -> Integer
-hpwl  _ n | elem (n ^. identifier) ["clk"] = 0
+hpwl  _ n | elem (n ^. identifier) ["clk", "CLK"] || elem (n ^. identifier) power = 0
 hpwl gs n = width p + height p
   where
     p = boundingBox $ catMaybes
-      [ join $ gs ^? ix i . geometry . to listToMaybe
+      [ gs ^? ix i . space 
       | (i, _) <- n ^. contacts . to assocs
       ]
 
 
-hpwlIncrease :: NetGraph -> Gate -> Integer
-hpwlIncrease top g = width q - width p + height q - height p
+hpwlDelta :: Foldable f => NetGraph -> f Gate -> Integer
+hpwlDelta top gs
+  = sum (width  <$> qs) - sum (width  <$> ps)
+  + sum (height <$> qs) - sum (height <$> ps)
   where
-    p = boundingBox $ catMaybes $
-      [ join $ top ^. gates ^? ix i . geometry . to listToMaybe
-      | k <- views wires elems g
-      , n <- maybeToList $ top ^. nets ^? ix k
-      , i <- views contacts keys n
+    ns = HashSet.fromList $ catMaybes
+      [ top ^. nets ^? ix k
+      | ks <- views wires elems <$> toList gs
+      , k <- ks
+      , k /= "clk", k /= "CLK", not $ k `elem` power
       ]
-    q = boundingBox $ catMaybes $ 
-      [ g ^. geometry . to listToMaybe ] ++
-      [ join $ top ^. gates ^? ix i . geometry . to listToMaybe
-      | k <- views wires elems g
-      , n <- maybeToList $ top ^. nets ^? ix k
-      , i <- views contacts keys n
-      , i /= g ^. number
+    ps =
+      [ boundingBox $ fmap (view space) $ catMaybes $ flip preview (top ^. gates) . ix <$> is
+      | n <- toList ns
+      , let is = views contacts keys n
       ]
+    qs =
+      [ boundingBox $ fmap (view space) $ mappend hs $ catMaybes $ flip preview (top ^. gates) . ix <$> is
+      | n <- toList ns
+      , let is = [ i | i <- views contacts keys n, all ((/= i) . view number) gs ]
+      , let hs = join [ [ g | g <- toList gs, view number g == h ] | h <- views contacts keys n ]
+      ]
+{-# SPECIALIZE hpwlDelta :: NetGraph -> Vector Gate -> Integer #-}
+{-# SPECIALIZE hpwlDelta :: NetGraph -> [Gate] -> Integer #-}
 
 
 markRouting :: NetGraph -> [Line Integer]
@@ -126,13 +151,13 @@ markRouting top = join [ either horizontal vertical track | track <- top ^. supe
 markEdges :: NetGraph -> [Line Integer]
 markEdges top =
     [ Line (p^.l + po^.l, p^.b + po^.b) (q^.l + qo^.l, q^.b + qo^.b)
-    | (_, net) <- top ^. nets . to assocs
+    | net <- toList $ top ^. nets
     , (i, src) <- net ^. contacts . to assocs
     , any (\c -> c ^. dir == Just Out) src
     , (j, snk) <- net ^. contacts . to assocs
     , i /= j
-    , p <- join $ toList $ top ^. gates ^? ix i . geometry . to (take 1)
-    , q <- join $ toList $ top ^. gates ^? ix j . geometry . to (take 1)
+    , p <- toList $ top ^. gates ^? ix i . space
+    , q <- toList $ top ^. gates ^? ix j . space
     , po <- join $ take 1 src <&> view geometry
     , qo <- join $ take 1 snk <&> view geometry
     ]
@@ -168,12 +193,19 @@ estimations top = do
   let gs = top ^. gates
       ns = top ^. nets
  
-  let box = boundingBox [ p | g <- toList gs, p <- take 1 $ g ^. geometry ]
+  let box = boundingBox $ view space <$> gs
 
   debug
     [ unpack (view identifier top) ++ " layout area: " ++ show (width box, height box)
     , unpack (view identifier top) ++ " sum of hpwl: " ++ show (sum $ hpwl gs <$> ns)
+    , unpack (view identifier top) ++ " gate count: "  ++ show (length gs)
     ]
+
+
+
+significantHpwl :: NetGraph -> NetGraph -> Integer
+significantHpwl m n = sw m - sw n - div (sw n) 10000
+    where sw q = sum $ hpwl (view gates q) <$> view nets q
 
 
 
@@ -188,14 +220,13 @@ inlineGeometry top = pure $ top &~ do
       ns = rebuildEdges gs
 
       gs = set number `imap` V.concat
-        [ s ^. gates <&> project p
+        [ s ^. gates <&> project (view space g)
         | g <- toList $ top ^. gates
         , s <- toList $ lookup (g ^. identifier) (top ^. subcells)
-        , p <- take 1 $ g ^. geometry
         ]
 
       project :: Component Layer Integer -> Gate -> Gate
-      project p = geometry %~ fmap (\x -> x & l +~ p^.l & b +~ p^.b & t +~ p^.b & r +~ p^.l)
+      project p = space %~ \ x -> x & l +~ p^.l & b +~ p^.b & t +~ p^.b & r +~ p^.l
 
 
 
@@ -204,7 +235,7 @@ gateGeometry netlist = do
 
   cells <- view stdCells <$> technology
 
-  let expand g = g & geometry %~ maybe id (fmap . drag) (cells ^? ix (g ^. identifier) . dims)
+  let expand g = g & space %~ maybe id drag (cells ^? ix (g ^. identifier) . dims)
       drag (w, h) p = p &~ do
           r .= view l p + w
           t .= view b p + h
@@ -212,6 +243,21 @@ gateGeometry netlist = do
   pure $ netlist &~ do
       gates %= fmap expand
 
+
+assignCellsToRows :: NetGraph -> LSC NetGraph
+assignCellsToRows top = do
+
+    let rs = S.fromList $ toList $ top ^. supercell . rows <&> views b fromIntegral
+
+    let closest x = minimumBy (compare `on` \ y -> abs (x - y)) $ catMaybes [S.lookupGE x rs, S.lookupLE x rs]
+
+    pure $ top &~ do
+        gates %= fmap (space %~ (relocateB =<< fromIntegral . closest . fromIntegral . view b))
+
+
+
+power :: HashSet Identifier
+power = HashSet.fromList ["gnd", "vdd", "vcc", "GND", "VDD", "VCC"]
 
 
 contactGeometry :: NetGraph -> LSC NetGraph
@@ -233,7 +279,7 @@ contactGeometry netlist = do
       = g & vdd .~ view vdd sc & gnd .~ view gnd sc
     vddGnd _ g = g
 
-    createNets tech = fromListWith mappend
+    createNets tech = HashMap.fromListWith mappend
       [ (net, Net net mempty (singleton (gate ^. number) [pin]))
       | gate <- toList $ netlist ^. gates
       , (contact, net) <- assocs $ gate ^. wires
@@ -295,22 +341,22 @@ netGraphGoedel :: NetGraph -> Int
 netGraphGoedel top = foldl' xor outerPins $ gateGoedel wireSequence <$> top ^. gates
   where
     outerPins = hash $ elems $ intersection wireSequence $ top ^. supercell . pins
-    wireSequence = fromAscList $ zip (top ^. nets . to keys) [0..]
+    wireSequence = fromAscList $ zip (top ^. nets . to HashMap.keys) [0..]
 
 gateGoedel :: Map Identifier Int -> Gate -> Int
 gateGoedel ns g = hash [ (lookup w ns, view identifier g) | w <- g ^. wires . to elems ]
 
 
 
-rebuildEdges :: Foldable f => f Gate -> Map Identifier Net
-rebuildEdges nodes = fromListWith (<>)
+rebuildEdges :: Foldable f => f Gate -> HashMap Identifier Net
+rebuildEdges nodes = HashMap.fromListWith (<>)
     [ (net, Net net mempty (singleton (gate ^. number) [pin]))
     | gate <- toList nodes
     , (contact, net) <- gate ^. wires & assocs
     , let pin = def & identifier .~ contact
     ]
-{-# SPECIALIZE rebuildEdges :: Matrix Gate -> Map Identifier Net #-}
-{-# SPECIALIZE rebuildEdges :: Vector Gate -> Map Identifier Net #-}
+{-# SPECIALIZE rebuildEdges :: Matrix Gate -> HashMap Identifier Net #-}
+{-# SPECIALIZE rebuildEdges :: Vector Gate -> HashMap Identifier Net #-}
 
 
 leaves :: NetGraph -> [NetGraph]

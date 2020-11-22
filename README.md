@@ -28,6 +28,10 @@
 `replace < gcd_nontd_test.tcl`  
 `lsc -dy -llibrary/nangate45/NangateOpenCellLibrary.lef gcd_nan45_nontd.def -odef > legalized.def`
 
+### Detailed placement
+
+`replace < gcd_nontd_test.tcl`  
+`lsc -dp -llibrary/nangate45/NangateOpenCellLibrary.lef gcd_nan45_nontd.def -odef > placed.def`
 
 ### Create graphics from def file
 
@@ -50,6 +54,10 @@ Pass the argument `-j4` for enabling concurrency tests with 4 jobs to run simult
 
 - Fiduccia, et. al. (1982): A Linear-Time Heuristic for Improving Network Partitions [10.1109/dac.1982.1585498](https://doi.org/10.1109/dac.1982.1585498)
 - Alpert, Huang, Kahng (1998): Multilevel Circuit Partitioning, [10.1109/dac.1997.597204](https://doi.org/10.1109/dac.1997.597204)
+
+### LSC.FastDP
+
+- Pan, Viswanathan, Chu (2005): An efficient and effective detailed placement algorithm [10.1109/iccad.2005.1560039](https://doi.org/10.1109/iccad.2005.1560039)
 
 ### LSC.Legalize
 

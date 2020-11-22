@@ -64,6 +64,12 @@ program = do
 
       netlist <- liftIO $ readNetGraph inputs
 
+      when (arg DetailedPlacement)
+        $ do
+          circuit2d <- liftIO $ evalLSC opts tech $ compiler stage2 netlist
+          liftIO $ printStdout scale circuit2d $ list Output
+          exit
+
       when (arg Legalize)
         $ do
           circuit2d <- liftIO $ evalLSC opts tech $ compiler stage0 netlist
@@ -134,6 +140,7 @@ data FlagKey
   | Def
   | Legalize
   | RowCapacity
+  | DetailedPlacement
   | LayoutEstimation
   | Compile
   | Output
@@ -159,6 +166,7 @@ args =
 
     , Option ['l']      ["lef"]        (ReqArg (Lef,  ) "FILE")     "LEF file"
     , Option ['y']      ["legalize"]   (NoArg (Legalize, mempty))   "legalize"
+    , Option ['p']      ["detailed-placement"]   (NoArg (DetailedPlacement, mempty))  "detailed placement"
     , Option [ ]        ["row-capacity"]  (ReqArg (RowCapacity, ) "ratio")  "set row capacity (e.g. 0.7)"
 --    , Option ['x']      ["estimate-layout"] (NoArg (LayoutEstimation, mempty)) "estimate area"
 

@@ -77,7 +77,7 @@ portRectangles tech ident (MacroPinPortRect x1 y1 x2 y2 : rest) = Layered
 portRectangles tech ident (_ : rest) = portRectangles tech ident rest
 portRectangles _ _ [] = []
 
-dimensions tech (MacroSize x y : _) = (ceiling $ x * g, ceiling $ y * g)
+dimensions tech (MacroSize x y : _) = (round $ x * g, round $ y * g)
   where g = scale tech
 dimensions tech (_ : rest) = dimensions tech rest
 dimensions _ [] = (0, 0)
