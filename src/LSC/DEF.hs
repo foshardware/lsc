@@ -15,9 +15,12 @@ import Data.Either
 import Data.Foldable
 import qualified Data.HashMap.Lazy as HashMap
 import Data.Maybe
-import Data.Map (fromList, fromListWith, lookup, insert, assocs)
+import Data.Map (fromList, lookup)
+import qualified Data.IntMap as IntMap
 import Data.Monoid
-import Data.Text (pack)
+import Data.Text.Lazy (toStrict)
+import Data.Text.Lazy.Builder
+import Data.Text.Lazy.Builder.Int
 import qualified Data.Vector as V
 import Prelude hiding (lookup)
 
@@ -38,10 +41,10 @@ fromDEF (DEF options area rs ts cs ps ns _) = def &~ do
     nets .= edges
     where
 
-      paths = V.accum (\ m (k, v) -> insert k v m) (V.replicate (length nodes) mempty)
+      paths = V.accum (\ m (k, v) -> HashMap.insert k v m) (V.replicate (length nodes) mempty)
           [ (i, (x ^. identifier, e ^. identifier))
           | e <- toList edges
-          , (i, xs) <- views contacts assocs e
+          , (i, xs) <- views contacts HashMap.toList e
           , i >= 0
           , x <- xs
           ]
@@ -57,7 +60,7 @@ fromDEF (DEF options area rs ts cs ps ns _) = def &~ do
 fromNet :: (Ident -> Number) -> DEF.Net -> Rect.Net
 fromNet n (DEF.Net i cs _) = Rect.Net i
     mempty
-    (fromListWith (++) [ (g, [def & identifier .~ p]) | (g, p) <- either (-1, ) (first n) <$> cs ])
+    (HashMap.fromListWith (++) [ (g, [def & identifier .~ p]) | (g, p) <- either (-1, ) (first n) <$> cs ])
 
 
 fromLayer :: LayerName -> Rect.Layer
@@ -79,8 +82,8 @@ supercellFrom :: DieArea -> [DEF.Track] -> [DEF.Row] -> [DEF.Pin] -> AbstractCel
 supercellFrom (DieArea (x1, y1) (x2, y2)) ts rs ps = def &~ do
     geometry .= [Rect (ceiling x1) (ceiling y1) (ceiling x2) (ceiling y2)]
     tracks .= fmap fromTrack ts
-    rows .= set number `imap` V.fromList (fmap fromRow rs)
-    pins .= fromList [ (p ^. identifier, p) | p <- fmap fromPin ps ] 
+    rows .= IntMap.fromList [ (p ^. b, p) | p <- fromRow <$> rs ]
+    pins .= HashMap.fromList [ (p ^. identifier, p) | p <- fmap fromPin ps ] 
 
 
 fromPin :: DEF.Pin -> Rect.Pin
@@ -89,10 +92,10 @@ fromPin (DEF.Pin p _ d layer placed) = def &~ do
     dir .= fmap fromDirection d
     geometry .=
       [ fromPlaced f
-        & l +~ x1
-        & b +~ y1
-        & r +~ x2
-        & t +~ y2
+        & l +~ fromIntegral x1
+        & b +~ fromIntegral y1
+        & r +~ fromIntegral x2
+        & t +~ fromIntegral y2
         & z .~ [fromLayer q]
       | (Layer q (x1, y1) (x2, y2), f) <- maybeToList $ (,) <$> layer <*> placed
       ]
@@ -115,7 +118,9 @@ fromTrack (DEF.Track   _ a ss c d)
 
 fromRow :: DEF.Row -> Rect.Row
 fromRow (DEF.Row _ i x y o ss _ w _)
-    = Rect.Row (-1) i x y (fromOrientation o) ss w
+    = Rect.Row i
+      (fromIntegral x) (fromIntegral y)
+      (fromOrientation o) (fromIntegral ss) (fromIntegral w)
 
 
 
@@ -130,7 +135,7 @@ fromComponent (Component _ j placed) = def &~ do
 
 
 
-fromPlaced :: Placed -> Rect.Component Rect.Layer Integer
+fromPlaced :: Placed -> Rect.Component Rect.Layer Int
 fromPlaced (Placed (x, y) ori)
     = Layered (ceiling x) (ceiling y) (ceiling x) (ceiling y) [Metal2, Metal3] (fromOrientation ori)
 fromPlaced (Fixed (x, y) ori)
@@ -163,7 +168,7 @@ toDEF :: Double -> NetGraph -> DEF
 toDEF scale top = DEF
   (filter units (defaultOptions $ Just $ top ^. identifier) ++ [Units $ DistanceList $ ceiling scale])
   (dieArea $ listToMaybe $ top ^. supercell . geometry)
-  (toList $ top ^. supercell . rows <&> toRow)
+  (fmap toRow $ zip [1..] $ toList $ top ^. supercell . rows)
   (toList $ top ^. supercell . tracks <&> toTrack)
   (toList $ set number `imap` view gates top <&> toComponent)
   (toList $ top ^. supercell . pins <&> toPin)
@@ -177,14 +182,14 @@ toDEF scale top = DEF
 
 
 
-toRow :: Rect.Row -> DEF.Row
-toRow x = DEF.Row
-    (enumeratedRow x)
+toRow :: (Int, Rect.Row) -> DEF.Row
+toRow (n, x) = DEF.Row
+    (toStrict $ toLazyText $ enumeratedRow n)
     (view identifier x)
-    (view l x) (view b x)
+    (fromIntegral $ view l x) (fromIntegral $ view b x)
     (toOrientation $ view orientation x)
-    (view cardinality x) 1
-    (view granularity x) 0
+    (fromIntegral $ view cardinality x) 1
+    (fromIntegral $ view granularity x) 0
 
 
 
@@ -196,7 +201,7 @@ toTrack (Left (Rect.Track a ss c d))
 
 
 
-dieArea :: Maybe (Rect.Component l Integer) -> DieArea
+dieArea :: Maybe (Rect.Component l Int) -> DieArea
 dieArea (Just p) = DieArea
     (fromIntegral $ p^.l, fromIntegral $ p^.b)
     (fromIntegral $ p^.r, fromIntegral $ p^.t)
@@ -204,15 +209,23 @@ dieArea _ = DieArea (0, 0) (0, 0)
 
 
 
-enumeratedGate :: Gate -> Identifier
-enumeratedGate g = view identifier g <> "_" <> pack (views number show g)
+enumeratedGate :: Gate -> Builder
+enumeratedGate g
+    =  fromText (view identifier g)
+    <> singleton '_'
+    <> decimal (view number g)
 
-enumeratedRow :: Rect.Row -> Identifier
-enumeratedRow x = "ROW_" <> pack (views number show x)
+enumeratedRow :: Int -> Builder
+enumeratedRow n
+    =  fromText "ROW_"
+    <> decimal n
 
 
 toComponent :: Gate -> DEF.Component
-toComponent g = Component (enumeratedGate g) (g ^. identifier) (Just $ place $ g ^. space)
+toComponent g = Component
+  (toStrict $ toLazyText $ enumeratedGate g)
+  (g ^. identifier)
+  (Just $ place $ g ^. space)
   where
     place x | g ^. fixed = Fixed (fromIntegral $ x^.l, fromIntegral $ x^.b) "N"
     place x = Placed (fromIntegral $ x^.l, fromIntegral $ x^.b) "N"
@@ -222,9 +235,9 @@ toComponent g = Component (enumeratedGate g) (g ^. identifier) (Just $ place $ g
 toNet :: NetGraph -> Rect.Net -> DEF.Net
 toNet top n = DEF.Net (n ^. identifier)
 
-    [ maybe (Left (p ^. identifier)) (Right . (, p ^. identifier) . enumeratedGate)
+    [ maybe (Left (p ^. identifier)) (Right . (, p ^. identifier) . toStrict . toLazyText . enumeratedGate)
     $ top ^. gates ^? ix i
-    | (i, ps) <- n ^. contacts . to assocs
+    | (i, ps) <- n ^. contacts & HashMap.toList
     , p <- ps
     ]
 

@@ -10,7 +10,7 @@ module LSC.LEF
 import Control.Lens
 import Control.Monad.State (get)
 import Data.Default
-import Data.Map as Map
+import Data.HashMap.Lazy as HashMap
 
 import Language.LEF.Parser (parseLEF)
 import Language.LEF.Syntax
@@ -24,9 +24,9 @@ fromLEF (LEF options _ _ _ _ _ macros) = do
   bootstrap $ set scaleFactor $ fromIntegral $ databaseUnits options
 
   tech <- get
-  bootstrap $ set stdCells $ Map.fromList
+  bootstrap $ set stdCells $ HashMap.fromList
     [ (,) name $ def &~ do
-        pins .= Map.fromList (macroPins tech macroOptions)
+        pins .= HashMap.fromList (macroPins tech macroOptions)
         dims .= dimensions tech macroOptions
         vdd  .= maybe def id (macroVdd tech macroOptions)
         gnd  .= maybe def id (macroGnd tech macroOptions)

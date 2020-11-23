@@ -11,7 +11,6 @@ import Control.Conditional (whenM)
 import Control.Lens hiding (indexed, imap)
 import Control.Monad
 import Control.Monad.Loops
-import Control.Monad.Primitive
 import Control.Monad.Reader
 import Control.Monad.ST
 import Data.Foldable
@@ -26,16 +25,15 @@ import Data.Ratio
 import Data.STRef
 import Data.Vector
   ( Vector
-  , unsafeFreeze, unsafeThaw
+  , unsafeFreeze
   , freeze, thaw
-  , take, generate
+  , take
   , (!), indexed, unzip
   , imap, unstablePartition
   )
-import Data.Vector.Mutable (MVector, read, write, modify, replicate, unsafeSwap, slice)
+import Data.Vector.Mutable (MVector, read, write, modify, replicate, slice)
 import qualified Data.Vector.Algorithms.Intro as Intro
 import Prelude hiding (replicate, length, read, lookup, take, drop, head, unzip)
-import System.Random.MWC
 
 import LSC.Entropy
 import LSC.Types (V, E)
@@ -132,10 +130,6 @@ cutSize (v, _) (Bisect p q) = size $ intersection
 type Clustering = Vector IntSet
 
 
-type Permutation = Vector Int
-
-
-
 data Heu s = Heu
   { _gains        :: Gain s Int
   , _freeCells    :: IntSet
@@ -148,15 +142,6 @@ makeFieldsNoPrefix ''Heu
 type FM s = ReaderT (Gen s, STRef s (Heu s)) (ST s)
 
 
-
-nonDeterministic :: FM RealWorld a -> IO a
-nonDeterministic f = do
-  v <- entropyVector32 258
-  stToIO $ do
-      g <- initialize v
-      runFMWithGen g f
-
-
 prng :: FM s (Gen s)
 prng = fst <$> ask
 
@@ -167,10 +152,10 @@ evalFM = runFM
 runFM :: FM s a -> ST s a
 runFM f = do
     gen <- create
-    runFMWithGen gen f
+    runFMWithGen f gen
 
-runFMWithGen :: Gen s -> FM s a -> ST s a
-runFMWithGen s f = do
+runFMWithGen :: FM s a -> Gen s -> ST s a
+runFMWithGen f s = do
   g <- Gain <$> newSTRef mempty <*> thaw mempty <*> new
   r <- newSTRef $ Heu g mempty mempty
   runReaderT f (s, r)
@@ -180,7 +165,7 @@ st :: ST s a -> FM s a
 st = lift
 
 
-update :: Simple Setter (Heu s) a -> (a -> a) -> FM s ()
+update :: Setter' (Heu s) a -> (a -> a) -> FM s ()
 update v f = do
   r <- modifySTRef . snd <$> ask
   st $ r $ v %~ f
@@ -190,31 +175,6 @@ value v = view v <$> snapshot
 
 snapshot :: FM s (Heu s)
 snapshot = st . readSTRef . snd =<< ask
-
-
--- | This function does not reach all possible permutations for lists
---   consisting of more than 969 elements. Any PRNGs possible states
---   are bound by its possible seed values.
---   In the case of MWC8222 the period is 2^8222 which allows for
---   not more than 969! different states.
---
--- seed bits: 8222
--- maximum list length: 969
---
---   969! =~ 2^8222
---
--- Monotonicity of  n! / (2^n): 
---
--- desired seed bits: 256909
--- desired list length: 20000
---
---   20000! =~ 2^256909
---
-randomPermutation :: Int -> FM s Permutation
-randomPermutation n = do
-  v <- unsafeThaw $ generate n id
-  for_ [0 .. n - 2] $ \ i -> unsafeSwap v i =<< uniformR (i, n - 1) =<< prng
-  unsafeFreeze v
 
 
 
@@ -241,7 +201,7 @@ fmMultiLevel (v, e) lock t r = do
     whileM_ continue $ do
 
       hi <- st $ read hypergraphs =<< readSTRef i
-      u <- randomPermutation $ length $ fst hi
+      u <- st . randomPermutation (length $ fst hi) =<< prng
 
       st $ do
 
@@ -324,7 +284,7 @@ rebalance (Bisect p q)
   | balanceCriterion (size p + size q) (Bisect p q) minBound
   = pure (Bisect p q)
 rebalance (Bisect p q) = do
-  u <- randomPermutation $ size p + size q
+  u <- st . randomPermutation (size p + size q) =<< prng
   st $ do
     b <- newSTRef $ Bisect p q
     i <- newSTRef 0
@@ -452,7 +412,7 @@ bipartitionEven (v, _) lock = Bisect
 
 bipartitionRandom :: (V, E) -> Lock -> FM s Bipartitioning
 bipartitionRandom (v, _) lock = do
-  u <- randomPermutation $ length v
+  u <- st . randomPermutation (length v) =<< prng
   let (p, q) = splitAt (length v `div` 2) (toList u)
   pure $ Bisect
     ((fromList p <> intersection base (view lft lock)) \\ view rgt lock)

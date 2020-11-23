@@ -11,7 +11,7 @@ module LSC.BLIF
 
 import Control.Lens hiding (imap)
 import Data.Default
-import Data.Map (assocs, elems, fromList)
+import qualified Data.HashMap.Lazy as HashMap
 import Data.Maybe hiding (mapMaybe)
 import Data.Vector (mapMaybe, imap)
 import Prelude hiding (lookup)
@@ -34,17 +34,17 @@ toModel top = Model
 
   (top ^. identifier)
 
-  [ p ^. identifier | p <- top ^. supercell . pins . to elems, p ^. dir == Just In  ]
-  [ p ^. identifier | p <- top ^. supercell . pins . to elems, p ^. dir == Just Out ]
+  [ p ^. identifier | p <- top ^. supercell . pins & HashMap.elems, p ^. dir == Just In  ]
+  [ p ^. identifier | p <- top ^. supercell . pins & HashMap.elems, p ^. dir == Just Out ]
   []
 
-  $ fmap (\ g -> Subcircuit (g ^. identifier) (g ^. wires . to assocs)) (top ^. gates)
+  $ fmap (\ g -> Subcircuit (g ^. identifier) (g ^. wires & HashMap.toList)) (top ^. gates)
 
 
 fromBLIF :: BLIF -> NetGraph
 fromBLIF (BLIF []) = def
 fromBLIF (BLIF (top : down)) = fromModel top
-  & subcells .~ fromList [ (x ^. identifier, x) | x <- fmap fromModel down ]
+  & subcells .~ HashMap.fromList [ (x ^. identifier, x) | x <- fmap fromModel down ]
   & treeStructure
 
 
@@ -64,22 +64,22 @@ fromModel (Model name inputs outputs clocks commands)
     edges = rebuildEdges nodes
 
     superCell = def
-      & pins <>~ fromList [(i, Pin i (Just  In) def) | i <- inputs ++ clocks] 
-      & pins <>~ fromList [(i, Pin i (Just Out) def) | i <- outputs]
+      & pins <>~ HashMap.fromList [(i, Pin i (Just  In) def) | i <- inputs ++ clocks] 
+      & pins <>~ HashMap.fromList [(i, Pin i (Just Out) def) | i <- outputs]
 
 
 fromNetlist :: Command -> Maybe Gate
 fromNetlist (LibraryGate ident assignments) = def
       & identifier .~ ident
-      & wires .~ fromList assignments
+      & wires .~ HashMap.fromList assignments
       & Just
 fromNetlist (Subcircuit ident assignments) = def
       & identifier .~ ident
-      & wires .~ fromList assignments
+      & wires .~ HashMap.fromList assignments
       & Just
 fromNetlist _ = Nothing
 
 
 toSubcircuit :: Gate -> Command
-toSubcircuit gate = Subcircuit (gate ^. identifier) (gate ^. wires & assocs)
+toSubcircuit gate = Subcircuit (gate ^. identifier) (gate ^. wires & HashMap.toList)
 

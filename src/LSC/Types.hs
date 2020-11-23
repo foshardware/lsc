@@ -23,8 +23,8 @@ import Data.Default
 import Data.Foldable
 import Data.Function (on)
 import Data.IntSet (IntSet)
-import Data.Map (Map, unionWith, lookup)
-import Data.HashMap.Lazy (HashMap)
+import Data.IntMap (IntMap)
+import Data.HashMap.Lazy (HashMap, unionWith, lookup)
 import Data.Semigroup
 import Data.Hashable
 import Data.Text (Text)
@@ -58,7 +58,7 @@ type E = NetArray
 data RTL = RTL
   { _identifier  :: Identifier
   , _description :: AbstractGate
-  , _subcircuits :: Map Identifier RTL
+  , _subcircuits :: HashMap Identifier RTL
   } deriving (Generic, Show)
 
 
@@ -90,7 +90,7 @@ data Expr
 data NetGraph = NetGraph
   { _identifier  :: Identifier
   , _supercell   :: AbstractCell
-  , _subcells    :: Map Identifier NetGraph
+  , _subcells    :: HashMap Identifier NetGraph
   , _gates       :: Vector Gate
   , _nets        :: HashMap Identifier Net
   } deriving (Generic, Show)
@@ -107,7 +107,7 @@ type Contact = Pin
 data Net = Net
   { _identifier :: Identifier
   , _geometry   :: Path
-  , _contacts   :: Map Number [Contact]
+  , _contacts   :: HashMap Number [Contact]
   } deriving (Generic, Show)
 
 instance ToJSON Net
@@ -123,10 +123,10 @@ type Identifier = Text
 
 data Gate = Gate
   { _identifier :: Identifier
-  , _space      :: Component Layer Integer
+  , _space      :: Component Layer Int
   , _vdd        :: Pin
   , _gnd        :: Pin
-  , _wires      :: Map Identifier Identifier
+  , _wires      :: HashMap Identifier Identifier
   , _number     :: Number
   , _fixed      :: Bool
   } deriving (Generic, Show)
@@ -140,9 +140,9 @@ instance Hashable Gate where
 
 
 data Track = Track
-  { _offset :: Integer
+  { _offset :: Int
   , _steps  :: Int
-  , _space  :: Integer
+  , _trackSpace :: Int
   , _z      :: [Layer]
   } deriving (Generic, Show)
 
@@ -154,13 +154,12 @@ instance Hashable Track
 
 
 data Row = Row
-  { _number      :: Number
-  , _identifier  :: Identifier
-  , _l           :: Integer
-  , _b           :: Integer
+  { _identifier  :: Identifier
+  , _l           :: Int
+  , _b           :: Int
   , _orientation :: Orientation
-  , _cardinality :: Integer
-  , _granularity :: Integer
+  , _cardinality :: Int
+  , _granularity :: Int
   } deriving (Generic, Show)
 
 instance ToJSON Row
@@ -173,10 +172,10 @@ instance Hashable Row
 data AbstractCell = AbstractCell
   { _geometry  :: Path
   , _tracks    :: [Either Track Track]
-  , _rows      :: Vector Row
+  , _rows      :: IntMap Row
   , _vdd       :: Pin
   , _gnd       :: Pin
-  , _pins      :: Map Identifier Pin
+  , _pins      :: HashMap Identifier Pin
   } deriving (Generic, Show)
 
 instance ToJSON AbstractCell
@@ -187,10 +186,10 @@ instance Hashable AbstractCell where
 
 
 data Cell = Cell
-  { _pins       :: Map Identifier Pin
+  { _pins       :: HashMap Identifier Pin
   , _vdd        :: Pin
   , _gnd        :: Pin
-  , _dims       :: (Integer, Integer)
+  , _dims       :: (Int, Int)
   } deriving (Generic, Show)
 
 instance ToJSON Cell
@@ -203,7 +202,7 @@ instance Hashable Cell where
 data Pin = Pin
   { _identifier :: Identifier
   , _dir        :: Maybe Dir
-  , _geometry   :: [Component Layer Integer]
+  , _geometry   :: [Component Layer Int]
   } deriving (Generic, Show)
 
 instance ToJSON Pin
@@ -212,7 +211,7 @@ instance FromJSON Pin
 instance Hashable Pin
 
 
-type Port = Component Layer Integer
+type Port = Component Layer Int
 
 
 data Dir = In | Out | InOut
@@ -247,9 +246,9 @@ instance Hashable Layer
 data Technology = Technology
   { _scaleFactor    :: Double
   , _featureSize    :: Double
-  , _stdCells       :: Map Text Cell
-  , _standardPin    :: (Integer, Integer)
-  , _rowSize        :: Integer
+  , _stdCells       :: HashMap Text Cell
+  , _standardPin    :: (Int, Int)
+  , _rowSize        :: Int
   } deriving (Generic, Show)
 
 instance ToJSON Technology
@@ -426,7 +425,7 @@ instance Monoid Orientation where
 
 
 
-type Path = [Component Layer Integer]
+type Path = [Component Layer Int]
 
 type Ring l a = Component l (Component l a)
 
@@ -468,41 +467,41 @@ makeFieldsNoPrefix ''Line
 
 centerX :: Integral a => Component l a -> a
 centerX p = div (p ^. r + p ^. l) 2
-{-# SPECIALIZE centerX :: Component Layer Integer -> Integer #-}
+{-# SPECIALIZE centerX :: Component Layer Int -> Int #-}
 
 
 centerY :: Integral a => Component l a -> a
 centerY p = div (p ^. t + p ^. b) 2
-{-# SPECIALIZE centerY :: Component Layer Integer -> Integer #-}
+{-# SPECIALIZE centerY :: Component Layer Int -> Int #-}
 
 
 relocateL :: Num a => a -> Component l a -> Component l a
 relocateL f p = p & l +~ f-x & r +~ f-x
     where x = p ^. l
-{-# SPECIALIZE relocateL :: Integer -> Component Layer Integer -> Component Layer Integer #-}
+{-# SPECIALIZE relocateL :: Int -> Component Layer Int -> Component Layer Int #-}
 
 relocateR :: Num a => a -> Component l a -> Component l a
 relocateR f p = p & l +~ f-x & r +~ f-x
     where x = p ^. r
-{-# SPECIALIZE relocateL :: Integer -> Component Layer Integer -> Component Layer Integer #-}
+{-# SPECIALIZE relocateL :: Int -> Component Layer Int -> Component Layer Int #-}
 
 
 relocateB :: Num a => a -> Component l a -> Component l a
 relocateB f p = p & b +~ f-y & t +~ f-y
     where y = p ^. b
-{-# SPECIALIZE relocateB :: Integer -> Component Layer Integer -> Component Layer Integer #-}
+{-# SPECIALIZE relocateB :: Int -> Component Layer Int -> Component Layer Int #-}
 
 
 relocateX :: Integral a => a -> Component l a -> Component l a
 relocateX f p = p & l +~ f-x & r +~ f-x
     where x = centerX p
-{-# SPECIALIZE relocateL :: Integer -> Component Layer Integer -> Component Layer Integer #-}
+{-# SPECIALIZE relocateL :: Int -> Component Layer Int -> Component Layer Int #-}
 
 
 relocateY :: Integral a => a -> Component l a -> Component l a
 relocateY f p = p & b +~ f-y & t +~ f-y
     where y = centerY p
-{-# SPECIALIZE relocateL :: Integer -> Component Layer Integer -> Component Layer Integer #-}
+{-# SPECIALIZE relocateL :: Int -> Component Layer Int -> Component Layer Int #-}
 
 
 projectNorth :: Component l a -> Component l a
@@ -588,7 +587,7 @@ instance Monoid Net where
 makeFieldsNoPrefix ''Gate
 
 
-gateWidth, gateHeight :: Gate -> Integer
+gateWidth, gateHeight :: Gate -> Int
 gateWidth  = width  . view space
 gateHeight = height . view space
 
@@ -664,10 +663,10 @@ instance Default Technology where
   def = Technology 1000 1 mempty (1000, 1000) 18000
 
 
-lookupDims :: Gate -> Technology -> Maybe (Integer, Integer)
+lookupDims :: Gate -> Technology -> Maybe (Int, Int)
 lookupDims g tech = view dims <$> lookup (g ^. identifier) (tech ^. stdCells)
 
-lambda :: Technology -> Integer
+lambda :: Technology -> Int
 lambda tech = ceiling $ view scaleFactor tech * view featureSize tech
 
 
@@ -683,10 +682,9 @@ median zs = go zs zs
           go (x:y:_) (_:_:[]) = div (x + y) 2
           go (_:xs)  (_:_:ys) = go xs ys
           go _ _ = error "median: this does not happen"
-{-# SPECIALIZE median :: [Integer] -> Integer #-}
 {-# SPECIALIZE median :: [Int] -> Int #-}
 
--- median :: [Integer] -> Maybe Integer
+-- median :: [Int] -> Maybe Int
 -- median [x] = Just x
 -- median [x, y] = Just $ div (x + y) 2
 -- median (_:xs) = median (init xs)

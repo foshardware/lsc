@@ -33,6 +33,7 @@ import Test.Tasty.QuickCheck
 
 import LSC
 import LSC.BLIF
+import LSC.Entropy
 import LSC.Types
 import LSC.FM as FM
 import LSC.KGGGP as KGGGP
@@ -202,11 +203,11 @@ fmRandomPartition = do
     (v, e) <- arbitraryHypergraph 1000
 
     xs <- generate $ vectorOf 20 $ choose (0, length v - 1)
-    Bisect p q <- nonDeterministic $ bipartitionRandom (v, e) (Lock (fromList xs) mempty)
+    Bisect p q <- nonDeterministic $ runFMWithGen $ bipartitionRandom (v, e) (Lock (fromList xs) mempty)
     assertEqual "duplicates" (size p + size q) (length v)
 
     ys <- generate $ vectorOf 20 $ choose (0, length v - 1)
-    Bisect p1 q1 <- nonDeterministic $ bipartitionRandom (v, e) (Lock mempty (fromList ys))
+    Bisect p1 q1 <- nonDeterministic $ runFMWithGen $ bipartitionRandom (v, e) (Lock mempty (fromList ys))
     assertEqual "duplicates" (size p1 + size q1) (length v)
 
 
@@ -215,7 +216,7 @@ fmRandomPartition = do
 fmMulti :: Int -> (V, E) -> IO ()
 fmMulti cut h = do
   let predicate p = cutSize h p <= cut
-  p <- iterateUntil predicate $ nonDeterministic
+  p <- iterateUntil predicate $ nonDeterministic $ runFMWithGen
     $ fmMultiLevel h mempty coarseningThreshold matchingRatio
   assertBool "unexpected cut size" $ cutSize h p <= cut
 
@@ -225,7 +226,7 @@ fmRandomPermutation :: IO ()
 fmRandomPermutation = do
   n <- generate $ choose (1000, 10000)
   v <- pure $ V.generate n id
-  u <- nonDeterministic $ randomPermutation n
+  u <- randomPermutation n =<< create
   a <- V.thaw u
   V.sort a
   w <- V.freeze a
@@ -238,8 +239,8 @@ fmRandomPermutation = do
 fmMatch :: IO ()
 fmMatch = do
   (v, e) <- arbitraryHypergraph 10000
-  (clustering, _) <- nonDeterministic $ do
-      u <- randomPermutation $ length v
+  (clustering, _) <- nonDeterministic $ runFMWithGen $ do
+      u <- FM.st . randomPermutation (length v) =<< prng
       FM.st $ match (v, e) mempty matchingRatio u
 
   assertEqual "length does not match" (length v) (sum $ size <$> clustering)
@@ -252,8 +253,8 @@ fmRebalance :: IO ()
 fmRebalance = do
   let v = 10000
   pivot <- generate $ choose (0, v)
-  (p, q) <- nonDeterministic $ do
-      u <- randomPermutation v
+  (p, q) <- nonDeterministic $ runFMWithGen $ do
+      u <- FM.st . randomPermutation v =<< prng
       let p = Bisect
             (fromList [u!i | i <- [0 .. pivot-1]])
             (fromList [u!i | i <- [pivot .. v-1]])

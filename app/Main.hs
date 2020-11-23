@@ -17,12 +17,11 @@ import System.IO
 import Text.Parsec (parse)
 import Text.ParserCombinators.Parsec.Number (decimal, fractional)
 
-import LSC.BLIF    (parseBLIF)
+import LSC.BLIF    (fromBLIF, parseBLIF)
 import LSC.LEF     (parseLEF, fromLEF)
 import LSC.DEF     (printDEF, toDEF, fromDEF, parseDEF)
 
 import LSC
-import LSC.BLIF
 import LSC.NetGraph
 import LSC.SVG
 import LSC.Types
@@ -171,8 +170,8 @@ args =
 --    , Option ['x']      ["estimate-layout"] (NoArg (LayoutEstimation, mempty)) "estimate area"
 
 --    , Option ['g']      ["visuals"]    (NoArg  (Visuals, mempty))   "show visuals"
---    , Option ['i']      ["iterations"]
---        (OptArg  ((Iterations, ) . maybe "4" id) "n")               "iterations"
+    , Option ['i']      ["iterations"]
+        (OptArg  ((Iterations, ) . maybe "4" id) "n")               "iterations"
 
 --    , Option ['c']      ["compile"]    (NoArg (Compile, mempty))    "compile"
 

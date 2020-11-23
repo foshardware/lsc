@@ -38,6 +38,16 @@
 `lsc -l sample/osu035.lef --output=svg sample/map9v3.def > result.svg`  
 
 
+## Stacktraces
+
+`stack build --profile && stack exec --profile -- lsc +RTS -xc -RTS`  
+
+
+## Profiling
+
+`stack build --profile && stack exec --profile -- lsc +RTS -p -hc -RTS`  
+
+
 ## Tests
 
 `stack test`  

@@ -16,10 +16,10 @@ import Control.Exception
 import Control.Lens
 import Control.Monad.Trans
 import Control.Monad.Codensity hiding (improve)
+import Data.Foldable
 import Prelude hiding ((.), id)
 
 import LSC.FastDP
-import LSC.Improve
 import LSC.Legalize
 import LSC.Mincut
 import LSC.NetGraph
@@ -30,8 +30,10 @@ import LSC.Version
 
 stage0 :: Compiler' NetGraph
 stage0 = id
-    >>> legalization
-    >>> estimate
+    >>> local gateGeometry
+    >>> local assignCellsToRows
+    >>> legalization >>> estimate
+    >>> local assignCellsToColumns >>> estimate
 
 
 stage1 :: Compiler' NetGraph
@@ -40,9 +42,12 @@ stage1 = zeroArrow
 
 stage2 :: Compiler' NetGraph
 stage2 = id
-    >>> stage0
-    >>> detailedPlacement
-    >>> stage0
+    >>> local gateGeometry >>> estimate
+    >>> local assignCellsToRows >>> estimate
+    >>> legalization >>> estimate
+    >>> detailedPlacement >>> estimate
+    >>> legalization >>> estimate
+    >>> local assignCellsToColumns >>> estimate
 
 
 stage4 :: Compiler' NetGraph
@@ -58,17 +63,15 @@ globalPlacement = local placeQuad
 detailedPlacement :: Compiler' NetGraph
 detailedPlacement = id
     >>> local singleSegmentClustering >>> estimate
-    >>> improveBy significantHpwl
+    >>> strategy1 significantHpwl
         (local globalSwap >>> local verticalSwap >>> legalization >>> local localReordering >>> legalization >>> estimate)
-    >>> improveBy significantHpwl
+    >>> strategy1 significantHpwl
         (local singleSegmentClustering >>> estimate)
 
 
 
 legalization :: Compiler' NetGraph
 legalization = id
-    >>> local gateGeometry
-    >>> local assignCellsToRows
     >>> local juggleCells
     >>> local legalizeRows
 
@@ -103,15 +106,15 @@ expensive :: (a -> b) -> Compiler a b
 expensive f = local $ pure . f
 
 
-remote_ :: LSC b -> Compiler' b
-remote_ f = remote (<$ f)
+remote_ :: LSC b -> Compiler () b
+remote_ = remote . const
 
 remote :: (a -> LSC b) -> Compiler a b
 remote = LSR . Lift . LS
 
 
-local_ :: LSC b -> Compiler' b
-local_ f = local (<$ f)
+local_ :: LSC b -> Compiler () b
+local_ = local . const
 
 local :: (a -> LSC b) -> Compiler a b
 local k = remote $ \ x -> do
@@ -123,10 +126,35 @@ local k = remote $ \ x -> do
 
 
 
-env_ :: Simple Setter CompilerOpts o -> o -> Compiler a b -> Compiler a b
+strategy1 :: (a -> a -> Ordering) -> Compiler' a -> Compiler' a
+strategy1 f a = proc p0 -> do
+
+    ev <- remote_ environment -< ()
+
+    let it = ev ^. iterations
+    ps <- collect it f a -<< [p0]
+
+    let p = minimumBy f ps
+
+    case f p0 p of
+        GT -> strategy1 f a -< p
+        _  -> returnA -< p0
+
+
+collect :: ArrowChoice a => Int -> (b -> b -> Ordering) -> a b b -> a [b] [b]
+collect 0 _ _ = id
+collect n f a = proc (p : ps) -> do
+    q <- a -< p
+    case f p q of
+        EQ -> returnA -< p : ps
+        _  -> collect (pred n) f a -< q : p : ps
+
+
+
+env_ :: Setter' CompilerOpts o -> o -> Compiler a b -> Compiler a b
 env_ setter = env setter . const
 
-env :: Simple Setter CompilerOpts o -> (o -> o) -> Compiler a b -> Compiler a b
+env :: Setter' CompilerOpts o -> (o -> o) -> Compiler a b -> Compiler a b
 env setter f k = remote $ \ x -> do
   o <- environment
   let p = o & setter %~ f
@@ -200,7 +228,7 @@ rtsWorkers = createWorkers =<< getNumCapabilities
 
 
 instance ArrowZero LS where
-  zeroArrow = LS $ fail $ unwords ["start", versionString]
+  zeroArrow = LS $ const $ fail $ unwords ["start", versionString]
 
 instance ArrowPlus LS where
   LS k <+> LS m = LS $ \ x -> do

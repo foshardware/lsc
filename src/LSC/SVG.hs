@@ -5,7 +5,7 @@ module LSC.SVG where
 import Control.Lens
 import Control.Monad
 import Data.Foldable
-import Data.Map (assocs)
+import qualified Data.HashMap.Lazy as HashMap
 import Data.String
 import qualified Data.Text.Lazy    as Lazy
 import qualified Data.Text.Lazy.IO as Lazy
@@ -25,7 +25,7 @@ import LSC.Types
 
 
 
-type Marker = Line Integer
+type Marker = Line Int
 
 type Circuit = (Circuit2D Path, [Marker])
 
@@ -36,11 +36,11 @@ type Arg = S.AttributeValue
 type Args = (Arg, Arg)
 
 
-scaleFactor' :: Integer
+scaleFactor' :: Int
 scaleFactor' = 10
 
 
-m_, l_:: Integer -> Integer -> S.Path
+m_, l_:: Int -> Int -> S.Path
 z_ :: S.Path
 m_ = S.m
 l_ = S.l
@@ -148,7 +148,7 @@ svgPaths netlist = (Circuit2D gs ns, if null $ netlist ^. nets then markRouting 
   where
 
     ns =
-      [ (net, (outerPins net ++) . inducePins =<< net ^. contacts . to assocs, net ^. geometry)
+      [ (net, (outerPins net ++) . inducePins =<< net ^. contacts . to HashMap.toList, net ^. geometry)
       | net <- set geometry (netlist ^. supercell . mappend (vdd . geometry) (gnd . geometry)) mempty
       : toList (netlist ^. nets)
       ]
@@ -175,7 +175,7 @@ svgPaths netlist = (Circuit2D gs ns, if null $ netlist ^. nets then markRouting 
       ]
 
 
-scaleDown :: Integer -> Circuit -> Circuit
+scaleDown :: Int -> Circuit -> Circuit
 scaleDown n (Circuit2D nodes edges, markers) = (Circuit2D
 
   [ (gate, f (`div` n) path)

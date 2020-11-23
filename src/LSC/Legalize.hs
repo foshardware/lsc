@@ -7,19 +7,19 @@ import Control.Monad
 import Control.Monad.IO.Class
 import Control.Monad.Loops
 import Control.Monad.ST
+import Control.Monad.Writer
 import qualified Data.Array as G
 import Data.Default
 import Data.Foldable
 import Data.Function
 import Data.Graph
-import qualified Data.IntMap as IntMap
-import Data.List (sortOn, groupBy)
-import Data.Maybe
+import Data.List (groupBy)
 import Data.STRef
-import Data.Vector ((!), (//), unsafeFreeze, unsafeThaw)
+import Data.Vector (Vector, (!), (//), unsafeFreeze, unsafeThaw, fromListN)
 import Data.Vector.Mutable (read, modify)
 import qualified Data.Vector.Algorithms.Intro as Intro
 import qualified Data.Vector as Vector
+import qualified Data.Vector.Unboxed as Unbox
 import qualified Data.Vector.Unboxed.Mutable as ST
 import Prelude hiding (read, lookup)
 import Text.Printf
@@ -35,33 +35,26 @@ legalizeRows top = do
     assert "legalizeRows: gate vector indices do not match gate numbers"
         $ and $ imap (==) $ view number <$> view gates top
 
-    let resolution = minimum $ top ^. supercell . rows <&> views granularity fromIntegral
+    let resolution = minimum $ top ^. supercell . rows <&> view granularity
 
     groups <- liftIO . stToIO
         $ sequence
-        $ rowLegalization resolution top
-        . sortOn (view space) <$> IntMap.fromListWith (++)
-        [ (fromIntegral $ g ^. space . b, [ g ])
-        | g <- toList $ view gates top
-        ]
+        $ rowLegalization resolution top <$> getRows (top ^. gates)
 
     pure $ top &~ do
-        gates %= (// [ (g ^. number, g) | g <- foldMap id groups ])
+        gates %= (// [ (g ^. number, g) | g <- foldMap toList groups ])
 
 
-rowLegalization :: Int -> NetGraph -> [Gate] -> ST s [Gate]
+rowLegalization :: Int -> NetGraph -> Vector Gate -> ST s (Vector Gate)
+rowLegalization   _   _ gs | length gs < 2 = pure gs
+rowLegalization   _   _ gs | all (view fixed) gs = pure gs
 rowLegalization res top gs = do
 
-    let gateVector = Vector.fromList gs
+    let n = head (top ^. supercell . geometry <&> width) `div` res
+        m = length gs
 
-    let bySites f g = g ^. space . to ((`div` res) . fromIntegral . f)
-        bySites :: (Component Layer Integer -> Integer) -> Gate -> Int
-
-    let n = maybe 0 (`div` res) $ listToMaybe $ top ^. supercell . geometry <&> width <&> fromIntegral
-        m = length gateVector
-
-    let w = bySites    width <$> gateVector
-        x = bySites (view l) <$> gateVector
+    let w = (`div` res) .  width . view space <$> gs
+        x = (`div` res) . view l . view space <$> gs
 
     let count = succ m * succ n
 
@@ -80,30 +73,31 @@ rowLegalization res top gs = do
           ]
 
     let minPERB (u, v) | (i, _) <- site u, (j, _) <- site v, i == j = 0
-        minPERB (u, _) | (j, k) <- site u, x ! j /= k, gateVector ! j ^. fixed = div maxBound 2
+        minPERB (u, _) | (j, k) <- site u, x ! j /= k, gs ! j ^. fixed = count
         minPERB (u, _) | (j, k) <- site u = abs $ x ! j - k
 
-    shortestPath <- topologicalShortestPath minPERB count graph
+    shortestPath <- topologicalShortestPath minPERB graph $ pred count
 
-    let leftMost = fmap (* res) $ fmap snd $ fmap last $ groupBy (on (==) fst) $ fmap site shortestPath
+    let leftMost = fmap head $ groupBy (on (==) fst) $ fmap site shortestPath
 
-    assert "cannot legalize row: try reducing the row capacity, e. g. lsc --row-capacity=0.5"
-        $ length leftMost >= length gateVector
+    assert "cannot legalize row!" $ tail leftMost /= [(0, 0)]
 
-    pure
-      [ g & space %~ relocateL (fromIntegral u)
-      | (u, g) <- leftMost `zip` toList gateVector
+    pure $ gs //
+      [ (g, gs ! g & space %~ relocateL (u * res))
+      | (g, u) <- tail leftMost
       ]
 
 
-topologicalShortestPath :: (Edge -> Int) -> Int -> Graph -> ST s [Int]
-topologicalShortestPath weight count graph = do
+topologicalShortestPath :: (Edge -> Int) -> Graph -> Int -> ST s [Int]
+topologicalShortestPath weight graph target = do
 
-    d <- ST.replicate count (div maxBound 2)
-    ST.write d 0 (0 :: Int)
+    let count = length graph
+
+    d <- ST.replicate count $ div maxBound 2
+    ST.write d 0 0
 
     p <- ST.new count
-    ST.write p 0 (0 :: Int)
+    ST.write p 0 0
 
     for_ (topSort graph) $ \ u -> do
       for_ (graph G.! u) $ \ v -> do
@@ -117,12 +111,12 @@ topologicalShortestPath weight count graph = do
           ST.write d v $ du + w
           ST.write p v $ u
 
-    shortestPath <- newSTRef [pred count]
-    whileM_ ((0 <) . head <$> readSTRef shortestPath)
-      $ do
-        modifySTRef shortestPath . (:) =<< ST.read p . head =<< readSTRef shortestPath
+    execWriter . traversePath target <$> Unbox.unsafeFreeze p
 
-    readSTRef shortestPath
+
+traversePath :: Int -> Unbox.Vector Int -> Writer [Int] ()
+traversePath 0 _ = tell [0]
+traversePath x g = tell [x] >> traversePath (Unbox.unsafeIndex g x) g
 
 
 
@@ -147,16 +141,13 @@ rowJuggling rc top = do
         $ and $ imap (==) $ view number <$> view gates top
 
     let rs = top ^. supercell . rows
-        gs = top ^. gates
 
-    let groups = IntMap.fromListWith (++) [ (fromIntegral $ g ^. space . b, [ g ]) | g <- toList gs ]
+    let table = fromListN (length rs) $ toList <$> getRows (top ^. gates)
 
-    let widths = rs <&> (*) <$> view granularity <*> view cardinality
-    let table  = rs <&> maybe mempty id . flip preview groups . ix . views b fromIntegral
+    let rowWidth p = ceiling $ rc * fromIntegral (view l p + view cardinality p * view granularity p)
+    let w = fmap (maybe 0 rowWidth . flip preview rs . ix . view (space . b) . head) table
 
-    surplus <- unsafeThaw $ uncurry (-) <$> Vector.zip
-        (sum . fmap gateWidth <$> table)
-        (ceiling . (rc *) . fromIntegral <$> widths)
+    surplus <- unsafeThaw $ uncurry (-) <$> Vector.zip (sum . fmap gateWidth <$> table) w
 
     sorted <- unsafeThaw . Vector.indexed =<< Vector.freeze surplus
     Intro.sortBy (flip compare `on` snd) sorted
@@ -169,7 +160,7 @@ rowJuggling rc top = do
       whileM_ ((0 <) <$> read surplus i)
         $ do
 
-          bestHpwl <- newSTRef (maxBound :: Int)
+          bestHpwl <- newSTRef maxBound
           bestRow  <- newSTRef (-1)
           bestCell <- newSTRef def
 
@@ -178,8 +169,8 @@ rowJuggling rc top = do
           for_ cs $ \ c -> do
             for_ [ 0 .. length table - 1 ] $ \ k -> do
 
-              let g = c & space %~ relocateB (rs!k ^. b)
-              let delta = fromIntegral $ hpwlDelta top [g]
+              let g = c & space %~ relocateB (head (table ! k) ^. space . b)
+              let delta = hpwlDelta top [g]
 
               s <- read surplus k
               d <- readSTRef bestHpwl
@@ -211,22 +202,20 @@ rowJuggling rc top = do
 debugRowCapacities :: NetGraph -> LSC ()
 debugRowCapacities top = do
 
-    let rs = top ^. supercell . rows
-
     rc <- view rowCapacity <$> environment
 
-    let groups = IntMap.fromListWith (++) [ (fromIntegral $ g ^. space . b, [ g ]) | g <- toList $ top ^. gates ]
-
-    let widths = rs <&> (*) <$> view granularity <*> view cardinality
-    let table  = rs <&> maybe mempty id . flip preview groups . ix . views b fromIntegral
+    let rs = top ^. supercell . rows
+    let table = top ^. gates . to getRows
+    let rowWidth p = ceiling $ rc * fromIntegral (view l p + view cardinality p * view granularity p)
+    let caps = fmap (maybe 0 rowWidth . flip preview rs . ix . view (space . b) . Vector.head) table
 
     debug $ "Row capacities:" :
-        [ printf "Row %d: %d (%.2f%%)" (i :: Int) (w :: Integer) (f :: Double)
+        [ printf "Row %d: %d (%.2f%%)" (i :: Int) (cap :: Int) (f :: Double)
           <> if f <= rc * 100 then mempty else printf " exceeds maximum! (%.2f%%)" (rc * 100)
-        | (i, rw, gs) <- zip3 [1..] (toList widths) (toList table)
-        , let w = sum $ gateWidth <$> gs
-        , let f = 100 * fromIntegral w / fromIntegral rw
+        | (i, gs, cap) <- zip3 [1..] table caps
+        , let gw = sum $ gateWidth <$> gs
+        , let f = 100 * fromIntegral gw / fromIntegral cap
         , f > rc * 10
-        , rw > (0 :: Integer)
+        , gw > (0 :: Int)
         ]
 

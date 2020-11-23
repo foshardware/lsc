@@ -15,11 +15,10 @@ import Data.Default
 import Data.Foldable hiding (concat)
 import Data.Function
 import Data.HashMap.Lazy (HashMap)
+import qualified Data.HashMap.Lazy as HashMap
 import Data.List (permutations)
 import Data.Maybe
 import Data.IntSet (size, elems)
-import Data.Map (assocs)
-import qualified Data.Map as Map
 import Data.Semigroup
 import Data.Matrix hiding (toList, (!))
 import Data.Vector (Vector, fromListN, (!))
@@ -28,6 +27,7 @@ import Data.Vector.Mutable (new, write)
 import qualified Data.Vector as V
 import Prelude hiding (concat, lookup, read, unzip)
 
+import LSC.Entropy
 import LSC.Improve
 import LSC.FM as FM
 import LSC.NetGraph
@@ -197,10 +197,10 @@ placeMatrix m = do
 
     it <- view iterations <$> environment
 
-    (q1, q2, q3, q4) <- liftIO $ nonDeterministic $ do
+    (q1, q2, q3, q4) <- liftIO $ nonDeterministic $ runFMWithGen $ do
 
         by <- st $ hypergraph (set number `imap` v) e
-        Bisect q21 q34 <- improve it (flip compare `on` cutSize by) (bisect by mempty) $ \ _ ->
+        Bisect q21 q34 <- improve it ((-) `on` cutSize by) (bisect by mempty) $ \ _ ->
             refit by (2*w*h) mempty <$> fmMultiLevel by mempty coarseningThreshold matchingRatio
 
 
@@ -211,11 +211,11 @@ placeMatrix m = do
 
 
         h21 <- st $ hypergraph (set number `imap` v21) e21
-        Bisect q2 q1 <- improve it (flip compare `on` cutSize h21) (bisect h21 mempty) $ \ _ ->
+        Bisect q2 q1 <- improve it ((-) `on` cutSize h21) (bisect h21 mempty) $ \ _ ->
             refit h21 (w*h) mempty <$> fmMultiLevel h21 mempty coarseningThreshold matchingRatio
 
         h34 <- st $ hypergraph (set number `imap` v34) e34
-        Bisect q3 q4 <- improve it (flip compare `on` cutSize h34) (bisect h34 mempty) $ \ _ ->
+        Bisect q3 q4 <- improve it ((-) `on` cutSize h34) (bisect h34 mempty) $ \ _ ->
             refit h34 (w*h) mempty <$> fmMultiLevel h34 mempty coarseningThreshold matchingRatio
 
 
@@ -251,7 +251,7 @@ hypergraph v e = inputRoutine (length e) (length v)
     [ (n, c)
     | (n, w) <- zip [0..] $ toList e
     , w ^. identifier /= "clk"
-    , (c, _) <- w ^. contacts . to assocs
+    , c <- w ^. contacts & HashMap.keys
     ]
 
 
@@ -260,7 +260,7 @@ hypergraph v e = inputRoutine (length e) (length v)
 inline :: Int -> NetGraph -> NetGraph
 inline n top
   | top ^. gates . to length < n
-  , subs <- Map.filter predicate $ top ^. subcells
+  , subs <- HashMap.filter predicate $ top ^. subcells
   , not $ null subs
   , sub <- maximumBy (compare `on` length . view pins . view supercell) subs
   = top &~ do
