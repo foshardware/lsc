@@ -91,3 +91,4 @@ tests:
     - tasty-quickcheck
     - lens
     - data-default
+    - unordered-containers

@@ -14,9 +14,9 @@ import Data.Bits
 import Data.Default
 import Data.FileEmbed
 import Data.Foldable
+import qualified Data.HashMap.Lazy as HashMap
 import Data.IntSet (fromList, fromAscList, size)
 import Data.List (isPrefixOf)
-import Data.Map (assocs)
 import Data.Ratio
 import Data.Text (Text)
 import Data.Text.Encoding
@@ -301,7 +301,7 @@ blifHypergraph netlist = FM.inputRoutine
     (top ^. gates . to length)
     [ (n, c)
     | (n, w) <- zip [0..] $ toList $ top ^. nets
-    , (c, _) <- w ^. contacts . to assocs
+    , c <- w ^. contacts . to HashMap.keys
     ] where top = fromBLIF netlist
 
 
