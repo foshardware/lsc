@@ -62,6 +62,7 @@ library:
   source-dirs: src
   ghc-options:
   - -Wall
+  - -O2
 
 executables:
   lsc:
@@ -69,6 +70,7 @@ executables:
     source-dirs:         app
     ghc-options:
     - -Wall
+    - -O2
     - -threaded
     - -rtsopts
     - -with-rtsopts=-N

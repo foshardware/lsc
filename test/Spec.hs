@@ -48,9 +48,30 @@ main = do
 
 lsc :: [String] -> TestTree
 lsc args = testGroup "LSC" $
-  [ gggp
+  [ medians
+  , entropy
+  , gggp
   , fm
   ] ++ [ concurrency | isPrefixOf "-j" `any` args ]
+
+
+
+medians :: TestTree
+medians = testGroup "Median"
+  [ testCase "Random input" $ do
+      rng <- create
+      assertEqual "is median" 50000 . median . toList =<< randomPermutation 100001 rng
+      assertEqual "is median" 50000 . median . toList =<< randomPermutation 100002 rng
+  , testCase "Large input" $ assertEqual "is median" 5000000 $ median [0..10000000 :: Int]
+  ]
+
+
+
+entropy :: TestTree
+entropy = testGroup "Entropy"
+  [ testCase "Random permutation" testRandomPermutation
+  ]
+
 
 
 gggp :: TestTree
@@ -76,8 +97,7 @@ fm = testGroup "FM"
 
 fmML :: TestTree
 fmML = testGroup "Multi level"
-  [ testCase "Random permutation" fmRandomPermutation
-  , testCase "Match" fmMatch
+  [ testCase "Match" fmMatch
   , testCase "Rebalance" $ sequence_ $ replicate 100 $ fmRebalance
   , fmRealWorld
   ]
@@ -113,6 +133,20 @@ concurrency = testGroup "Concurrency" $
   [ testCase "Race condition" $ raceCondition n
   | n <- take 4 $ drop 2 $ iterate (`shiftR` 1) (shiftL 1 20)
   ]
+
+
+
+testRandomPermutation :: IO ()
+testRandomPermutation = do
+  n <- generate $ choose (1000, 10000)
+  v <- pure $ V.generate n id
+  u <- randomPermutation n =<< create
+  a <- V.thaw u
+  V.sort a
+  w <- V.freeze a
+
+  assertBool "permutation" $ u /= v
+  assertBool "sorted"      $ w == v
 
 
 
@@ -219,20 +253,6 @@ fmMulti cut h = do
   p <- iterateUntil predicate $ nonDeterministic $ runFMWithGen
     $ fmMultiLevel h mempty coarseningThreshold matchingRatio
   assertBool "unexpected cut size" $ cutSize h p <= cut
-
-
-
-fmRandomPermutation :: IO ()
-fmRandomPermutation = do
-  n <- generate $ choose (1000, 10000)
-  v <- pure $ V.generate n id
-  u <- randomPermutation n =<< create
-  a <- V.thaw u
-  V.sort a
-  w <- V.freeze a
-
-  assertBool "permutation" $ u /= v
-  assertBool "sorted"      $ w == v
 
 
 

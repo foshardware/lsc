@@ -22,11 +22,12 @@ import Control.Exception
 import Data.Default
 import Data.Foldable
 import Data.Function (on)
+import Data.Hashable
 import Data.IntSet (IntSet)
 import Data.IntMap (IntMap)
 import Data.HashMap.Lazy (HashMap, unionWith, lookup)
+import Data.List (sort, sortBy, groupBy)
 import Data.Semigroup
-import Data.Hashable
 import Data.Text (Text)
 import Data.Vector (Vector)
 
@@ -675,18 +676,16 @@ distinctPairs (x : xs) = fmap (x, ) xs ++ distinctPairs xs
 distinctPairs _ = []
 
 
+uniqueBy :: (a -> a -> Ordering) -> [a] -> [a]
+uniqueBy f = fmap head . groupBy (\ a -> (EQ ==) . f a) . sortBy f
+
+
 median :: (Ord a, Integral a) => [a] -> a
 median [] = error "median: empty list"
-median zs = go zs zs
-    where go (x:_)   (_:  []) = x
-          go (x:y:_) (_:_:[]) = div (x + y) 2
-          go (_:xs)  (_:_:ys) = go xs ys
+median zs = let as = sort zs in go as as
+    where go (x : _)         (_: []) = x
+          go (x : y :_) (_ : _ : []) = div (x + y) 2
+          go (_ : xs)   (_ : _ : ys) = go xs ys
           go _ _ = error "median: this does not happen"
 {-# SPECIALIZE median :: [Int] -> Int #-}
-
--- median :: [Int] -> Maybe Int
--- median [x] = Just x
--- median [x, y] = Just $ div (x + y) 2
--- median (_:xs) = median (init xs)
--- median _ = Nothing
 

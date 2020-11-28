@@ -1,5 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE BlockArguments #-}
+{-# LANGUAGE TupleSections #-}
 
 module LSC.FastDP where
 
@@ -11,12 +12,11 @@ import Control.Monad.Loops
 import Control.Monad.ST
 import Data.Foldable
 import Data.Function
-import qualified Data.HashSet as HashSet
 import qualified Data.HashMap.Lazy as HashMap
 import qualified Data.HashTable.ST.Cuckoo as C
 import qualified Data.HashTable.Class as H
 import Data.IntMap (IntMap, lookupGE, lookupLE, lookupLT, lookupGT, singleton, fromListWith)
-import Data.List (sort, sortOn, groupBy, permutations)
+import Data.List (sortOn, permutations)
 import Data.Maybe
 import Data.Ratio
 import Data.STRef
@@ -234,23 +234,23 @@ singleSegmentClustering top = do
 
 
 clustering :: NetGraph -> Vector Gate -> ST s (Vector Gate)
-clustering top gs = do
+clustering top segment = do
 
-    let n = length gs
+    let n = length segment
 
-    let area = coarseBoundingBox $ view space <$> gs 
+    let area = coarseBoundingBox $ view space <$> segment
 
     (getX, setX, mX) <- newX (area ^. l, area ^. r) n
 
     numOldCluster <- newSTRef n
-    oldCluster <- unsafeThaw $ pure <$> gs 
+    oldCluster <- unsafeThaw $ pure <$> segment
 
     when (n > 0)
       $ flip untilM_ (not <$> segmentOverlaps getX numOldCluster oldCluster) $ do
 
         numOld <- readSTRef numOldCluster
         old <- Vector.freeze (slice 0 numOld oldCluster)
-        sequence_ [ setX c $ optimalRegionCenterIn gs top c | c <- toList old ]
+        sequence_ [ setX c $ median $ boundsListSSC segment top c | c <- toList old ]
 
         newcount <- newSTRef 1
         newCluster <- new n
@@ -273,7 +273,7 @@ clustering top gs = do
             then do
                 let merged = x <> y
                 write newCluster (pred k) merged
-                setX merged $ optimalRegionCenterIn gs top merged
+                setX merged $ median $ boundsListSSC segment top merged
             else do
                 write newCluster k y -- NEW
                 modifySTRef' newcount succ
@@ -283,14 +283,12 @@ clustering top gs = do
         i <- readSTRef newcount
         sequence_ [ write oldCluster x =<< read newCluster x | x <- [ 0.. pred i ] ]
 
-    clusters <- sortOn (length . fst) <$> H.toList mX
+    clusters <- sortOn (negate . length . fst) <$> H.toList mX
 
     pure $ fromListN n
-      [ centerCluster pos (fmap (view gates top !) c) g
-      | xs <- groupBy (on (==) fst) $ sortOn fst
+      [ centerCluster pos (fmap (view gates top !) c) (view gates top ! k)
+      | (k, (c, pos)) <- uniqueBy (compare `on` fst)
         [ (k, entry) | entry <- clusters, k <- fst entry ]
-      , let (k, (c, pos)) = last xs
-      , let g = view gates top ! k
       ]
 
 
@@ -333,36 +331,37 @@ segmentOverlaps getX numOldCluster oldCluster = do
     pure $ or overlaps
 
 
-optimalRegionCenterIn :: Vector Gate -> NetGraph -> Cluster -> Int
-optimalRegionCenterIn segment top c = median boundsList
+
+boundsListSSC :: Vector Gate -> NetGraph -> Cluster -> [Int]
+boundsListSSC segment top c = join [ [box ^. l, box ^. r] | box <- boxes ]
 
     where
-
-      boundsList = sort $ join [ [box ^. l, box ^. r] | box <- boxes ]
 
       leftEnd  = Vector.head segment ^. space
       rightEnd = Vector.last segment ^. space
 
       boxes =
         [ boundingBox cs
-        | net <- toList $ HashSet.fromList $ catMaybes
-            [ top ^. nets ^? ix x . contacts . to HashMap.keys
-            | m <- view wires <$> c
-            , x <- toList m
-            , x /= "clk", x /= "CLK", not $ x `elem` power
-            ]
-        , cs <- pure $ catMaybes $
-            [ top ^. gates ^? ix i . space
-            | i <- net
-            , not $ elem i $ view number <$> segment
-            ] ++
-            [ Just $ if x < y then leftEnd else rightEnd
-            | i <- net
-            , elem i $ view number <$> segment
-            , not $ elem i $ view number <$> c
-            , let x = Vector.findIndex (== i) (view number <$> segment)
-            , let y = Vector.findIndex (== view number (head c)) (view number <$> segment)
-            ]
+        | k <- uniqueBy compare
+          [ k
+          | ks <- view wires <$> c
+          , k <- toList ks
+          , not $ control k
+          ]
+        , cs <- pure $
+          [ view gates top ! i ^. space
+          | i <- maybe [] HashMap.keys $ top ^. nets ^? ix k . contacts
+          , i >= 0
+          , not $ elem i $ view number <$> segment
+          ] ++
+          [ if x < y then leftEnd else rightEnd
+          | i <- maybe [] HashMap.keys $ top ^. nets ^? ix k . contacts
+          , i >= 0
+          , not $ elem i $ view number <$> c
+          , elem i $ view number <$> segment
+          , let x = Vector.findIndex (== i) (view number <$> segment)
+          , let y = Vector.findIndex (== view number (head c)) (view number <$> segment)
+          ]
         , not $ null cs
         ]
 

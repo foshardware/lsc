@@ -20,14 +20,14 @@ import Data.HashMap.Lazy (HashMap)
 import qualified Data.HashMap.Lazy as HashMap
 import qualified Data.IntMap as M
 import qualified Data.IntSet as S
-import Data.List (sort, sortOn, groupBy)
+import Data.List (sort, group, sortOn, groupBy)
 import Data.List.Split (wordsBy)
 import Data.Maybe
 import Data.Serialize.Put
 import Data.Text (unpack)
 import Data.Text.Encoding
 import Data.Matrix (Matrix, nrows, ncols, getElem, getMatrixAsVector)
-import Data.Vector (Vector, imap, filter)
+import Data.Vector (Vector, (!), imap, filter)
 import Data.Vector.Unboxed (unsafeFreeze)
 import Data.Vector.Unboxed.Mutable (new, write)
 import qualified Data.Vector.Unboxed as U
@@ -37,24 +37,25 @@ import Prelude hiding (lookup, filter)
 import LSC.Types
 
 
-boundingBox :: (Foldable f, Functor f, Integral n) => f (Component l n) -> Component l n
+
+boundingBox :: (Foldable f, Integral n) => f (Component l n) -> Component l n
 boundingBox cs | null cs = error "boundingBox: no components"
 boundingBox cs = Rect (minimum x) (minimum y) (maximum x) (maximum y)
     where
-        x = fmap (\ c -> div (view r c + view l c) 2) cs
-        y = fmap (\ c -> div (view t c + view b c) 2) cs
+        x = fmap (\ c -> div (view r c + view l c) 2) (toList cs)
+        y = fmap (\ c -> div (view t c + view b c) 2) (toList cs)
 {-# SPECIALIZE boundingBox ::        [Component l Int] -> Component l Int #-}
 {-# SPECIALIZE boundingBox :: Vector (Component l Int) -> Component l Int #-}
 
 
 
-coarseBoundingBox :: (Foldable f, Functor f, Ord n) => f (Component l n) -> Component l n
+coarseBoundingBox :: (Foldable f, Ord n) => f (Component l n) -> Component l n
 coarseBoundingBox cs | null cs = error "coarseBoundingBox: no components"
 coarseBoundingBox cs = Rect
-    (minimum $ view l <$> cs)
-    (minimum $ view b <$> cs)
-    (maximum $ view r <$> cs)
-    (maximum $ view t <$> cs)
+    (minimum $ view l <$> toList cs)
+    (minimum $ view b <$> toList cs)
+    (maximum $ view r <$> toList cs)
+    (maximum $ view t <$> toList cs)
 {-# SPECIALIZE coarseBoundingBox ::        [Component l Int] -> Component l Int #-}
 {-# SPECIALIZE coarseBoundingBox :: Vector (Component l Int) -> Component l Int #-}
 
@@ -87,13 +88,14 @@ coordsVector m = runST $ do
 
 
 hpwl :: Vector Gate -> Net -> Int
-hpwl  _ n | elem (n ^. identifier) ["clk", "CLK"] || elem (n ^. identifier) power = 0
+hpwl  _ n | control $ n ^. identifier = 0
 hpwl gs n = width p + height p
   where
     p = boundingBox $ catMaybes
       [ gs ^? ix i . space 
-      | i <- n ^. contacts . to HashMap.keys
+      | i <- HashMap.keys (n ^. contacts)
       ]
+
 
 
 hpwlDelta :: Foldable f => NetGraph -> f Gate -> Int
@@ -101,24 +103,30 @@ hpwlDelta top gs
   = sum (width  <$> qs) - sum (width  <$> ps)
   + sum (height <$> qs) - sum (height <$> ps)
   where
-    ns = HashSet.fromList
+    ns = fmap head $ group $ sort
       [ k
       | ks <- views wires HashMap.elems <$> toList gs
       , k <- ks
-      , k /= "clk", k /= "CLK", not $ k `elem` power
+      , not $ control k
       ]
     ps =
-      [ boundingBox $ fmap (view space) $ catMaybes $ flip preview (top ^. gates) . ix <$> is
-      | k <- toList ns
+      [ boundingBox [ view gates top ! i ^. space | i <- HashMap.keys (n ^. contacts), i >= 0 ]
+      | k <- ns
       , n <- toList $ top ^. nets ^? ix k
-      , let is = views contacts HashMap.keys n
       ]
     qs =
-      [ boundingBox $ fmap (view space) $ mappend hs $ catMaybes $ flip preview (top ^. gates) . ix <$> is
-      | k <- toList ns
+      [ boundingBox $
+        [ view gates top ! i ^. space
+        | i <- HashMap.keys (n ^. contacts)
+        , i >= 0
+        , all ((/= i) . view number) gs
+        ] ++
+        [ g ^. space
+        | g <- toList gs
+        , HashMap.member (g ^. number) (n ^. contacts)
+        ]
+      | k <- ns
       , n <- toList $ top ^. nets ^? ix k
-      , let is = [ i | i <- views contacts HashMap.keys n, all ((/= i) . view number) gs ]
-      , let hs = join [ [ g | g <- toList gs, view number g == h ] | h <- views contacts HashMap.keys n ]
       ]
 {-# SPECIALIZE hpwlDelta :: NetGraph -> Vector Gate -> Int #-}
 {-# SPECIALIZE hpwlDelta :: NetGraph -> [Gate] -> Int #-}
@@ -129,8 +137,8 @@ optimalRegionCenter :: (Foldable f, Foldable g) => f (g Gate) -> (Int, Int)
 optimalRegionCenter f = (median xs, median ys)
     where
       ns = fmap (view space) . toList <$> toList f
-      xs = sort $ join [ [box ^. l, box ^. r] | box <- boundingBox <$> ns ]
-      ys = sort $ join [ [box ^. b, box ^. t] | box <- boundingBox <$> ns ]
+      xs = join [ [box ^. l, box ^. r] | box <- boundingBox <$> ns ]
+      ys = join [ [box ^. b, box ^. t] | box <- boundingBox <$> ns ]
 {-# SPECIALIZE optimalRegionCenter :: [[Gate]] -> (Int, Int) #-}
 
 
@@ -141,7 +149,7 @@ connectedIndices top g =
     | net <- catMaybes
       [ top ^. nets ^? ix x . contacts . to HashMap.keys
       | x <- toList $ g ^. wires
-      , x /= "clk", x /= "CLK", not $ x `elem` power
+      , not $ control x
       ]
     , let cs = [ i | i <- net, i /= g ^. number, i >= 0 ]
     , not $ null cs
@@ -226,11 +234,11 @@ estimations top = do
     ]
 
 
--- significantHwpl: improvement in second argument is GT
---
+
 significantHpwl :: NetGraph -> NetGraph -> Ordering
-significantHpwl m n = compare 0 $ sw n - sw m -- + div (sw n) 100000
+significantHpwl m n = compare (sw m `div` x) (sw n `div` x)
     where sw q = sum $ hpwl (view gates q) <$> view nets q
+          x = sw m `div` 20000
 
 
 
@@ -325,6 +333,19 @@ assignCellsToColumns top = pure $ top &~ do
 
 power :: HashSet Identifier
 power = HashSet.fromList ["gnd", "vdd", "vcc", "GND", "VDD", "VCC"]
+
+
+control :: Identifier -> Bool
+control "gnd" = True
+control "vdd" = True
+control "vcc" = True
+control "GND" = True
+control "VDD" = True
+control "VCC" = True
+control "clk" = True
+control "CLK" = True
+control _ = False
+
 
 
 contactGeometry :: NetGraph -> LSC NetGraph

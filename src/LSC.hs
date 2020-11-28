@@ -127,27 +127,22 @@ local k = remote $ \ x -> do
 
 
 strategy1 :: (a -> a -> Ordering) -> Compiler' a -> Compiler' a
-strategy1 f a = proc p0 -> do
-
-    ev <- remote_ environment -< ()
-
-    let it = ev ^. iterations
-    ps <- collect it f a -<< [p0]
-
-    let p = minimumBy f ps
-
-    case f p0 p of
-        GT -> strategy1 f a -< p
-        _  -> returnA -< p0
-
-
-collect :: ArrowChoice a => Int -> (b -> b -> Ordering) -> a b b -> a [b] [b]
-collect 0 _ _ = id
-collect n f a = proc (p : ps) -> do
-    q <- a -< p
+strategy1 f a = proc p -> do
+    i <- view iterations ^<< remote_ environment -< ()
+    q <- minimumBy f ^<< collect f a -< (i, [p])
     case f p q of
-        EQ -> returnA -< p : ps
-        _  -> collect (pred n) f a -< q : p : ps
+        GT -> strategy1 f a -< q
+        _  -> returnA -< p
+
+
+collect :: ArrowChoice a => (b -> b -> Ordering) -> a b b -> a (Int, [b]) [b]
+collect f a = proc (i, ps) -> case ps of
+    p : _ | i > 0 -> do
+        q <- a -< p
+        case f p q of
+            EQ -> returnA -< q : ps
+            _  -> collect f a -< (pred $ abs i, q : ps)
+    _ -> returnA -< ps
 
 
 

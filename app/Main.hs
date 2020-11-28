@@ -194,7 +194,7 @@ compilerOpts xs = do
   setNumCapabilities j
   ws <- createWorkers j
 
-  let i = last $ 4 : rights [ parse decimal "-i" v | (k, v) <- xs, k == Iterations ]
+  let i = last $ 2 : rights [ parse decimal "-i" v | (k, v) <- xs, k == Iterations ]
 
   let rc = last $ 1 : rights [ parse fractional "--row-capacity" v | (k, v) <- xs, k == RowCapacity ]
 
