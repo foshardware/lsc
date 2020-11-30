@@ -45,8 +45,14 @@ legalizeRows top = do
 
 
 rowLegalization :: Double -> NetGraph -> Vector Gate -> ST s (Vector Gate)
-rowLegalization  _   _ gs | length gs < 2 = pure gs
-rowLegalization  _   _ gs | all (view fixed) gs = pure gs
+rowLegalization _ _ gs
+    | length gs < 2 = pure gs
+rowLegalization _ _ gs
+    | all (view fixed) gs
+    = pure gs
+rowLegalization _ _ gs
+    | not $ or $ uncurry gateOverlap <$> Vector.zip gs (Vector.drop 1 gs)
+    = pure gs
 rowLegalization rc top gs = do
 
     let row = top ^. supercell . rows ^? ix (gs ! 0 ^. space . b)
@@ -110,7 +116,7 @@ rowLegalization rc top gs = do
                 ST.write d v2 $ du2 + w2
                 ST.write p v2 u2
 
-    shortestPath <- execWriter . traversePath target <$> Unbox.unsafeFreeze p
+    shortestPath <- traversePath Unbox.unsafeIndex target <$> Unbox.unsafeFreeze p
 
     let leftMost = fmap head $ groupBy (on (==) fst) $ site <$> shortestPath
 
@@ -146,17 +152,22 @@ topologicalShortestPath weight graph target = do
           ST.write d v $ du + w
           ST.write p v $ u
 
-    execWriter . traversePath target <$> Unbox.unsafeFreeze p
+    traversePath Unbox.unsafeIndex target <$> Unbox.unsafeFreeze p
 
 
-traversePath :: Int -> Unbox.Vector Int -> Writer [Int] ()
-traversePath 0 _ = tell [0]
-traversePath x g = tell [x] >> traversePath (Unbox.unsafeIndex g x) g
+
+-- traversePath :: Int -> Unbox.Vector Int -> [Int]
+traversePath :: (s -> Int -> Int) -> Int -> s -> [Int]
+traversePath _ 0 _ = [0]
+traversePath f x g = x : traversePath f (f g x) g
 
 
 
 juggleCells :: NetGraph -> LSC NetGraph
 juggleCells top = do
+
+    assert "juggleCells: gate vector indices do not match gate numbers"
+        $ and $ imap (==) $ view number <$> view gates top
 
     debugRowCapacities top
 
@@ -171,9 +182,6 @@ juggleCells top = do
 
 rowJuggling :: Double -> NetGraph -> ST s NetGraph
 rowJuggling rc top = do
-
-    assert "rowJuggling: gate vector indices do not match gate numbers"
-        $ and $ imap (==) $ view number <$> view gates top
 
     let rs = top ^. supercell . rows
 

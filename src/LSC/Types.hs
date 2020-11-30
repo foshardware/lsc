@@ -55,6 +55,10 @@ type V = CellArray
 type E = NetArray
 
 
+data Move
+  = Move Gate Gate
+  | Reset NetGraph
+
 
 data RTL = RTL
   { _identifier  :: Identifier
@@ -433,9 +437,9 @@ type Ring l a = Component l (Component l a)
 
 
 data Component l a
-  = Rect    { _l :: a, _b :: a, _r :: a, _t :: a }
-  | Via     { _l :: a, _b :: a, _r :: a, _t :: a, _z :: [l] }
-  | Layered { _l :: a, _b :: a, _r :: a, _t :: a, _z :: [l], _orientation :: Orientation }
+  = Rect    { _l :: !a, _b :: !a, _r :: !a, _t :: !a }
+  | Via     { _l :: !a, _b :: !a, _r :: !a, _t :: !a, _z :: [l] }
+  | Layered { _l :: !a, _b :: !a, _r :: !a, _t :: !a, _z :: [l], _orientation :: Orientation }
   deriving (Eq, Functor, Foldable, Traversable, Generic, Show)
 
 instance (ToJSON l, ToJSON a) => ToJSON (Component l a)
@@ -677,7 +681,7 @@ distinctPairs _ = []
 
 
 uniqueBy :: (a -> a -> Ordering) -> [a] -> [a]
-uniqueBy f = fmap head . groupBy (\ a -> (EQ ==) . f a) . sortBy f
+uniqueBy f = fmap head . groupBy (\ x y -> f x y == EQ) . sortBy f
 
 
 median :: (Ord a, Integral a) => [a] -> a

@@ -86,11 +86,11 @@ localReorderSegment3 top gs = do
 
 
 globalSwap :: NetGraph -> LSC NetGraph
-globalSwap = liftIO . stToIO . swapST True
+globalSwap = liftIO . stToIO . swapRoutine True
 
 
 verticalSwap :: NetGraph -> LSC NetGraph
-verticalSwap = liftIO . stToIO . swapST False
+verticalSwap = liftIO . stToIO . swapRoutine False
 
 
 type Netlist = IntMap Segment
@@ -98,25 +98,33 @@ type Netlist = IntMap Segment
 type Segment = IntMap Gate
 
 
-swapST :: Bool -> NetGraph -> ST s NetGraph
-swapST global top = do
+swapRoutine :: Bool -> NetGraph -> ST s NetGraph
+swapRoutine _ top
+    | top ^. gates . to length < 3
+    = pure top
+swapRoutine global top = do
 
-    assert "globalSwapST: gate vector indices do not match gate numbers"
+    assert "swapRoutine: gate vector indices do not match gate numbers"
         $ and $ imap (==) $ view number <$> view gates top
 
+    assert "swapRoutine: gates have different heights"
+        $ all (== gateHeight (view gates top ! 0)) $ gateHeight <$> view gates top
+
     v <- Vector.thaw $ view gates top
+    tainted <- unsafeThaw $ False <$ view gates top
 
     let byCoords = fromListWith (<>)
             [ (g ^. space . to centerY, singleton (g ^. space . to centerX) g)
             | g <- toList $ view gates top
             ]
 
-    for_ [ 0 .. top ^. gates . to length - 1 ] $ \ k -> do
+    for_ (view gates top) $ \ g -> do
 
-      g <- read v k
-      ns <- sequence $ sequence . fmap (read v) <$> connectedIndices top g
+      ns <- sequence $ sequence . fmap (read v . view number) <$> adjacentByNet top g
 
-      unless (g ^. fixed || null ns) $ do
+      taintG <- read tainted $ g ^. number
+
+      unless (taintG || g ^. fixed || null ns) $ do
 
         let (x, y) = optimalRegionCenter ns
 
@@ -127,25 +135,28 @@ swapST global top = do
               then findSwapCell segment x g
               else findSwapCell segment (g ^. space . to centerX) g
 
+        taintH <- maybe (pure False) (read tainted . view number) swapCell
+
         case swapCell of
 
-            Just h
-              | h ^. fixed || g == h -> pure ()
+          Just h | taintH || h ^. fixed || g == h -> pure ()
 
-            Nothing
+          Nothing
               | delta <- hpwlDelta top [g & space %~ relocateX x . relocateY y1]
               , (s1, s, s2) <- findSwapSpaces segment x
               , p1 <- fromIntegral (gateWidth g - s) * wt1
               , p2 <- fromIntegral (gateWidth g - (s1 + s + s2)) * wt2
               , fromIntegral (negate delta) - p1 - p2 > 0 
-              -> do
+              ->  do
 
-                 modify v (space %~ relocateX x . relocateY y1) (g ^. number)
+                  modify v (space %~ relocateX x . relocateY y1) (g ^. number)
 
-            Just h
+                  sequence_ $ flip (write tainted) True . view number <$> join ns
+
+          Just h
               | delta <- hpwlDelta top
                 [ g & space %~ relocateX x . relocateY y1
-                , h & space %~ relocateX (g ^. space . to centerX) . relocateY (g ^. space . to centerY)
+                , h & space %~ relocateX (g ^. space . to centerX) . relocateB (g ^. space . b)
                 ]
               , i <- minimumBy (compare `on` gateWidth) [g, h]
               , j <- maximumBy (compare `on` gateWidth) [g, h]
@@ -153,12 +164,14 @@ swapST global top = do
               , p1 <- fromIntegral (gateWidth j - gateWidth i - (s - gateWidth i)) * wt1
               , p2 <- fromIntegral (gateWidth j - gateWidth i - (s1 + s - gateWidth i + s2)) * wt2
               , fromIntegral (negate delta) - p1 - p2 > 0
-              -> do
+              ->  do
 
-                 modify v (space %~ relocateX x . relocateY y1) (g ^. number)
-                 modify v (space %~ relocateX (g ^. space . to centerX) . relocateY (g ^. space . to centerY)) (h ^. number)
+                  modify v (space %~ relocateX x . relocateY y1) (g ^. number)
+                  modify v (space %~ relocateX (g ^. space . to centerX) . relocateB (g ^. space . b)) (h ^. number)
 
-            _ -> pure ()
+                  sequence_ $ flip (write tainted) True . view number <$> join ns
+
+          _ -> pure ()
  
     gs <- unsafeFreeze v
 
@@ -341,28 +354,26 @@ boundsListSSC segment top c = join [ [box ^. l, box ^. r] | box <- boxes ]
       rightEnd = Vector.last segment ^. space
 
       boxes =
-        [ boundingBox cs
-        | k <- uniqueBy compare
-          [ k
-          | ks <- view wires <$> c
-          , k <- toList ks
-          , not $ control k
-          ]
-        , cs <- pure $
+        [ boundingBox $
           [ view gates top ! i ^. space
-          | i <- maybe [] HashMap.keys $ top ^. nets ^? ix k . contacts
+          | i <- HashMap.keys (net ^. contacts)
           , i >= 0
           , not $ elem i $ view number <$> segment
           ] ++
           [ if x < y then leftEnd else rightEnd
-          | i <- maybe [] HashMap.keys $ top ^. nets ^? ix k . contacts
+          | i <- HashMap.keys (net ^. contacts)
           , i >= 0
           , not $ elem i $ view number <$> c
           , elem i $ view number <$> segment
           , let x = Vector.findIndex (== i) (view number <$> segment)
           , let y = Vector.findIndex (== view number (head c)) (view number <$> segment)
           ]
-        , not $ null cs
+        | net <- uniqueBy compare $ catMaybes
+          [ top ^. nets ^? ix k
+          | ks <- view wires <$> c
+          , k <- toList ks
+          , not $ control k
+          ]
         ]
 
 

@@ -60,8 +60,9 @@ medians :: TestTree
 medians = testGroup "Median"
   [ testCase "Random input" $ do
       rng <- create
-      assertEqual "is median" 50000 . median . toList =<< randomPermutation 100001 rng
-      assertEqual "is median" 50000 . median . toList =<< randomPermutation 100002 rng
+      med <- generate $ choose (1, 50000)
+      assertEqual "even median" (med - 1) . median . toList =<< randomPermutation (2 * med) rng
+      assertEqual "odd median" med . median . toList =<< randomPermutation (2 * med + 1) rng
   , testCase "Large input" $ assertEqual "is median" 5000000 $ median [0..10000000 :: Int]
   ]
 

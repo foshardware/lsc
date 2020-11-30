@@ -42,6 +42,7 @@ dependencies:
 - monad-loops
 - mtl
 - mwc-random
+- parallel
 - parsec
 - parsec-numbers
 - primitive

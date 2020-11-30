@@ -30,10 +30,10 @@ import LSC.Version
 
 stage0 :: Compiler' NetGraph
 stage0 = id
-    >>> local gateGeometry
-    >>> local assignCellsToRows
+    >>> remote gateGeometry
+    >>> remote assignCellsToRows
     >>> legalization >>> estimate
-    >>> local assignCellsToColumns >>> estimate
+    >>> remote assignCellsToColumns >>> estimate
 
 
 stage1 :: Compiler' NetGraph
@@ -42,12 +42,12 @@ stage1 = zeroArrow
 
 stage2 :: Compiler' NetGraph
 stage2 = id
-    >>> local gateGeometry >>> estimate
-    >>> local assignCellsToRows >>> estimate
+    >>> remote gateGeometry >>> estimate
+    >>> remote assignCellsToRows >>> estimate
     >>> legalization >>> estimate
     >>> detailedPlacement >>> estimate
     >>> legalization >>> estimate
-    >>> local assignCellsToColumns >>> estimate
+    >>> remote assignCellsToColumns >>> estimate
 
 
 stage4 :: Compiler' NetGraph
