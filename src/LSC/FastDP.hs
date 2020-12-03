@@ -21,7 +21,7 @@ import Data.Maybe
 import Data.Ratio
 import Data.STRef
 import Data.Vector (Vector, (!), (//), unsafeFreeze, unsafeThaw, fromListN)
-import Data.Vector.Mutable (STVector, new, read, write, modify)
+import Data.Vector.Mutable (STVector, new, read, write, modify, copy)
 import qualified Data.Vector as Vector
 import Data.Vector.Mutable (slice)
 import Prelude hiding (read, filter)
@@ -247,6 +247,7 @@ singleSegmentClustering top = do
 
 
 clustering :: NetGraph -> Vector Gate -> ST s (Vector Gate)
+clustering   _ segment | null segment = pure segment
 clustering top segment = do
 
     let n = length segment
@@ -258,16 +259,16 @@ clustering top segment = do
     numOldCluster <- newSTRef n
     oldCluster <- unsafeThaw $ pure <$> segment
 
-    when (n > 0)
-      $ flip untilM_ (not <$> segmentOverlaps getX numOldCluster oldCluster) $ do
+    newCluster <- new n
+    newcount <- newSTRef 0
+
+    flip untilM_ (not <$> segmentOverlaps getX numOldCluster oldCluster) $ do
 
         numOld <- readSTRef numOldCluster
         old <- Vector.freeze (slice 0 numOld oldCluster)
-        sequence_ [ setX c $ median $ boundsListSSC segment top c | c <- toList old ]
-
-        newcount <- newSTRef 1
-        newCluster <- new n
+        sequence_ $ (\ c -> setX c $ median $ boundsListSSC segment top c) <$> old
         write newCluster 0 =<< read oldCluster 0
+        writeSTRef newcount 1
 
         j <- newSTRef 1
 
@@ -292,9 +293,9 @@ clustering top segment = do
                 modifySTRef' newcount succ
             modifySTRef' j succ -- NEW
 
-        writeSTRef numOldCluster =<< readSTRef newcount
         i <- readSTRef newcount
-        sequence_ [ write oldCluster x =<< read newCluster x | x <- [ 0.. pred i ] ]
+        copy (slice 0 i oldCluster) (slice 0 i newCluster)
+        writeSTRef numOldCluster i
 
     clusters <- sortOn (negate . length . fst) <$> H.toList mX
 
