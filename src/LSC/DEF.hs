@@ -53,13 +53,14 @@ fromDEF (DEF options area rs ts cs ps ns _) = def &~ do
 
       edges = HashMap.fromList [ (n ^. identifier, n) | n <- fromNet gateNumber <$> ns ]
 
-      gateNumber y = maybe (-1) id $ lookup y $ fromList [ (x, i) | (i, Component x _ _) <- zip [0..] cs ]
+      gateNumber y = maybe (-1) id $ lookup y $ fromList [ (x, i) | (i, DEF.Component x _ _) <- zip [0..] cs ]
 
 
 
 fromNet :: (Ident -> Number) -> DEF.Net -> Rect.Net
 fromNet n (DEF.Net i cs _) = Rect.Net i
     mempty
+    (V.fromList $ n . fst <$> rights cs)
     (HashMap.fromListWith (++) [ (g, [def & identifier .~ p]) | (g, p) <- either (-1, ) (first n) <$> cs ])
 
 
@@ -125,11 +126,11 @@ fromRow (DEF.Row _ i x y o ss _ w _)
 
 
 fromComponent :: DEF.Component -> Gate
-fromComponent (Component _ j placed@(Just (Fixed _ _))) = def &~ do
+fromComponent (DEF.Component _ j placed@(Just (Fixed _ _))) = def &~ do
     identifier .= j
     space .= maybe def fromPlaced placed
     fixed .= True
-fromComponent (Component _ j placed) = def &~ do
+fromComponent (DEF.Component _ j placed) = def &~ do
     identifier .= j
     space .= maybe def fromPlaced placed
 
@@ -137,9 +138,9 @@ fromComponent (Component _ j placed) = def &~ do
 
 fromPlaced :: Placed -> Rect.Component Rect.Layer Int
 fromPlaced (Placed (x, y) ori)
-    = Layered (ceiling x) (ceiling y) (ceiling x) (ceiling y) [Metal2, Metal3] (fromOrientation ori)
+    = Rect.Component (ceiling x) (ceiling y) (ceiling x) (ceiling y) [Metal2, Metal3] (fromOrientation ori)
 fromPlaced (Fixed (x, y) ori)
-    = Layered (ceiling x) (ceiling y) (ceiling x) (ceiling y) [Metal2, Metal3] (fromOrientation ori)
+    = Rect.Component (ceiling x) (ceiling y) (ceiling x) (ceiling y) [Metal2, Metal3] (fromOrientation ori)
 fromPlaced _ = def
 
 
@@ -153,7 +154,7 @@ fromOrientation "FN" = FN
 fromOrientation "FS" = FS
 fromOrientation "FW" = FW
 fromOrientation "FE" = FE
-fromOrientation _ = error "undefined orientation"
+fromOrientation o = error $ "undefined orientation " ++ show o
 
 
 
@@ -222,7 +223,7 @@ enumeratedRow n
 
 
 toComponent :: Gate -> DEF.Component
-toComponent g = Component
+toComponent g = DEF.Component
   (toStrict $ toLazyText $ enumeratedGate g)
   (g ^. identifier)
   (Just $ place $ g ^. space)

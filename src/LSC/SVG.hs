@@ -56,12 +56,12 @@ plot = renderSvg . svgDoc . scaleDown scaleFactor' . svgPaths
 
 
 svgDoc :: Circuit -> Svg
-svgDoc (Circuit2D nodes edges, markers) = S.docTypeSvg
+svgDoc (Circuit2D ns edges, markers) = S.docTypeSvg
   ! A.version "1.1"
   ! A.width "10000000"
   ! A.height "10000000"
   $ do
-    place `mapM_` nodes
+    place `mapM_` ns
     route `mapM_` edges
     drawL `mapM_` markers
 
@@ -176,10 +176,10 @@ svgPaths netlist = (Circuit2D gs ns, if null $ netlist ^. nets then markRouting 
 
 
 scaleDown :: Int -> Circuit -> Circuit
-scaleDown n (Circuit2D nodes edges, markers) = (Circuit2D
+scaleDown n (Circuit2D ns edges, markers) = (Circuit2D
 
   [ (gate, f (`div` n) path)
-  | (gate, path) <- nodes
+  | (gate, path) <- ns
   , let f = fmap . fmap
   ]
 

@@ -15,7 +15,7 @@ import Data.Function
 import Data.Graph
 import Data.List (groupBy)
 import Data.STRef
-import Data.Vector (Vector, (!), (//), unsafeFreeze, unsafeThaw, fromListN)
+import Data.Vector (Vector, (!), (//), unsafeFreeze, unsafeThaw, fromListN, update)
 import Data.Vector.Mutable (read, modify)
 import qualified Data.Vector as Vector
 import qualified Data.Vector.Unboxed as Unbox
@@ -41,7 +41,7 @@ legalizeRows top = do
         $ rowLegalization rc top <$> getRows (top ^. gates)
 
     pure $ top &~ do
-        gates %= (// [ (g ^. number, g) | g <- foldMap toList groups ])
+        gates %= flip update ((\ g -> (g ^. number, g)) <$> Vector.concat groups)
 
 
 rowLegalization :: Double -> NetGraph -> Vector Gate -> ST s (Vector Gate)
@@ -237,7 +237,7 @@ rowJuggling rc top = do
     grouped <- unsafeFreeze matrix
 
     pure $ top &~ do
-        gates %= (// [ (g ^. number, g) | g <- foldMap id grouped ])
+        gates %= (// fmap (\ g -> (g ^. number, g)) (foldMap id grouped))
 
 
 

@@ -15,12 +15,12 @@ import Data.Function
 import qualified Data.HashMap.Lazy as HashMap
 import qualified Data.HashTable.ST.Cuckoo as C
 import qualified Data.HashTable.Class as H
-import Data.IntMap (IntMap, lookupGE, lookupLE, lookupLT, lookupGT, singleton, fromListWith)
-import Data.List (sortOn, permutations)
+import Data.IntMap (IntMap, lookupGE, lookupLE, lookupLT, lookupGT, insert, alter)
+import Data.List (sortOn, groupBy, permutations)
 import Data.Maybe
 import Data.Ratio
 import Data.STRef
-import Data.Vector (Vector, (!), (//), unsafeFreeze, unsafeThaw, fromListN)
+import Data.Vector (Vector, (!), unsafeFreeze, unsafeThaw, fromListN, update)
 import Data.Vector.Mutable (STVector, new, read, write, modify, copy)
 import qualified Data.Vector as Vector
 import Data.Vector.Mutable (slice)
@@ -53,7 +53,7 @@ localReordering top = do
         $ localReorderSegment3 top <$> getSegments (top ^. gates)
 
     pure $ top &~ do
-        gates %= (// [ (g ^. number, g) | g <- foldMap toList groups ])
+        gates %= flip update ((\ g -> (g ^. number, g)) <$> Vector.concat groups)
 
 
 localReorderSegment3 :: NetGraph -> Vector Gate -> ST s (Vector Gate)
@@ -113,20 +113,19 @@ swapRoutine global top = do
     v <- Vector.thaw $ view gates top
     tainted <- unsafeThaw $ False <$ view gates top
 
-    let byCoords = fromListWith (<>)
-            [ (g ^. space . to centerY, singleton (g ^. space . to centerX) g)
-            | g <- toList $ view gates top
-            ]
+    let byCoords = foldl' (\ a g -> alter (pure . insert (g ^. space . to centerX) g . maybe mempty id)
+                                          (g ^. space . to centerY) a)
+                          mempty $ top ^. gates
 
     for_ (view gates top) $ \ g -> do
 
-      ns <- sequence $ sequence . fmap (read v . view number) <$> adjacentByNet top g
-
       taintG <- read tainted $ g ^. number
+
+      let ns = fmap (view number) <$> adjacentByNet top g
 
       unless (taintG || g ^. fixed || null ns) $ do
 
-        let (x, y) = optimalRegionCenter ns
+        (x, y) <- optimalRegionCenter <$> sequence (mapM (read v) <$> ns)
 
         let (y1, segment) = if global
               then findGlobalSwapSegment byCoords y g
@@ -151,7 +150,7 @@ swapRoutine global top = do
 
                   modify v (space %~ relocateX x . relocateY y1) (g ^. number)
 
-                  sequence_ $ flip (write tainted) True . view number <$> join ns
+                  sequence_ $ mapM_ (flip (write tainted) True) <$> ns
 
           Just h
               | delta <- hpwlDelta top
@@ -169,7 +168,7 @@ swapRoutine global top = do
                   modify v (space %~ relocateX x . relocateY y1) (g ^. number)
                   modify v (space %~ relocateX (g ^. space . to centerX) . relocateB (g ^. space . b)) (h ^. number)
 
-                  sequence_ $ flip (write tainted) True . view number <$> join ns
+                  sequence_ $ mapM_ (flip (write tainted) True) <$> ns
 
           _ -> pure ()
  
@@ -243,7 +242,7 @@ singleSegmentClustering top = do
         $ clustering top <$> getSegments (top ^. gates)
 
     pure $ top &~ do
-        gates %= (// [ (g ^. number, g) | g <- foldMap toList groups ])
+        gates %= flip update ((\ g -> (g ^. number, g)) <$> Vector.concat groups)
 
 
 clustering :: NetGraph -> Vector Gate -> ST s (Vector Gate)
@@ -266,7 +265,9 @@ clustering top segment = do
 
         numOld <- readSTRef numOldCluster
         old <- Vector.freeze (slice 0 numOld oldCluster)
-        sequence_ $ (\ c -> setX c $ median $ boundsListSSC segment top c) <$> old
+
+        mapM_ (uncurry setX) $ Vector.zip old (median . boundsListSSC segment top <$> old)
+
         write newCluster 0 =<< read oldCluster 0
         writeSTRef newcount 1
 
@@ -297,12 +298,12 @@ clustering top segment = do
         copy (slice 0 i oldCluster) (slice 0 i newCluster)
         writeSTRef numOldCluster i
 
-    clusters <- sortOn (negate . length . fst) <$> H.toList mX
+    clusters <- H.toList mX
 
     pure $ fromListN n
       [ centerCluster pos (fmap (view gates top !) c) (view gates top ! k)
-      | (k, (c, pos)) <- uniqueBy (compare `on` fst)
-        [ (k, entry) | entry <- clusters, k <- fst entry ]
+      | (k, (c, pos)) <- fmap head $ groupBy (on (==) fst) $ sortOn fst
+        [ (k, (c, pos)) | (c, pos) <- sortOn (negate . length . fst) clusters, k <- c ]
       ]
 
 
@@ -347,35 +348,30 @@ segmentOverlaps getX numOldCluster oldCluster = do
 
 
 boundsListSSC :: Vector Gate -> NetGraph -> Cluster -> [Int]
-boundsListSSC segment top c = join [ [box ^. l, box ^. r] | box <- boxes ]
+boundsListSSC gs top c = join [ [box ^. l, box ^. r] | box <- boxes ]
 
     where
 
-      leftEnd  = Vector.head segment ^. space
-      rightEnd = Vector.last segment ^. space
+      leftEnd  = Vector.head gs ^. space
+      rightEnd = Vector.last gs ^. space
 
       boxes =
         [ boundingBox $
           [ view gates top ! i ^. space
           | i <- HashMap.keys (net ^. contacts)
           , i >= 0
-          , not $ elem i $ view number <$> segment
+          , not $ HashMap.member i segment
           ] ++
           [ if x < y then leftEnd else rightEnd
           | i <- HashMap.keys (net ^. contacts)
           , i >= 0
+          , HashMap.member i segment
           , not $ elem i $ view number <$> c
-          , elem i $ view number <$> segment
-          , let x = Vector.findIndex (== i) (view number <$> segment)
-          , let y = Vector.findIndex (== view number (head c)) (view number <$> segment)
+          , let x = HashMap.lookup i segment
+          , let y = HashMap.lookup (head c ^. number) segment
           ]
-        | net <- uniqueBy compare $ catMaybes
-          [ top ^. nets ^? ix k
-          | ks <- view wires <$> c
-          , k <- toList ks
-          , not $ control k
-          ]
-        ]
+        | net <- hyperedges top c
+        ] where segment = foldMap' (\ (i, g) -> HashMap.singleton (g ^. number) i) (Vector.indexed gs)
 
 
 newX

@@ -65,7 +65,7 @@ portLayer "metal2" = Metal2
 portLayer "metal3" = Metal3
 portLayer _ = AnyLayer
 
-portRectangles tech ident (MacroPinPortRect x1 y1 x2 y2 : rest) = Layered
+portRectangles tech ident (MacroPinPortRect x1 y1 x2 y2 : rest) = Component
   (ceiling $ x1 * g)
   (ceiling $ y1 * g)
   (ceiling $ x2 * g)

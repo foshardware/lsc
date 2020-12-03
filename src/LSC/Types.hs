@@ -112,6 +112,7 @@ type Contact = Pin
 data Net = Net
   { _identifier :: Identifier
   , _geometry   :: Path
+  , _members    :: Vector Number
   , _contacts   :: HashMap Number [Contact]
   } deriving (Generic, Show)
 
@@ -437,10 +438,9 @@ type Ring l a = Component l (Component l a)
 
 
 data Component l a
-  = Rect    { _l :: !a, _b :: !a, _r :: !a, _t :: !a }
-  | Via     { _l :: !a, _b :: !a, _r :: !a, _t :: !a, _z :: [l] }
-  | Layered { _l :: !a, _b :: !a, _r :: !a, _t :: !a, _z :: [l], _orientation :: Orientation }
-  deriving (Eq, Functor, Foldable, Traversable, Generic, Show)
+  = Rect      { _l :: !a, _b :: !a, _r :: !a, _t :: !a }
+  | Component { _l :: !a, _b :: !a, _r :: !a, _t :: !a, _z :: [l], _orientation :: Orientation }
+  deriving (Functor, Foldable, Traversable, Generic, Show)
 
 instance (ToJSON l, ToJSON a) => ToJSON (Component l a)
 instance (FromJSON l, FromJSON a) => FromJSON (Component l a)
@@ -451,11 +451,38 @@ instance (Hashable l, Hashable a) => Hashable (Component l a)
 makeFieldsNoPrefix ''Component
 
 
-instance (Eq l, Ord a) => Ord (Component l a) where
-  compare x y | x ^. l == y ^. l && x ^. b == y ^. b && x ^. r == y ^. r = compare (x ^. t) (y ^. t)
-  compare x y | x ^. l == y ^. l && x ^. b == y ^. b = compare (x ^. r) (y ^. r)
-  compare x y | x ^. l == y ^. l = compare (x ^. b) (y ^. b)
-  compare x y = compare (x ^. l) (y ^. l)
+instance Ord a => Semigroup (Component l a) where
+    Rect b1 l1 r1 t1 <> Rect b2 l2 r2 t2
+        = Rect (min b1 b2) (min l1 l2) (max r1 r2) (max t1 t2)
+    Component b1 l1 r1 t1 ls o <> Rect b2 l2 r2 t2
+        = Component (min b1 b2) (min l1 l2) (max r1 r2) (max t1 t2) ls o
+    Rect b1 l1 r1 t1 <> Component b2 l2 r2 t2 ls o
+        = Component (min b1 b2) (min l1 l2) (max r1 r2) (max t1 t2) ls o
+    Component b1 l1 r1 t1 ls1 o1 <> Component b2 l2 r2 t2 ls2 o2
+        = Component (min b1 b2) (min l1 l2) (max r1 r2) (max t1 t2) (ls1 <> ls2) (o1 <> o2)
+    {-# SPECIALIZE instance Semigroup (Component l Int) #-}
+
+
+instance (Ord a, Bounded a) => Monoid (Component l a) where
+    mempty = Rect maxBound maxBound minBound minBound
+    mappend = (<>)
+    {-# SPECIALIZE instance Monoid (Component l Int) #-}
+
+
+instance Eq a => Eq (Component l a) where
+    x == y
+       =  x ^. l == y ^. l
+       && x ^. b == y ^. b
+       && x ^. r == y ^. r
+       && x ^. t == y ^. t
+
+
+instance Ord a => Ord (Component l a) where
+    compare x y | x ^. l /= y ^. l = compare (x ^. l) (y ^. l)
+    compare x y | x ^. b /= y ^. b = compare (x ^. b) (y ^. b)
+    compare x y | x ^. r /= y ^. r = compare (x ^. r) (y ^. r)
+    compare x y = compare (x ^. t) (y ^. t)
+    {-# SPECIALIZE instance Ord (Component l Int) #-}
 
 
 
@@ -470,43 +497,48 @@ instance Hashable a => Hashable (Line a)
 makeFieldsNoPrefix ''Line
 
 
+center :: Integral a => Component l a -> Component l a
+center c = Rect (centerX c) (centerY c) (centerX c) (centerY c)
+{-# SPECIALIZE center :: Component l Int -> Component l Int #-}
+
+
 centerX :: Integral a => Component l a -> a
 centerX p = div (p ^. r + p ^. l) 2
-{-# SPECIALIZE centerX :: Component Layer Int -> Int #-}
+{-# SPECIALIZE centerX :: Component l Int -> Int #-}
 
 
 centerY :: Integral a => Component l a -> a
 centerY p = div (p ^. t + p ^. b) 2
-{-# SPECIALIZE centerY :: Component Layer Int -> Int #-}
+{-# SPECIALIZE centerY :: Component l Int -> Int #-}
 
 
 relocateL :: Num a => a -> Component l a -> Component l a
 relocateL f p = p & l +~ f-x & r +~ f-x
     where x = p ^. l
-{-# SPECIALIZE relocateL :: Int -> Component Layer Int -> Component Layer Int #-}
+{-# SPECIALIZE relocateL :: Int -> Component l Int -> Component l Int #-}
 
 relocateR :: Num a => a -> Component l a -> Component l a
 relocateR f p = p & l +~ f-x & r +~ f-x
     where x = p ^. r
-{-# SPECIALIZE relocateL :: Int -> Component Layer Int -> Component Layer Int #-}
+{-# SPECIALIZE relocateL :: Int -> Component l Int -> Component l Int #-}
 
 
 relocateB :: Num a => a -> Component l a -> Component l a
 relocateB f p = p & b +~ f-y & t +~ f-y
     where y = p ^. b
-{-# SPECIALIZE relocateB :: Int -> Component Layer Int -> Component Layer Int #-}
+{-# SPECIALIZE relocateB :: Int -> Component l Int -> Component l Int #-}
 
 
 relocateX :: Integral a => a -> Component l a -> Component l a
 relocateX f p = p & l +~ f-x & r +~ f-x
     where x = centerX p
-{-# SPECIALIZE relocateL :: Int -> Component Layer Int -> Component Layer Int #-}
+{-# SPECIALIZE relocateL :: Int -> Component l Int -> Component l Int #-}
 
 
 relocateY :: Integral a => a -> Component l a -> Component l a
 relocateY f p = p & b +~ f-y & t +~ f-y
     where y = centerY p
-{-# SPECIALIZE relocateL :: Int -> Component Layer Int -> Component Layer Int #-}
+{-# SPECIALIZE relocateL :: Int -> Component l Int -> Component l Int #-}
 
 
 projectNorth :: Component l a -> Component l a
@@ -525,10 +557,9 @@ height p = p ^. t - p ^. b
 
 
 integrate :: [l] -> Component k a -> Component l a
-integrate    [] (Rect    x1 y1 x2 y2)     = Rect    x1 y1 x2 y2
-integrate layer (Layered x1 y1 x2 y2 _ o) = Layered x1 y1 x2 y2 layer o
-integrate layer (Rect    x1 y1 x2 y2)     = Layered x1 y1 x2 y2 layer def
-integrate layer (Via     x1 y1 x2 y2 _)   = Via     x1 y1 x2 y2 layer
+integrate    [] (Rect    x1 y1 x2 y2)       = Rect      x1 y1 x2 y2
+integrate layer (Component x1 y1 x2 y2 _ o) = Component x1 y1 x2 y2 layer o
+integrate layer (Rect    x1 y1 x2 y2)       = Component x1 y1 x2 y2 layer mempty
 
 
 flipComponent :: Component l a -> Component l a
@@ -582,10 +613,10 @@ instance Ord Net where
   compare = compare `on` view identifier
 
 instance Semigroup Net where
-  Net i ns as <> Net _ os bs = Net i (ns <> os) (unionWith mappend as bs)
+  Net i xs ns as <> Net _ ys os bs = Net i (xs <> ys) (ns <> os) (unionWith (<>) as bs)
 
 instance Monoid Net where
-  mempty = Net mempty mempty mempty
+  mempty = Net mempty mempty mempty mempty
   mappend = (<>)
 
 

@@ -75,10 +75,10 @@ placeQuad top = do
     let geo g = g & space .~ maybe def id (maybe (padCell g) (gate g) $ cells ^? ix (g ^. identifier) . dims)
 
         gate g (w, h) = region ^? ix (g ^. number)
-            <&> \ (x, y) -> Layered x y (x + w) (y + h) [Metal2, Metal3] N
+            <&> \ (x, y) -> Component x y (x + w) (y + h) [Metal2, Metal3] N
 
         padCell g = region ^? ix (g ^. number)
-            <&> \ (x, y) -> Layered x y (x + fst std) (y + snd std) [Metal1] N
+            <&> \ (x, y) -> Component x y (x + fst std) (y + snd std) [Metal1] N
 
         region = runST $ do
             u <- new $ succ $ maximum $ view number <$> m
