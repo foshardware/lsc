@@ -14,6 +14,7 @@ import Data.Foldable
 import Data.Function
 import Data.Graph
 import Data.List (groupBy)
+import Data.Maybe
 import Data.STRef
 import Data.Vector (Vector, (!), (//), unsafeFreeze, unsafeThaw, fromListN, update)
 import Data.Vector.Mutable (read, modify)
@@ -51,23 +52,25 @@ rowLegalization _ _ gs
     | all (view fixed) gs
     = pure gs
 rowLegalization _ _ gs
-    | not $ or $ uncurry gateOverlap <$> Vector.zip gs (Vector.drop 1 gs)
+    | any (\ (g, h) -> h ^. space . l < g ^. space . l) $ Vector.zip gs (Vector.drop 1 gs)
+    = gs <$ assert "rowLegalization: row is unsorted!" False
+rowLegalization _ _ gs
+    | not $ any (uncurry gateOverlap) $ Vector.zip gs (Vector.drop 1 gs)
     = pure gs
 rowLegalization rc top gs = do
 
     let row = top ^. supercell . rows ^? ix (gs ! 0 ^. space . b)
 
-    let res = maybe 1 (view granularity) row
-        off = div (maybe 0 (view l) row) res - 1
+    assert "rowLegalization: no corresponding row found!" $ isJust row
 
-    let w = (`div` res) .  width . view space <$> gs
+    let res = maybe 1 (view granularity) row
+        off = pred $ maybe 0 (view l) row `div` res
+
+    let w = (`div` res) . width . view space <$> gs
         x = (flip (-) off) . (`div` res) . view l . view space <$> gs
 
-    -- let n = head (top ^. supercell . geometry <&> width) `div` res
-    let n = maybe 0 (view cardinality) row + maximum w
+    let n = succ $ maybe 0 (view cardinality) row
         m = length gs
-
-    -- let clearArea = ceiling $ fromIntegral n * (1 - rc) * 0.5
 
     let count = succ n * succ m
 
@@ -84,39 +87,42 @@ rowLegalization rc top gs = do
 
     for_ [0 .. m] $ \ j -> do
       for_ [1 .. n] $ \ k -> do
-      -- for_ [ 1 + sum (Vector.take j w) .. n] $ \ k -> do
 
-        let u1 = vertex j (pred k)
-        let v1 = vertex j k
-
-        dv1 <- ST.read d v1
-        du1 <- ST.read d u1
-
-        when (dv1 > du1)
+        void
           $ do
-            ST.write d v1 du1
-            ST.write p v1 u1
+
+            let u = vertex j (pred k)
+            let v = vertex j k
+
+            dv <- ST.read d v
+            du <- ST.read d u
+
+            when (dv > du)
+              $ do
+                ST.write d v du
+                ST.write p v u
 
         unless (j < 1)
           $ unless (k > n - w ! pred j)
           $ unless (gs ! pred j ^. fixed && x ! pred j /= k)
-          -- $ when (gs ! pred j ^. fixed || k > clearArea && k < n - clearArea)
           $ do
 
-            let u2 = vertex (pred j) k
-            let v2 = vertex j (k + w ! pred j)
+            let u = vertex (pred j) k
+            let v = vertex j (k + w ! pred j)
 
-            let w2 = abs $ x ! pred j - k
+            let weight = abs $ x ! pred j - k
 
-            dv2 <- ST.read d v2
-            du2 <- ST.read d u2
+            dv <- ST.read d v
+            du <- ST.read d u
 
-            when (dv2 > du2 + w2)
+            when (dv > du + weight)
               $ do
-                ST.write d v2 $ du2 + w2
-                ST.write p v2 u2
+                ST.write d v $ du + weight
+                ST.write p v u
 
-    shortestPath <- traversePath Unbox.unsafeIndex target <$> Unbox.unsafeFreeze p
+    subgraph <- Unbox.unsafeFreeze p
+
+    let shortestPath = takeWhile (> 0) (iterate (Unbox.unsafeIndex subgraph) target) ++ [0]
 
     let leftMost = fmap head $ groupBy (on (==) fst) $ site <$> shortestPath
 
@@ -152,14 +158,9 @@ topologicalShortestPath weight graph target = do
           ST.write d v $ du + w
           ST.write p v $ u
 
-    traversePath Unbox.unsafeIndex target <$> Unbox.unsafeFreeze p
+    subgraph <- Unbox.unsafeFreeze p
 
-
-
--- traversePath :: Int -> Unbox.Vector Int -> [Int]
-traversePath :: (s -> Int -> Int) -> Int -> s -> [Int]
-traversePath _ 0 _ = [0]
-traversePath f x g = x : traversePath f (f g x) g
+    pure $ takeWhile (> 0) (iterate (Unbox.unsafeIndex subgraph) target) ++ [0]
 
 
 

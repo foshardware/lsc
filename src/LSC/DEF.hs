@@ -173,7 +173,7 @@ toDEF scale top = DEF
   (toList $ top ^. supercell . tracks <&> toTrack)
   (toList $ set number `imap` view gates top <&> toComponent)
   (toList $ top ^. supercell . pins <&> toPin)
-  (toList $ ala Endo foldMap (HashMap.delete <$> toList power) (top ^. nets) <&> toNet top)
+  (toList $ HashMap.filterWithKey (const . not . power) (top ^. nets) <&> toNet top)
   mempty
 
   where

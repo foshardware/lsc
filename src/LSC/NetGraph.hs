@@ -14,8 +14,6 @@ import Data.Default
 import Data.Foldable
 import Data.Function
 import Data.Hashable
-import Data.HashSet (HashSet)
-import qualified Data.HashSet as HashSet
 import Data.HashMap.Lazy (HashMap)
 import qualified Data.HashMap.Lazy as HashMap
 import qualified Data.IntMap as M
@@ -324,20 +322,22 @@ assignCellsToColumns top = pure $ top &~ do
 
 
 
-power :: HashSet Identifier
-power = HashSet.fromList ["gnd", "vdd", "vcc", "GND", "VDD", "VCC"]
+power :: Identifier -> Bool
+power "gnd" = True
+power "vdd" = True
+power "vss" = True
+power "vcc" = True
+power "GND" = True
+power "VDD" = True
+power "VSS" = True
+power "VCC" = True
+power _ = False
 
 
 control :: Identifier -> Bool
-control "gnd" = True
-control "vdd" = True
-control "vcc" = True
-control "GND" = True
-control "VDD" = True
-control "VCC" = True
 control "clk" = True
 control "CLK" = True
-control _ = False
+control i = power i
 
 
 
