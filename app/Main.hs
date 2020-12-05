@@ -2,6 +2,7 @@
 
 module Main where
 
+import Control.Arrow
 import Control.Lens
 import Control.Monad
 import Control.Monad.Trans
@@ -63,6 +64,18 @@ program = do
 
       netlist <- liftIO $ readNetGraph inputs
 
+      when (arg DetailedPlacement && arg GlobalRouting)
+        $ do
+          circuit2d <- liftIO $ evalLSC opts tech $ compiler (stage2 >>> stage3) netlist
+          liftIO $ printStdout scale circuit2d $ list Output
+          exit
+
+      when (arg GlobalRouting)
+        $ do
+          circuit2d <- liftIO $ evalLSC opts tech $ compiler stage3 netlist
+          liftIO $ printStdout scale circuit2d $ list Output
+          exit
+
       when (arg DetailedPlacement)
         $ do
           circuit2d <- liftIO $ evalLSC opts tech $ compiler stage2 netlist
@@ -77,13 +90,7 @@ program = do
 
       when (arg LayoutEstimation)
         $ do
-          circuit2d <- liftIO $ evalLSC opts tech $ compiler stage1 netlist
-          liftIO $ printStdout scale circuit2d $ list Output
-          exit
-
-      when (arg Compile)
-        $ do
-          circuit2d <- lift $ evalLSC opts tech $ compiler stage4 netlist
+          circuit2d <- liftIO $ evalLSC opts tech $ compiler estimate netlist
           liftIO $ printStdout scale circuit2d $ list Output
           exit
 
@@ -139,6 +146,7 @@ data FlagKey
   | Def
   | Legalize
   | RowCapacity
+  | GlobalRouting
   | DetailedPlacement
   | LayoutEstimation
   | Compile
@@ -166,12 +174,13 @@ args =
     , Option ['l']      ["lef"]        (ReqArg (Lef,  ) "FILE")     "LEF file"
     , Option ['y']      ["legalize"]   (NoArg (Legalize, mempty))   "legalize"
     , Option ['p']      ["detailed-placement"]   (NoArg (DetailedPlacement, mempty))  "detailed placement"
+    , Option ['g']      ["global-routing"]       (NoArg (GlobalRouting, mempty))  "global routing"
     , Option [ ]        ["row-capacity"]  (ReqArg (RowCapacity, ) "ratio")  "set row capacity (e.g. 0.7)"
---    , Option ['x']      ["estimate-layout"] (NoArg (LayoutEstimation, mempty)) "estimate area"
+    , Option ['x']      ["estimate-layout"] (NoArg (LayoutEstimation, mempty)) "estimate area"
 
 --    , Option ['g']      ["visuals"]    (NoArg  (Visuals, mempty))   "show visuals"
     , Option ['i']      ["iterations"]
-        (OptArg  ((Iterations, ) . maybe "4" id) "n")               "iterations"
+        (OptArg  ((Iterations, ) . maybe "2" id) "n")               "iterations"
 
 --    , Option ['c']      ["compile"]    (NoArg (Compile, mempty))    "compile"
 

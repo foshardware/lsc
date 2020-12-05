@@ -20,6 +20,7 @@ import Data.Foldable
 import Prelude hiding ((.), id)
 
 import LSC.FastDP
+import LSC.GlobalRouting
 import LSC.Legalize
 import LSC.Mincut
 import LSC.NetGraph
@@ -31,9 +32,10 @@ import LSC.Version
 stage0 :: Compiler' NetGraph
 stage0 = id
     >>> remote gateGeometry
-    >>> remote assignCellsToRows
+    >>> arr assignCellsToRows
     >>> legalization >>> estimate
-    >>> remote assignCellsToColumns >>> estimate
+    >>> arr assignCellsToColumns >>> estimate
+    >>> arr rebuildEdges >>> estimate
 
 
 stage1 :: Compiler' NetGraph
@@ -42,12 +44,22 @@ stage1 = zeroArrow
 
 stage2 :: Compiler' NetGraph
 stage2 = id
-    >>> remote gateGeometry >>> estimate
-    >>> remote assignCellsToRows >>> estimate
+    >>> remote gateGeometry
+    >>> arr assignCellsToRows
     >>> legalization >>> estimate
     >>> detailedPlacement >>> estimate
+    >>> local legalizeRows
+    >>> arr assignCellsToColumns
+    >>> arr rebuildEdges >>> estimate
+
+
+stage3 :: Compiler' NetGraph
+stage3 = id
+    >>> remote gateGeometry
+    >>> arr assignCellsToRows
     >>> legalization >>> estimate
-    >>> remote assignCellsToColumns >>> estimate
+    >>> remote pinGeometry
+    >>> globalRouting >>> estimate
 
 
 stage4 :: Compiler' NetGraph
@@ -59,14 +71,37 @@ globalPlacement :: Compiler' NetGraph
 globalPlacement = local placeQuad
 
 
+globalRouting :: Compiler' NetGraph
+globalRouting = id
+    >>> local determineFeedthroughs
+    >>> remote gateGeometry >>> estimate
+    >>> local legalizeRows
+    >>> arr rebuildEdges >>> estimate
+    >>> strategy1 significantHpwl
+        (local singleSegmentClustering >>> arr rebuildEdges >>> estimate)
+    >>> local legalizeRows
+    >>> arr assignCellsToColumns
+    >>> arr rebuildEdges >>> estimate
+    >>> remote pinGeometry
+
+
 
 detailedPlacement :: Compiler' NetGraph
 detailedPlacement = id
-    >>> local singleSegmentClustering >>> estimate
+    -- >>> local singleSegmentClustering >>> arr rebuildEdges >>> estimate
     >>> strategy1 significantHpwl
-        (local globalSwap >>> local verticalSwap >>> legalization >>> local localReordering >>> legalization >>> estimate)
-    >>> strategy1 significantHpwl
-        (local singleSegmentClustering >>> estimate)
+        (id
+        >>> local globalSwap
+        >>> arr rebuildEdges
+        >>> local verticalSwap
+        >>> local legalizeRows
+        >>> arr rebuildEdges
+        >>> local localReordering
+        >>> local legalizeRows
+        >>> arr rebuildEdges
+        >>> estimate)
+    -- >>> strategy1 significantHpwl
+    --     (local singleSegmentClustering >>> arr rebuildEdges >>> estimate)
 
 
 
@@ -74,6 +109,7 @@ legalization :: Compiler' NetGraph
 legalization = id
     >>> local juggleCells
     >>> local legalizeRows
+    >>> arr rebuildEdges
 
 
 estimate :: Compiler' NetGraph

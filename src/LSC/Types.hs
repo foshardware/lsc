@@ -19,17 +19,23 @@ import Control.Applicative
 import Control.Lens hiding (element)
 import Control.Concurrent.MSem (MSem)
 import Control.Exception
+import Control.Monad.ST
 import Data.Default
 import Data.Foldable
 import Data.Function (on)
 import Data.Hashable
-import Data.IntSet (IntSet)
 import Data.IntMap (IntMap)
 import Data.HashMap.Lazy (HashMap, unionWith, lookup)
-import Data.List (sort, sortBy, groupBy)
+import Data.List (sortBy, groupBy)
 import Data.Semigroup
+import Data.STRef
 import Data.Text (Text)
+import qualified Data.Text.Lazy as Lazy
+import Data.Text.Lazy.Builder
+import Data.Text.Lazy.Builder.Int
 import Data.Vector (Vector)
+import Data.Vector.Generic.Mutable (MVector)
+import qualified Data.Vector.Generic.Mutable as M
 
 import Data.Aeson (encode, FromJSON, ToJSON)
 
@@ -46,18 +52,6 @@ import GHC.Generics
 import Prelude hiding (lookup, fail)
 
 
-
-type NetArray  = Vector IntSet
-type CellArray = Vector IntSet
-
-
-type V = CellArray
-type E = NetArray
-
-
-data Move
-  = Move Gate Gate
-  | Reset NetGraph
 
 
 data RTL = RTL
@@ -112,7 +106,7 @@ type Contact = Pin
 data Net = Net
   { _identifier :: Identifier
   , _geometry   :: Path
-  , _members    :: Vector Number
+  , _members    :: Vector Gate
   , _contacts   :: HashMap Number [Contact]
   } deriving (Generic, Show)
 
@@ -128,13 +122,12 @@ type Number = Int
 type Identifier = Text
 
 data Gate = Gate
-  { _identifier :: Identifier
-  , _space      :: Component Layer Int
-  , _vdd        :: Pin
-  , _gnd        :: Pin
-  , _wires      :: HashMap Identifier Identifier
-  , _number     :: Number
-  , _fixed      :: Bool
+  { _identifier  :: Identifier
+  , _space       :: Component Layer Int
+  , _wires       :: HashMap Identifier Identifier
+  , _number      :: Number
+  , _fixed       :: Bool
+  , _feedthrough :: Bool
   } deriving (Generic, Show)
 
 instance ToJSON Gate
@@ -161,6 +154,7 @@ instance Hashable Track
 
 data Row = Row
   { _identifier  :: Identifier
+  , _number      :: Number 
   , _l           :: Int
   , _b           :: Int
   , _orientation :: Orientation
@@ -371,10 +365,6 @@ instance ToJSON Orientation
 instance Hashable Orientation
 
 
-instance Default Orientation where
-  def = N
-
-
 instance Semigroup Orientation where
 
   N <> a = a
@@ -426,7 +416,7 @@ instance Semigroup Orientation where
 
 
 instance Monoid Orientation where
-  mempty = def
+  mempty = N
   mappend = (<>)
 
 
@@ -568,9 +558,6 @@ flipComponent p = p &~ do
     t .= p ^. r
 
 
-instance Default a => Default (Component l a) where
-  def = Rect def def def def
-
 
 inner, outer :: Ring l a -> Component l a
 inner p = Rect (p ^. l . r) (p ^. b . t) (p ^. r . l) (p ^. t . b)
@@ -606,14 +593,22 @@ instance Default AbstractCell where
 
 makeFieldsNoPrefix ''Net
 
+
 instance Eq Net where
   (==) = (==) `on` view identifier
+
 
 instance Ord Net where
   compare = compare `on` view identifier
 
+
 instance Semigroup Net where
-  Net i xs ns as <> Net _ ys os bs = Net i (xs <> ys) (ns <> os) (unionWith (<>) as bs)
+  Net i xs ns as <> Net j ys os bs
+      | i /= j
+      = Net (i <> j) (xs <> ys) (ns <> os) (unionWith (<>) as bs)
+  Net i xs ns as <> Net _ ys os bs
+      = Net i (xs <> ys) (ns <> os) (unionWith (<>) as bs)
+
 
 instance Monoid Net where
   mempty = Net mempty mempty mempty mempty
@@ -635,7 +630,7 @@ instance Ord Gate where
   compare = compare `on` view number
 
 instance Default Gate where
-  def = Gate mempty def def def mempty (-1) False
+  def = Gate mempty mempty mempty (-1) False False
 
 
 type Arboresence a = (Net, a, a)
@@ -684,13 +679,23 @@ evalLSC :: Environment -> Bootstrap () -> LSC a -> IO a
 evalLSC = runLSC
 
 
-debug :: Foldable f => f String -> LSC ()
+debug :: [String] -> LSC ()
+debug [msg] = do
+  enabled <- view enableDebug <$> environment
+  when enabled $ liftIO $ do
+    time <- decimalToString . round <$> getPOSIXTime
+    errorConcurrent $ unwords ["->", time, msg]
+    flushConcurrentOutput
 debug msg = do
   enabled <- view enableDebug <$> environment
   when enabled $ unless (null msg) $ liftIO $ do
-    time <- show . round <$> getPOSIXTime
+    time <- decimalToString . round <$> getPOSIXTime
     errorConcurrent $ unlines $ unwords ["->", time] : toList msg
     flushConcurrentOutput
+
+
+decimalToString :: Integral a => a -> String
+decimalToString = Lazy.unpack . toLazyText . decimal
 
 
 makeFieldsNoPrefix ''Technology
@@ -706,21 +711,49 @@ lambda :: Technology -> Int
 lambda tech = ceiling $ view scaleFactor tech * view featureSize tech
 
 
+
 distinctPairs :: [a] -> [(a, a)]
 distinctPairs (x : xs) = fmap (x, ) xs ++ distinctPairs xs
 distinctPairs _ = []
 
 
+
 uniqueBy :: (a -> a -> Ordering) -> [a] -> [a]
 uniqueBy f = fmap head . groupBy (\ x y -> f x y == EQ) . sortBy f
+{-# INLINE uniqueBy #-}
 
 
-median :: (Ord a, Integral a) => [a] -> a
+
+median :: Integral a => [a] -> a
 median [] = error "median: empty list"
-median zs = let as = sort zs in go as as
-    where go (x : _)         (_: []) = x
-          go (x : y :_) (_ : _ : []) = div (x + y) 2
-          go (_ : xs)   (_ : _ : ys) = go xs ys
+median zs = go zs zs
+    where go (x : _)          (_: []) = x
+          go (x : y : _) (_ : _ : []) = div (x + y) 2
+          go (_ : xs)    (_ : _ : ys) = go xs ys
           go _ _ = error "median: this does not happen"
 {-# SPECIALIZE median :: [Int] -> Int #-}
+
+
+
+minimumOnST :: (MVector v a, Ord n) => (a -> n) -> v s a -> ST s (Int, a)
+minimumOnST _ graph
+    | M.null graph
+    = fail "minimumOnST: empty vector"
+minimumOnST weight graph = do
+
+    e <- M.read graph 0
+
+    minEdge <- newSTRef (0, e)
+    minWght <- newSTRef (weight e)
+
+    for_ [ 1 .. M.length graph - 1 ] $ \ i -> do
+        x <- readSTRef minWght
+        f <- M.read graph i
+        case weight f of
+            w | w < x -> writeSTRef minWght w >> writeSTRef minEdge (i, f)
+            _ -> pure ()
+
+    readSTRef minEdge
+{-# INLINE minimumOnST #-}
+
 

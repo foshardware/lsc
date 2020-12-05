@@ -72,7 +72,7 @@ placeQuad top = do
 
     cells <- view stdCells <$> technology
 
-    let geo g = g & space .~ maybe def id (maybe (padCell g) (gate g) $ cells ^? ix (g ^. identifier) . dims)
+    let geo g = g & space .~ foldMap id (maybe (padCell g) (gate g) $ cells ^? ix (g ^. identifier) . dims)
 
         gate g (w, h) = region ^? ix (g ^. number)
             <&> \ (x, y) -> Component x y (x + w) (y + h) [Metal2, Metal3] N
@@ -141,7 +141,7 @@ rotateBins m = ala Endo foldMap
 
 
 subHpwl :: Matrix Gate -> Matrix Gate -> Int
-subHpwl m n = sum $ hpwlMatrix (coordsVector m) <$> rebuildEdges n
+subHpwl m n = sum $ hpwlMatrix (coordsVector m) <$> generateEdges n
 
 
 
@@ -190,7 +190,7 @@ placeMatrix m
 placeMatrix m = do
 
     let v = flattenGateMatrix m
-        e = rebuildEdges $ set number `imap` v
+        e = generateEdges $ set number `imap` v
 
     let h = nrows m `div` 2
         w = ncols m `div` 2
@@ -206,8 +206,8 @@ placeMatrix m = do
 
         let v21 = fromListN (size q21) $ (v!) <$> elems q21
             v34 = fromListN (size q34) $ (v!) <$> elems q34
-        let e21 = rebuildEdges $ set number `imap` v21
-            e34 = rebuildEdges $ set number `imap` v34
+        let e21 = generateEdges $ set number `imap` v21
+            e34 = generateEdges $ set number `imap` v34
 
 
         h21 <- st $ hypergraph (set number `imap` v21) e21

@@ -28,7 +28,6 @@ import Language.DEF.Builder
 import Language.DEF.Parser (parseDEF)
 import Language.DEF.Syntax as DEF
 
-import LSC.NetGraph (power)
 import LSC.Types as Rect
 
 
@@ -51,17 +50,17 @@ fromDEF (DEF options area rs ts cs ps ns _) = def &~ do
 
       nodes = set number `imap` V.fromList (fromComponent <$> cs)
 
-      edges = HashMap.fromList [ (n ^. identifier, n) | n <- fromNet gateNumber <$> ns ]
+      edges = HashMap.fromList [ (n ^. identifier, n) | n <- fromNet lookupGate <$> ns ]
 
-      gateNumber y = maybe (-1) id $ lookup y $ fromList [ (x, i) | (i, DEF.Component x _ _) <- zip [0..] cs ]
+      lookupGate y = maybe def id $ lookup y $ fromList [ (x, g) | (DEF.Component x _ _, g) <- cs `zip` toList nodes ]
 
 
 
-fromNet :: (Ident -> Number) -> DEF.Net -> Rect.Net
+fromNet :: (Ident -> Gate) -> DEF.Net -> Rect.Net
 fromNet n (DEF.Net i cs _) = Rect.Net i
     mempty
     (V.fromList $ n . fst <$> rights cs)
-    (HashMap.fromListWith (++) [ (g, [def & identifier .~ p]) | (g, p) <- either (-1, ) (first n) <$> cs ])
+    (HashMap.fromListWith (++) [ (g ^. number, [def & identifier .~ p]) | (g, p) <- either (def, ) (first n) <$> cs ])
 
 
 fromLayer :: LayerName -> Rect.Layer
@@ -83,7 +82,11 @@ supercellFrom :: DieArea -> [DEF.Track] -> [DEF.Row] -> [DEF.Pin] -> AbstractCel
 supercellFrom (DieArea (x1, y1) (x2, y2)) ts rs ps = def &~ do
     geometry .= [Rect (ceiling x1) (ceiling y1) (ceiling x2) (ceiling y2)]
     tracks .= fmap fromTrack ts
-    rows .= IntMap.fromList [ (p ^. b, p) | p <- fromRow <$> rs ]
+    rows .= IntMap.fromDistinctAscList
+        ( fmap (\ (i, (y, row)) -> (y, set number i row))
+        $ zip [0..] $ IntMap.assocs
+        $ IntMap.fromList [ (p ^. b, p) | p <- fromRow <$> rs ]
+        )
     pins .= HashMap.fromList [ (p ^. identifier, p) | p <- fmap fromPin ps ] 
 
 
@@ -119,7 +122,7 @@ fromTrack (DEF.Track   _ a ss c d)
 
 fromRow :: DEF.Row -> Rect.Row
 fromRow (DEF.Row _ i x y o ss _ w _)
-    = Rect.Row i
+    = Rect.Row i (-1)
       (fromIntegral x) (fromIntegral y)
       (fromOrientation o) (fromIntegral ss) (fromIntegral w)
 
@@ -128,11 +131,11 @@ fromRow (DEF.Row _ i x y o ss _ w _)
 fromComponent :: DEF.Component -> Gate
 fromComponent (DEF.Component _ j placed@(Just (Fixed _ _))) = def &~ do
     identifier .= j
-    space .= maybe def fromPlaced placed
+    space .= foldMap fromPlaced placed
     fixed .= True
 fromComponent (DEF.Component _ j placed) = def &~ do
     identifier .= j
-    space .= maybe def fromPlaced placed
+    space .= foldMap fromPlaced placed
 
 
 
@@ -141,7 +144,7 @@ fromPlaced (Placed (x, y) ori)
     = Rect.Component (ceiling x) (ceiling y) (ceiling x) (ceiling y) [Metal2, Metal3] (fromOrientation ori)
 fromPlaced (Fixed (x, y) ori)
     = Rect.Component (ceiling x) (ceiling y) (ceiling x) (ceiling y) [Metal2, Metal3] (fromOrientation ori)
-fromPlaced _ = def
+fromPlaced _ = mempty 
 
 
 
@@ -169,11 +172,11 @@ toDEF :: Double -> NetGraph -> DEF
 toDEF scale top = DEF
   (filter units (defaultOptions $ Just $ top ^. identifier) ++ [Units $ DistanceList $ ceiling scale])
   (dieArea $ listToMaybe $ top ^. supercell . geometry)
-  (fmap toRow $ zip [1..] $ toList $ top ^. supercell . rows)
+  (fmap toRow $ toList $ top ^. supercell . rows)
   (toList $ top ^. supercell . tracks <&> toTrack)
   (toList $ set number `imap` view gates top <&> toComponent)
   (toList $ top ^. supercell . pins <&> toPin)
-  (toList $ HashMap.filterWithKey (const . not . power) (top ^. nets) <&> toNet top)
+  (toList $ view nets top <&> toNet top)
   mempty
 
   where
@@ -183,9 +186,9 @@ toDEF scale top = DEF
 
 
 
-toRow :: (Int, Rect.Row) -> DEF.Row
-toRow (n, x) = DEF.Row
-    (toStrict $ toLazyText $ enumeratedRow n)
+toRow :: Rect.Row -> DEF.Row
+toRow x = DEF.Row
+    (toStrict $ toLazyText $ enumeratedRow (view number x))
     (view identifier x)
     (fromIntegral $ view l x) (fromIntegral $ view b x)
     (toOrientation $ view orientation x)

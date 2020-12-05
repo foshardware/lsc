@@ -36,7 +36,6 @@ import qualified Data.Vector.Algorithms.Intro as Intro
 import Prelude hiding (replicate, length, read, lookup, take, drop, head, unzip)
 
 import LSC.Entropy
-import LSC.Types (V, E)
 
 
 
@@ -49,6 +48,14 @@ coarseningThreshold = 8
 
 balanceFactor :: Rational
 balanceFactor = 1 % 10
+
+
+type NetArray  = Vector IntSet
+type CellArray = Vector IntSet
+
+
+type V = CellArray
+type E = NetArray
 
 
 
