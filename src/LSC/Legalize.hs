@@ -35,39 +35,41 @@ legalizeRows top = do
     assert "legalizeRows: gate vector indices do not match gate numbers"
         $ and $ imap (==) $ view number <$> view gates top
 
-    rc <- view rowCapacity <$> environment
-
     groups <- liftIO . stToIO
         $ sequence
-        $ rowLegalization rc top <$> getRows (top ^. gates)
+        $ rowLegalization top <$> getRows (top ^. gates)
 
     pure $ top &~ do
         gates %= flip update ((\ g -> (g ^. number, g)) <$> Vector.concat groups)
 
 
-rowLegalization :: Double -> NetGraph -> Vector Gate -> ST s (Vector Gate)
-rowLegalization _ _ gs
+rowLegalization :: NetGraph -> Vector Gate -> ST s (Vector Gate)
+rowLegalization _ gs
     | length gs < 2 = pure gs
-rowLegalization _ _ gs
+rowLegalization _ gs
     | all (view fixed) gs
     = pure gs
-rowLegalization _ _ gs
+rowLegalization _ gs
     | any (\ (g, h) -> h ^. space . l < g ^. space . l) $ Vector.zip gs (Vector.drop 1 gs)
     = gs <$ assert "rowLegalization: row is unsorted!" False
-rowLegalization _ _ gs
+rowLegalization _ gs
     | not $ any (uncurry gateOverlap) $ Vector.zip gs (Vector.drop 1 gs)
     = pure gs
-rowLegalization rc top gs = do
+rowLegalization top gs = do
 
-    let row = top ^. supercell . rows ^? ix (gs ! 0 ^. space . b)
+    let y = gs ! 0 ^. space . b
+
+    assert "rowLegalization: row is not aligned!" $ all (\ g -> g ^. space . b == y) gs
+
+    let row = top ^. supercell . rows ^? ix y
 
     assert "rowLegalization: no corresponding row found!" $ isJust row
 
     let res = maybe 1 (view granularity) row
-        off = pred $ maybe 0 (view l) row `div` res
+        off = pred $ maybe 1 (view l) row `div` res
 
     let w = (`div` res) . width . view space <$> gs
-        x = (flip (-) off) . (`div` res) . view l . view space <$> gs
+        x = (flip (-) off) . (`div` res) . view (space . l) <$> gs
 
     let n = succ $ maybe 0 (view cardinality) row
         m = length gs
@@ -120,17 +122,17 @@ rowLegalization rc top gs = do
                 ST.write d v $ du + weight
                 ST.write p v u
 
-    subgraph <- Unbox.unsafeFreeze p
+    predecessor <- Unbox.unsafeFreeze p
 
-    let shortestPath = takeWhile (> 0) (iterate (Unbox.unsafeIndex subgraph) target) ++ [0]
+    let shortestPath = takeWhile (> 0) (iterate (Unbox.unsafeIndex predecessor) target)
 
-    let leftMost = fmap head $ groupBy (on (==) fst) $ site <$> shortestPath
+    let diagonal = tail $ fmap head $ groupBy (on (==) fst) $ site <$> shortestPath
 
-    assert "cannot legalize row!" $ tail leftMost /= [(0, 0)]
+    assert "rowLegalization: cannot legalize row!" $ not $ null diagonal
 
     pure $ gs //
-      [ (g, gs ! g & space %~ relocateL ((u + off) * res))
-      | (g, u) <- tail leftMost
+      [ (i, gs ! i & space %~ relocateL ((pos + off) * res))
+      | (i, pos) <- diagonal
       ]
 
 
@@ -158,9 +160,9 @@ topologicalShortestPath weight graph target = do
           ST.write d v $ du + w
           ST.write p v $ u
 
-    subgraph <- Unbox.unsafeFreeze p
+    predecessor <- Unbox.unsafeFreeze p
 
-    pure $ takeWhile (> 0) (iterate (Unbox.unsafeIndex subgraph) target) ++ [0]
+    pure $ takeWhile (> 0) (iterate (Unbox.unsafeIndex predecessor) target)
 
 
 
