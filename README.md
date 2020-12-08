@@ -81,3 +81,6 @@ Pass the argument `-j4` for enabling concurrency tests with 4 jobs to run simult
 ### LSC.SuffixTree
 
 - Becher, Deymonnaz, Heiber (2013): Efficient repeat finding via suffix arrays
+
+### Licensing:
+This program is available as open source under the terms of the GPL-3.0-or-later. However, some elements are being licensed under CC0-1.0. For accurate information, please check individual files.
