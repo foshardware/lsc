@@ -1,3 +1,6 @@
+-- Copyright 2018 - Andreas Westerwick <westerwick@pconas.de>
+-- SPDX-License-Identifier: GPL-3.0-or-later
+
 {-# OPTIONS_GHC -fno-warn-type-defaults #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE RankNTypes #-}
