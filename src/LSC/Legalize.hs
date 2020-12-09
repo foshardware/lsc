@@ -35,27 +35,29 @@ legalizeRows top = do
     assert "legalizeRows: gate vector indices do not match gate numbers"
         $ and $ imap (==) $ view number <$> view gates top
 
-    groups <- liftIO . stToIO
+    segments <- liftIO . stToIO
         $ sequence
         $ rowLegalization top <$> getRows (top ^. gates)
 
     pure $ top &~ do
-        gates %= flip update ((\ g -> (g ^. number, g)) <$> Vector.concat groups)
+        gates %= flip update ((\ g -> (g ^. number, g)) <$> Vector.concat segments)
 
 
 rowLegalization :: NetGraph -> Vector Gate -> ST s (Vector Gate)
 rowLegalization _ gs
-    | length gs < 2 = pure gs
+    | length gs < 2
+    = pure gs
 rowLegalization _ gs
     | all (view fixed) gs
     = pure gs
 rowLegalization _ gs
-    | any (\ (g, h) -> h ^. space . l < g ^. space . l) $ Vector.zip gs (Vector.drop 1 gs)
-    = gs <$ assert "rowLegalization: row is unsorted!" False
-rowLegalization _ gs
-    | not $ any (uncurry gateOverlap) $ Vector.zip gs (Vector.drop 1 gs)
+    | all (\ (g, h) -> g ^. space . l <= h ^. space . l) $ Vector.zip gs (Vector.tail gs)
+    , not $ or $ Vector.zipWith gateOverlap gs (Vector.tail gs)
     = pure gs
 rowLegalization top gs = do
+
+    assert "rowLegalization: row is unsorted!"
+        $ all (\ (g, h) -> g ^. space . l <= h ^. space . l) $ Vector.zip gs (Vector.tail gs)
 
     let y = gs ! 0 ^. space . b
 
@@ -191,7 +193,7 @@ rowJuggling rc top = do
     let table = fromListN (length rs) $ toList <$> getRows (top ^. gates)
 
     let rowWidth p = ceiling $ rc * fromIntegral (view cardinality p * view granularity p)
-    let w = fmap (maybe 0 rowWidth . flip preview rs . ix . view (space . b) . head) table
+    let w = fmap (maybe 0 rowWidth . (rs ^?) . ix . view (space . b) . head) table
     let y = fmap (view (space . b) . head) table
 
     surplus <- unsafeThaw $ uncurry (-) <$> Vector.zip (sum . fmap gateWidth <$> table) w
@@ -252,7 +254,7 @@ debugRowCapacities top = do
     let rs = top ^. supercell . rows
     let table = top ^. gates . to getRows
     let rowWidth p = fromIntegral (view cardinality p * view granularity p)
-    let caps = fmap (maybe 0 rowWidth . flip preview rs . ix . view (space . b) . Vector.head) table
+    let caps = fmap (maybe 0 rowWidth . (rs ^?) . ix . view (space . b) . Vector.head) table
 
     debug $ "Row capacities:" :
         [ printf "Row %d: %d (%.2f%%)" (i :: Int) (cap :: Int) (f :: Double)

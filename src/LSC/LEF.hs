@@ -11,6 +11,7 @@ import Control.Lens
 import Control.Monad.State (get)
 import Data.Default
 import Data.HashMap.Lazy as HashMap
+import qualified Data.Vector as V
 
 import Language.LEF.Parser (parseLEF)
 import Language.LEF.Syntax
@@ -56,34 +57,39 @@ macroPins tech (MacroPin ident options _ : rest)
 macroPins tech (_ : rest) = macroPins tech rest
 macroPins _ [] = []
 
-macroPorts tech (MacroPinPort (MacroPinPortLayer ident _ : rest) : _) = portRectangles tech ident rest
+
+macroPorts tech (MacroPinPort (MacroPinPortLayer ident xs : _) : rest)
+    = portLayerRectangles tech ident xs ++ macroPorts tech rest
 macroPorts tech (_ : rest) = macroPorts tech rest
 macroPorts _ [] = []
+
 
 portLayer "metal1" = Metal1
 portLayer "metal2" = Metal2
 portLayer "metal3" = Metal3
 portLayer _ = AnyLayer
 
-portRectangles tech ident (MacroPinPortRect x1 y1 x2 y2 : rest) = Component
-  (ceiling $ x1 * g)
-  (ceiling $ y1 * g)
-  (ceiling $ x2 * g)
-  (ceiling $ y2 * g)
-  (pure $ portLayer ident)
-  def
-  : portRectangles tech ident rest
-  where g = scale tech
-portRectangles tech ident (_ : rest) = portRectangles tech ident rest
-portRectangles _ _ [] = []
+
+portLayerRectangles tech ident (xs : rest) = Component
+    (minimum x)
+    (minimum y)
+    (maximum x)
+    (maximum y)
+    (pure $ portLayer ident)
+    mempty 
+    : portLayerRectangles tech ident rest
+    where g = view scaleFactor (tech :: Technology)
+          u = V.fromList $ round . (g *) <$> xs
+          x = V.generate (length u `div` 2) (\ i -> V.unsafeIndex u (i * 2))
+          y = V.generate (length u `div` 2) (\ i -> V.unsafeIndex u (i * 2 + 1))
+portLayerRectangles _ _ [] = []
+
 
 dimensions tech (MacroSize x y : _) = (round $ x * g, round $ y * g)
-  where g = scale tech
+    where g = view scaleFactor (tech :: Technology)
 dimensions tech (_ : rest) = dimensions tech rest
 dimensions _ [] = (0, 0)
 
-scale :: Technology -> Double
-scale = view scaleFactor
 
 databaseUnits (Units (DatabaseList x) : _) = x
 databaseUnits (_ : rest) = databaseUnits rest
@@ -94,3 +100,4 @@ direction (MacroPinDirection Output _ : _) = Just Out
 direction (MacroPinDirection InputOutput _ : _) = Just InOut
 direction (_ : rest) = direction rest
 direction [] = Nothing
+

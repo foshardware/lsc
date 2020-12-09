@@ -16,7 +16,7 @@ import Data.FileEmbed
 import Data.Foldable
 import qualified Data.HashMap.Lazy as HashMap
 import Data.IntSet (fromList, fromAscList, size)
-import Data.List (isPrefixOf)
+import Data.List (sort, isPrefixOf)
 import Data.Ratio
 import Data.Text (Text)
 import Data.Text.Encoding
@@ -36,7 +36,7 @@ import LSC.BLIF
 import LSC.Entropy
 import LSC.Types
 import LSC.FM as FM
-import LSC.KGGGP as KGGGP
+import LSC.KGGGP as KGGGP hiding (V, E)
 
 
 
@@ -60,9 +60,9 @@ medians :: TestTree
 medians = testGroup "Median"
   [ testCase "Random input" $ do
       rng <- create
-      med <- generate $ choose (1, 50000)
-      assertEqual "even median" (med - 1) . median . toList =<< randomPermutation (2 * med) rng
-      assertEqual "odd median" med . median . toList =<< randomPermutation (2 * med + 1) rng
+      med <- generate $ choose (1, 100000)
+      assertEqual "even median" (med - 1) . median . sort . toList =<< randomPermutation (2 * med) rng
+      assertEqual "odd median" med . median . sort . toList =<< randomPermutation (2 * med + 1) rng
   , testCase "Large input" $ assertEqual "is median" 5000000 $ median [0..10000000 :: Int]
   ]
 

@@ -37,12 +37,19 @@ import Data.Vector.Mutable
 import qualified Data.Vector.Mutable as M
 import Prelude hiding (replicate, length, read, lookup, take, drop)
 
-import LSC.Types (V, E)
-
 
 
 balanceFactor :: Rational
 balanceFactor = 1 % 10
+
+
+type NetArray  = Vector IntSet
+type CellArray = Vector IntSet
+
+
+type V = CellArray
+type E = NetArray
+
 
 
 data Gain s a = Gain

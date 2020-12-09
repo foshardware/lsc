@@ -1,5 +1,5 @@
 name:                lsc
-version:             0.2.0.2
+version:             0.2.0.3
 github:              "foshardware/lsc"
 license:             GPL-3
 author:              "Andreas Westerwick"
@@ -42,7 +42,6 @@ dependencies:
 - monad-loops
 - mtl
 - mwc-random
-- parallel
 - parsec
 - parsec-numbers
 - primitive
@@ -53,6 +52,7 @@ dependencies:
 - text
 - time
 - transformers
+- union-find
 - unordered-containers
 - vector
 - vector-algorithms
@@ -84,6 +84,7 @@ tests:
     source-dirs:         test
     ghc-options:
     - -Wall
+    - -O
     - -threaded
     - -rtsopts
     - -with-rtsopts=-N

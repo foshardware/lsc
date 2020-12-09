@@ -70,8 +70,8 @@ drawL :: Marker -> Svg
 drawL (Line (x1, y1) (x2, y2)) = do
   S.path
     ! A.d (mkPath pen)
-    ! A.stroke "blue"
-    ! A.fill "blue"
+    ! A.stroke "black"
+    ! A.fill "black"
     ! A.strokeWidth "1"
   where
     pen = do
@@ -129,7 +129,7 @@ follow _ = pure ()
 
 stroke :: [Layer] -> Arg
 stroke (Metal2 : Metal3 : _) = "black"
-stroke (Metal1 : _) = "blue"
+stroke (Metal1 : _) = "black"
 stroke (Metal2 : _) = "red"
 stroke (Metal3 : _) = "green"
 stroke _ = "black"
