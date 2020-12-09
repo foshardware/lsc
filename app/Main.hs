@@ -64,7 +64,7 @@ program = do
 
       netlist <- liftIO $ readNetGraph inputs
 
-      when (arg DetailedPlacement && arg GlobalRouting)
+      when (arg DetailedPlacement || arg GlobalRouting)
         $ do
           circuit2d <- liftIO $ evalLSC opts tech $ compiler (stage2 >>> stage3) netlist
           liftIO $ printStdout scale circuit2d $ list Output
@@ -73,12 +73,6 @@ program = do
       when (arg GlobalRouting)
         $ do
           circuit2d <- liftIO $ evalLSC opts tech $ compiler stage3 netlist
-          liftIO $ printStdout scale circuit2d $ list Output
-          exit
-
-      when (arg DetailedPlacement)
-        $ do
-          circuit2d <- liftIO $ evalLSC opts tech $ compiler stage2 netlist
           liftIO $ printStdout scale circuit2d $ list Output
           exit
 
