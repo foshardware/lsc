@@ -13,12 +13,15 @@ import Data.Default
 import Data.Foldable
 import Data.Function
 import Data.Graph
+import Data.HashMap.Lazy (insert, delete)
+import qualified Data.HashMap.Lazy as HashMap
 import Data.List (groupBy)
 import Data.Maybe
 import Data.STRef
-import Data.Vector (Vector, (!), (//), unsafeFreeze, unsafeThaw, fromListN, update)
+import Data.Vector (Vector, (!), unsafeFreeze, unsafeThaw, update, unsafeUpd)
 import Data.Vector.Mutable (read, modify)
 import qualified Data.Vector as Vector
+import qualified Data.Vector.Algorithms.Intro as Intro
 import qualified Data.Vector.Unboxed as Unbox
 import qualified Data.Vector.Unboxed.Mutable as ST
 import Prelude hiding (read, lookup)
@@ -40,7 +43,7 @@ legalizeRows top = do
         $ rowLegalization top <$> getRows (top ^. gates)
 
     pure $ top &~ do
-        gates %= flip update ((\ g -> (g ^. number, g)) <$> Vector.concat segments)
+        gates %= flip update (liftA2 (,) (view number) id <$> Vector.concat segments)
 
 
 rowLegalization :: NetGraph -> Vector Gate -> ST s (Vector Gate)
@@ -132,7 +135,7 @@ rowLegalization top gs = do
 
     assert "rowLegalization: cannot legalize row!" $ not $ null diagonal
 
-    pure $ gs //
+    pure $ unsafeUpd gs
       [ (i, gs ! i & space %~ relocateL ((pos + off) * res))
       | (i, pos) <- diagonal
       ]
@@ -186,29 +189,37 @@ juggleCells top = do
 
 
 rowJuggling :: Double -> NetGraph -> ST s NetGraph
+rowJuggling _ top
+    | views gates null top
+    = pure top
 rowJuggling rc top = do
 
     let rs = top ^. supercell . rows
 
-    let table = fromListN (length rs) $ toList <$> getRows (top ^. gates)
+    let table = Vector.fromList
+            [ HashMap.fromList [ (g ^. number, g) | g <- toList row ]
+            | row <- top ^. gates . to getRows
+            ]
 
     let rowWidth p = ceiling $ rc * fromIntegral (view cardinality p * view granularity p)
-    let w = fmap (maybe 0 rowWidth . (rs ^?) . ix . view (space . b) . head) table
-    let y = fmap (view (space . b) . head) table
+    let w = maybe 0 rowWidth . (rs ^?) . ix . view b . foldMap' (view space) <$> table
+    let y = view b . foldMap' (view space) <$> table
 
-    surplus <- unsafeThaw $ uncurry (-) <$> Vector.zip (sum . fmap gateWidth <$> table) w
+    surplus <- unsafeThaw $ Vector.zipWith (-) (sum . fmap gateWidth <$> table) w
 
     matrix <- Vector.thaw table
 
-    ranked <- Vector.indexed <$> Vector.freeze surplus
+    ranked <- unsafeThaw . Vector.indexed =<< Vector.freeze surplus
+    Intro.sortBy (compare `on` negate . snd) ranked
+    loaded <- Vector.takeWhile ((> 0) . fst) <$> Vector.freeze ranked
 
-    for_ (Vector.filter (\ (_, s) -> s > 0) ranked) $ \ (i, _) -> do
+    for_ loaded $ \ (i, _) -> do
 
       whileM_ ((0 <) <$> read surplus i)
         $ do
 
           bestHpwl <- newSTRef maxBound
-          bestRow  <- newSTRef (-1)
+          bestRow  <- newSTRef minBound
           bestCell <- newSTRef def
 
           cs <- read matrix i
@@ -231,18 +242,19 @@ rowJuggling rc top = do
           k <- readSTRef bestRow
           c <- readSTRef bestCell
 
-          assert "no space left to juggle - increase row capacity!" $ k >= 0
+          assert "rowJuggling: no space left to juggle - increase row capacity!"
+              $ k > minBound
 
-          modify matrix (filter (/= c)) i
-          modify matrix (c : ) k
+          modify matrix (views number delete c) i
+          modify matrix (views number insert c c) k
 
-          modify surplus (\ s -> s - gateWidth c) i
-          modify surplus (\ s -> s + gateWidth c) k
+          modify surplus (subtract $ gateWidth c) i
+          modify surplus (+ gateWidth c) k
 
     grouped <- unsafeFreeze matrix
 
     pure $ top &~ do
-        gates %= (// fmap (\ g -> (g ^. number, g)) (foldMap id grouped))
+        gates %= flip unsafeUpd (foldMap HashMap.toList grouped)
 
 
 

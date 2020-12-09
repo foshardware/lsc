@@ -76,3 +76,7 @@ Pass the argument `-j4` for enabling concurrency tests with 4 jobs to run simult
 ### LSC.SuffixTree
 
 - Becher, Deymonnaz, Heiber (2013): Efficient repeat finding via suffix arrays
+
+### LSC.UnionFind
+
+- Tarjan (1975): Efficiency of a Good But Not Linear Set Union Algorithm [10.1145/321879.321884](https://doi.org/10.1145/321879.321884)

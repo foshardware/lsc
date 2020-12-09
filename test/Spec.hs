@@ -34,7 +34,9 @@ import Test.Tasty.QuickCheck
 import LSC
 import LSC.BLIF
 import LSC.Entropy
-import LSC.Types
+import LSC.FIFO (enqueue, deq)
+import LSC.Types hiding (assert)
+import LSC.UnionFind
 import LSC.FM as FM
 import LSC.KGGGP as KGGGP hiding (V, E)
 
@@ -49,6 +51,8 @@ main = do
 lsc :: [String] -> TestTree
 lsc args = testGroup "LSC" $
   [ medians
+  , fifo
+  , unionFind
   , entropy
   , gggp
   , fm
@@ -57,13 +61,54 @@ lsc args = testGroup "LSC" $
 
 
 medians :: TestTree
-medians = testGroup "Median"
-  [ testCase "Random input" $ do
+medians = testGroup "Types"
+  [ testCase "Median random input" $ do
       rng <- create
       med <- generate $ choose (1, 100000)
       assertEqual "even median" (med - 1) . median . sort . toList =<< randomPermutation (2 * med) rng
       assertEqual "odd median" med . median . sort . toList =<< randomPermutation (2 * med + 1) rng
-  , testCase "Large input" $ assertEqual "is median" 5000000 $ median [0..10000000 :: Int]
+  , testCase "Median large input" $ assertEqual "is median" 5000000 $ median [0..10000000 :: Int]
+  ]
+
+
+
+fifo :: TestTree
+fifo = testGroup "FIFO"
+  [ testCase "Enqueue" $ do
+      let q = enqueue 3 $ enqueue 2 $ enqueue 1 $ mempty
+      assertEqual "is first element" (1 :: Int) $ fst $ deq q
+      assertEqual "is sum" 6 $ sum q
+      assertEqual "is maximum" 3 $ maximum q
+      assertEqual "is length" 3 $ length q
+  ]
+
+
+
+unionFind :: TestTree
+unionFind = testGroup "UnionFind"
+  [ testCase "Simple union" $ do
+      (p1, p2) <- stToIO $ do
+        disjoint <- newDisjointSet
+        union disjoint (1 :: Int) 2
+        (,) <$> equivalent disjoint 1 2 <*> equivalent disjoint 1 3
+      assertEqual "" True $ p1 && not p2
+  , testCase "Complex union" $ do
+      (p1, p2, p3, p4) <- stToIO $ do
+        disjoint <- newDisjointSet
+        union disjoint (1 :: Int) 2
+        union disjoint 1 4
+        union disjoint 2 6
+        union disjoint 2 5
+        union disjoint 7 9
+        union disjoint 7 10
+        union disjoint 7 2
+        _ <- equivalent disjoint 7 10
+        (,,,)
+          <$> equivalent disjoint 2 4
+          <*> equivalent disjoint 3 4
+          <*> equivalent disjoint 30 31
+          <*> equivalent disjoint 35 35
+      assertEqual "" True $ p1 && not p2 && not p3 && p4
   ]
 
 

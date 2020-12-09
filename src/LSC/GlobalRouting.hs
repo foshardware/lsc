@@ -12,12 +12,11 @@ import Control.Monad.Writer
 import Data.Default
 import Data.Foldable
 import Data.Function
+import Data.Hashable
 import qualified Data.HashMap.Lazy as HashMap
-import Data.List (sortOn)
 import Data.Semigroup
 import Data.Maybe
 import Data.STRef
-import Data.UnionFind.ST
 import Data.Vector ((!), fromListN, unsafeThaw, accumulate, generate)
 import qualified Data.Vector as Vector
 import Data.Vector.Mutable (write, modify)
@@ -25,6 +24,7 @@ import Prelude hiding (read, lookup)
 
 import LSC.NetGraph
 import LSC.Types
+import LSC.UnionFind
 
 
 
@@ -55,15 +55,11 @@ globalDetermineFeedthroughs top = do
     assert "globalDetermineFeedthroughs: gates are not aligned to rows!"
         $ all (isJust . row) $ top ^. gates
 
-    let res g = maybe 1 (view granularity) (row g)
-        off g = pred $ maybe 1 (view l) (row g) `div` res g
-
-
     let builtInEdge :: Net -> (Gate, Pin) -> Edge
         builtInEdge n (g, p)
             = ((rowIndex * 2, colIndex, n ^. identifier), (rowIndex * 2 + 1, colIndex, n ^. identifier))
-            where rowIndex = maybe 0 (view number) (row g)
-                  colIndex = view (geometry . to (foldMap' id) . l) p `div` res g - off g
+            where rowIndex = fromJust (row g) ^. number
+                  colIndex = p ^. geometry . to (foldMap' id) . l
 
     let rowDiff (u, _, _) (v, _, _) = div v 2 - div u 2 -- row(u) <= row(v)
 
@@ -90,18 +86,13 @@ globalDetermineFeedthroughs top = do
 
     graph <- unsafeThaw $ Just <$> edges
 
-    disjoint <- mapM fresh
-        $ HashMap.fromList
-        $ foldMap (\ (u, v) -> [(u, u), (v, v)])
-        $ join
-        $ foldMap builtInEdgesByRow
-        $ view nets top
+    disjoint <- newDisjointSetSized $ 2 * sum (views members length <$> view nets top)
 
     penalties <- unsafeThaw
         $ accumulate (+) (Vector.replicate (length rs) 0)
         $ Vector.zip
-          (maybe 0 (view number) . row <$> view gates top)
-          (liftA2 div gateWidth res <$> view gates top)
+          (view number . fromJust . row <$> view gates top)
+          (gateWidth <$> view gates top)
 
     feedthroughs <- newSTRef mempty
 
@@ -124,124 +115,21 @@ globalDetermineFeedthroughs top = do
                          , u^._2 + div (succ i * (v^._2 - u^._2)) (rowDiff u v)
                          ) -- row(u) <= row(v)
 
-        let points = (,) <$> disjoint ^? ix u <*> disjoint ^? ix v
+        cyclic <- equivalent disjoint (hash u) (hash v)
 
-        for_ points $ \ (du, dv) -> do
+        unless cyclic
+          $ do
 
-            cyclic <- equivalent du dv
+            for_ intersections $ \ (i, _) -> modify penalties (+ ss!i ^. granularity) i
 
-            unless cyclic
-              $ do
+            modifySTRef feedthroughs $ HashMap.insertWith (<>) (u^._3) intersections
 
-                for_ intersections $ modify penalties succ . view _1
-
-                modifySTRef feedthroughs $ HashMap.insertWith (<>) (u^._3) intersections
-
-                union du dv
+            union disjoint (hash u) (hash v)
 
     intersections <- readSTRef feedthroughs
 
     let locate :: (Int, Int) -> Gate -> Gate
-        locate (i, j) = space
-            %~ set l (j * (ss ! i ^. granularity) + ss ! i ^. l)
-             . set b (ss ! i ^. b)
-
-    pure $ top &~ do
-        gates <>= HashMap.foldMapWithKey (fmap . flip locate . feedthroughGate) intersections
-        gates  %= imap (set number)
-
-
-
--- | This version of the algorithm assumes a constant cost for adding feedthroughs.
---
---   O(n) in the number of pins
---
-fastDetermineFeedthroughs :: NetGraph -> ST s NetGraph
-fastDetermineFeedthroughs top = do
-
-    let sites = maximum $ top ^. supercell . rows <&> view cardinality
-
-    let row :: Gate -> Maybe Row
-        row g = top ^. supercell . rows ^? ix (g ^. space . b)
-
-    assert "fastDetermineFeedthroughs: gates are not aligned to rows!"
-        $ all (isJust . row) $ top ^. gates
-
-    let res g = maybe 1 (view granularity) (row g)
-        off g = pred $ maybe 1 (view l) (row g) `div` res g
-
-    let builtInEdge :: Net -> (Gate, Pin) -> Edge
-        builtInEdge n (g, p)
-          = ((rowIndex * 2, colIndex, n ^. identifier), (rowIndex * 2 + 1, colIndex, n ^. identifier))
-          where rowIndex = maybe 0 (view number) (row g)
-                colIndex = view (geometry . to (foldMap' id) . l) p `div` res g - off g
-
-
-    intersections <- forM (view nets top) $ \ net -> do
-
-        let builtInEdgesByRow = fmap (builtInEdge net) <$> verticesByRow top net
-
-        let sameRow =
-              [ [ (lupper, rupper), (llower, rlower) ] 
-              | xs <- builtInEdgesByRow
-              , ((lupper, llower), (rupper, rlower)) <- zip xs $ tail xs
-              ]
-
-        let diffRow =
-              [ (lower, upper)
-              | (x, y) <- distinctPairs builtInEdgesByRow
-              , (_, lower) <- x
-              , (upper, _) <- y
-              ]
-
-
-        let rowDiff u v = div (v ^. _1) 2 - div (u ^. _1) 2 -- row(u) <= row(v)
-
-
-        let graph = join builtInEdgesByRow ++ join sameRow ++ diffRow
-
-        let weight :: Edge -> Int
-            weight (u, v) = abs (v ^. _2 - u ^. _2) + sites * rowDiff u v
-
-
-        feedthroughs <- newSTRef mempty
-
-        disjoint <- mapM fresh
-            $ HashMap.fromList
-            $ foldMap (\ (u, v) -> [(u, u), (v, v)])
-            $ join
-            $ builtInEdgesByRow
-
-        for_ (sortOn weight graph) $ \ (u, v) -> do
-
-          let intersections
-                = generate (rowDiff u v - 1)
-                $ \ i -> ( div (u^._1) 2 + succ i
-                         , u^._2 + div (succ i * (v^._2 - u^._2)) (rowDiff u v)
-                         ) -- row(u) <= row(v)
-
-          let points = (,) <$> disjoint ^? ix u <*> disjoint ^? ix v
-
-          for_ points $ \ (du, dv) -> do
-
-            cyclic <- equivalent du dv
-
-            unless cyclic
-              $ do
-
-                modifySTRef feedthroughs $ mappend intersections
-
-                union du dv
-
-        readSTRef feedthroughs
-
-    let rs = top ^. supercell . rows
-        ss = fromListN (length rs) (toList rs)
-
-    let locate :: (Int, Int) -> Gate -> Gate
-        locate (i, j) = space
-            %~ set l (j * (ss ! i ^. granularity) + ss ! i ^. l)
-             . set b (ss ! i ^. b)
+        locate (i, j) = space %~ relocateL j . relocateB (ss ! i ^. b)
 
     pure $ top &~ do
         gates <>= HashMap.foldMapWithKey (fmap . flip locate . feedthroughGate) intersections
