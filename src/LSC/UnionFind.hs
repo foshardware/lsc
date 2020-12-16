@@ -1,7 +1,7 @@
 {-# LANGUAGE BangPatterns #-}
 
 module LSC.UnionFind
-    ( DisjointSet(..)
+    ( DisjointSet
     , newDisjointSet, newDisjointSetSized
     , union, representation, equivalent
     , singleton

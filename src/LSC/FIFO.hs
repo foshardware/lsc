@@ -3,7 +3,7 @@
 module LSC.FIFO
     ( FIFO
     , enqueue, dequeue, deq
-    , fromList, empty
+    , fromList
     ) where
 
 import Control.Applicative
