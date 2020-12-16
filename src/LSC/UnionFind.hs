@@ -1,3 +1,6 @@
+-- Copyright 2018 - Andreas Westerwick <westerwick@pconas.de>
+-- SPDX-License-Identifier: GPL-3.0-or-later
+
 {-# LANGUAGE BangPatterns #-}
 
 module LSC.UnionFind
