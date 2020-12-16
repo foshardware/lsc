@@ -42,6 +42,7 @@ import LSC.Types
 boundingBox :: (Foldable f, Integral n, Bounded n) => f (Component l n) -> Component l n
 boundingBox = foldMap' center
 {-# SPECIALIZE boundingBox :: [Component l Int] -> Component l Int #-}
+{-# INLINABLE boundingBox #-}
 
 
 
@@ -67,20 +68,22 @@ hpwlDelta top gs = sum
                             (view members net)
     ]
 {-# SPECIALIZE hpwlDelta :: NetGraph -> [Gate] -> Int #-}
+{-# INLINABLE hpwlDelta #-}
 
 
 
-optimalRegionCenter :: (Foldable f, Foldable g) => f (g Gate) -> (Int, Int)
-optimalRegionCenter f
+optimalRegion :: (Foldable f, Foldable g) => f (g Gate) -> Component l Int
+optimalRegion f
     | all null f
     = error "optimalRegion: empty nodes"
-optimalRegionCenter f
-    = (median xs, median ys)
+optimalRegion f
+    = Rect x1 y1 x2 y2
     where
         boxes = foldr ((:) . foldMap' (center . view space)) [] f
-        xs = sort $ foldMap (\ box -> [box ^. l, box ^. r]) boxes
-        ys = sort $ foldMap (\ box -> [box ^. b, box ^. t]) boxes
-{-# SPECIALIZE optimalRegionCenter :: HashMap Identifier (Vector Gate) -> (Int, Int) #-}
+        [x1, x2] = medianElements $ sort $ foldMap (\ box -> [box ^. l, box ^. r]) boxes
+        [y1, y2] = medianElements $ sort $ foldMap (\ box -> [box ^. b, box ^. t]) boxes
+{-# SPECIALIZE optimalRegion :: HashMap Identifier (Vector Gate) -> Component l Int #-}
+{-# INLINABLE optimalRegion #-}
 
 
 

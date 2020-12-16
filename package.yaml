@@ -52,7 +52,6 @@ dependencies:
 - text
 - time
 - transformers
-- union-find
 - unordered-containers
 - vector
 - vector-algorithms

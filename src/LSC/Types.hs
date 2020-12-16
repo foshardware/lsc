@@ -1,4 +1,3 @@
-{-# OPTIONS_GHC -fno-warn-type-defaults #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE DataKinds #-}
@@ -450,13 +449,11 @@ instance Ord a => Semigroup (Component l a) where
         = Component (min b1 b2) (min l1 l2) (max r1 r2) (max t1 t2) ls o
     Component b1 l1 r1 t1 ls1 o1 <> Component b2 l2 r2 t2 ls2 o2
         = Component (min b1 b2) (min l1 l2) (max r1 r2) (max t1 t2) (ls1 <> ls2) (o1 <> o2)
-    {-# SPECIALIZE instance Semigroup (Component l Int) #-}
 
 
 instance (Ord a, Bounded a) => Monoid (Component l a) where
     mempty = Rect maxBound maxBound minBound minBound
     mappend = (<>)
-    {-# SPECIALIZE instance Monoid (Component l Int) #-}
 
 
 instance Eq a => Eq (Component l a) where
@@ -472,7 +469,6 @@ instance Ord a => Ord (Component l a) where
     compare x y | x ^. b /= y ^. b = compare (x ^. b) (y ^. b)
     compare x y | x ^. r /= y ^. r = compare (x ^. r) (y ^. r)
     compare x y = compare (x ^. t) (y ^. t)
-    {-# SPECIALIZE instance Ord (Component l Int) #-}
 
 
 
@@ -490,45 +486,54 @@ makeFieldsNoPrefix ''Line
 center :: Integral a => Component l a -> Component l a
 center c = Rect (centerX c) (centerY c) (centerX c) (centerY c)
 {-# SPECIALIZE center :: Component l Int -> Component l Int #-}
+{-# INLINABLE center #-}
 
 
 centerX :: Integral a => Component l a -> a
 centerX p = div (p ^. r + p ^. l) 2
 {-# SPECIALIZE centerX :: Component l Int -> Int #-}
+{-# INLINABLE centerX #-}
 
 
 centerY :: Integral a => Component l a -> a
 centerY p = div (p ^. t + p ^. b) 2
 {-# SPECIALIZE centerY :: Component l Int -> Int #-}
+{-# INLINABLE centerY #-}
 
 
 relocateL :: Num a => a -> Component l a -> Component l a
 relocateL f p = p & l +~ f-x & r +~ f-x
     where x = p ^. l
 {-# SPECIALIZE relocateL :: Int -> Component l Int -> Component l Int #-}
+{-# INLINABLE relocateL #-}
+
 
 relocateR :: Num a => a -> Component l a -> Component l a
 relocateR f p = p & l +~ f-x & r +~ f-x
     where x = p ^. r
 {-# SPECIALIZE relocateL :: Int -> Component l Int -> Component l Int #-}
+{-# INLINABLE relocateR #-}
 
 
 relocateB :: Num a => a -> Component l a -> Component l a
 relocateB f p = p & b +~ f-y & t +~ f-y
     where y = p ^. b
 {-# SPECIALIZE relocateB :: Int -> Component l Int -> Component l Int #-}
+{-# INLINABLE relocateB #-}
 
 
 relocateX :: Integral a => a -> Component l a -> Component l a
 relocateX f p = p & l +~ f-x & r +~ f-x
     where x = centerX p
 {-# SPECIALIZE relocateL :: Int -> Component l Int -> Component l Int #-}
+{-# INLINABLE relocateX #-}
 
 
 relocateY :: Integral a => a -> Component l a -> Component l a
 relocateY f p = p & b +~ f-y & t +~ f-y
     where y = centerY p
 {-# SPECIALIZE relocateL :: Int -> Component l Int -> Component l Int #-}
+{-# INLINABLE relocateY #-}
 
 
 projectNorth :: Component l a -> Component l a
@@ -683,19 +688,19 @@ debug :: [String] -> LSC ()
 debug [msg] = do
   enabled <- view enableDebug <$> environment
   when enabled $ liftIO $ do
-    time <- decimalToString . round <$> getPOSIXTime
+    time <- intToString . round <$> getPOSIXTime
     errorConcurrent $ unwords ["->", time, msg]
     flushConcurrentOutput
 debug msg = do
   enabled <- view enableDebug <$> environment
   when enabled $ unless (null msg) $ liftIO $ do
-    time <- decimalToString . round <$> getPOSIXTime
+    time <- intToString . round <$> getPOSIXTime
     errorConcurrent $ unlines $ unwords ["->", time] : toList msg
     flushConcurrentOutput
 
 
-decimalToString :: Integral a => a -> String
-decimalToString = Lazy.unpack . toLazyText . decimal
+intToString :: Int -> String
+intToString = Lazy.unpack . toLazyText . decimal
 
 
 makeFieldsNoPrefix ''Technology
@@ -725,13 +730,18 @@ uniqueBy f = fmap head . groupBy (\ x y -> f x y == EQ) . sortBy f
 
 
 median :: Integral a => [a] -> a
-median [] = error "median: empty list"
-median zs = go zs zs
-    where go (x : _)          (_: []) = x
-          go (x : y : _) (_ : _ : []) = div (x + y) 2
+median
+    = uncurry div
+    . foldl' (\ (a, len) x -> (a + x, len + 1)) (0, 0)
+    . medianElements
+
+
+medianElements :: [a] -> [a]
+medianElements zs = go zs zs
+    where go (x : _)         (_ : []) = [x]
+          go (x : y : _) (_ : _ : []) = [x, y]
           go (_ : xs)    (_ : _ : ys) = go xs ys
-          go _ _ = error "median: this does not happen"
-{-# SPECIALIZE median :: [Int] -> Int #-}
+          go _ _ = error "medianElements: empty list"
 
 
 
