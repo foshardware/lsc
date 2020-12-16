@@ -1,3 +1,8 @@
+<!--
+Copyright 2018 - Andreas Westerwick <westerwick@pconas.de>
+SPDX-License-Identifier: GPL-3.0-or-later
+-->
+
 # Libre Silicon Compiler
 
 ## Dependencies
@@ -80,3 +85,7 @@ Pass the argument `-j4` for enabling concurrency tests with 4 jobs to run simult
 ### LSC.UnionFind
 
 - Tarjan (1975): Efficiency of a Good But Not Linear Set Union Algorithm [10.1145/321879.321884](https://doi.org/10.1145/321879.321884)
+
+## Licensing:
+This program is available as open source under the terms of the GPL-3.0-or-later. However, some elements are being licensed under CC0-1.0. For accurate information, please check individual files.
+
