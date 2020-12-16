@@ -1,3 +1,7 @@
+-- Copyright 2018 - Andreas Westerwick <westerwick@pconas.de>
+-- SPDX-License-Identifier: CC0-1.0
+
+
 dist/
 
 *.svg
