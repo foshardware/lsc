@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 
 name:                lsc
-version:             0.2.0.4
+version:             0.2.0.5
 github:              "foshardware/lsc"
 license:             GPL-3
 author:              "Andreas Westerwick"
@@ -45,6 +45,7 @@ dependencies:
 - monad-loops
 - mtl
 - mwc-random
+- parallel
 - parsec
 - parsec-numbers
 - primitive

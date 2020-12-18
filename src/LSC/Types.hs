@@ -22,6 +22,7 @@ import Control.Lens hiding (element)
 import Control.Concurrent.MSem (MSem)
 import Control.Exception
 import Control.Monad.ST
+import Control.Monad.ST.Unsafe
 import Data.Default
 import Data.Foldable
 import Data.Function (on)
@@ -30,14 +31,11 @@ import Data.IntMap (IntMap)
 import Data.HashMap.Lazy (HashMap, unionWith, lookup)
 import Data.List (sortBy, groupBy)
 import Data.Semigroup
-import Data.STRef
 import Data.Text (Text)
 import qualified Data.Text.Lazy as Lazy
 import Data.Text.Lazy.Builder
 import Data.Text.Lazy.Builder.Int
 import Data.Vector (Vector)
-import Data.Vector.Generic.Mutable (MVector)
-import qualified Data.Vector.Generic.Mutable as M
 
 import Data.Aeson (encode, FromJSON, ToJSON)
 
@@ -49,6 +47,7 @@ import Control.Monad.State hiding (fail)
 
 import Data.Time.Clock.POSIX
 import System.Console.Concurrent
+import System.IO.Unsafe
 
 import GHC.Generics
 import Prelude hiding (lookup, fail)
@@ -676,6 +675,24 @@ instance Default CompilerOpts where
   def = CompilerOpts 2 100000 (16 * 1000000) True True 1 Singleton
 
 
+
+class Trace m a where
+    trace :: a -> m a
+
+instance Show a => Trace IO a where
+    trace m = m <$ errorConcurrent (show m ++ "\n")
+
+instance Show a => Trace (ST s) a where
+    trace = unsafeIOToST . trace
+
+instance Show a => Trace LSC a where
+    trace = liftIO . trace
+
+instance Show a => Trace ((->) a) a where
+    trace _ = unsafePerformIO . trace
+
+
+
 runLSC :: Environment -> Bootstrap () -> LSC a -> IO a
 runLSC opts tech
   = flip runGnosticT (freeze tech)
@@ -745,28 +762,4 @@ medianElements zs = go zs zs
           go (x : y : _) (_ : _ : []) = [x, y]
           go (_ : xs)    (_ : _ : ys) = go xs ys
           go _ _ = error "medianElements: empty list"
-
-
-
-minimumOnST :: (MVector v a, Ord n) => (a -> n) -> v s a -> ST s (Int, a)
-minimumOnST _ graph
-    | M.null graph
-    = fail "minimumOnST: empty vector"
-minimumOnST weight graph = do
-
-    e <- M.read graph 0
-
-    minEdge <- newSTRef (0, e)
-    minWght <- newSTRef (weight e)
-
-    for_ [ 1 .. M.length graph - 1 ] $ \ i -> do
-        x <- readSTRef minWght
-        f <- M.read graph i
-        case weight f of
-            w | w < x -> writeSTRef minWght w >> writeSTRef minEdge (i, f)
-            _ -> pure ()
-
-    readSTRef minEdge
-{-# INLINE minimumOnST #-}
-
 

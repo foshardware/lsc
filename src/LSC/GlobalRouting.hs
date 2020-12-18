@@ -1,26 +1,30 @@
+-- Copyright 2018 - Andreas Westerwick <westerwick@pconas.de>
+-- SPDX-License-Identifier: GPL-3.0-or-later
+
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TupleSections #-}
+{-# LANGUAGE BangPatterns #-}
 
-module LSC.GlobalRouting where
+module LSC.GlobalRouting
+    ( determineFeedthroughs
+    , globalDetermineFeedthroughs
+    ) where
 
-import Control.Applicative
 import Control.Lens
 import Control.Monad
 import Control.Monad.IO.Class
+import Control.Monad.Loops
 import Control.Monad.ST
-import Control.Monad.Writer
 import Data.Default
 import Data.Foldable
-import Data.Function
-import Data.Hashable
 import qualified Data.HashMap.Lazy as HashMap
-import Data.Semigroup
+import Data.Sequence (Seq)
+import qualified Data.Sequence as Seq
 import Data.Maybe
 import Data.STRef
-import Data.Vector ((!), fromListN, unsafeThaw, accumulate, generate)
+import Data.Vector ((!), fromListN, unsafeThaw, unsafeIndex, accumulate, generate)
 import qualified Data.Vector as Vector
-import Data.Vector.Mutable (write, modify)
-import Prelude hiding (read, lookup)
+import Data.Vector.Mutable (modify)
 
 import LSC.NetGraph
 import LSC.Types
@@ -29,12 +33,30 @@ import LSC.UnionFind
 
 
 wt :: Int
-wt = 2
+wt = 1
 
 
-type Vertex = (Int, Int, Identifier)
+type Edge s = (Vertex s, Vertex s)
 
-type Edge = (Vertex, Vertex)
+
+data Vertex s = Vertex
+  { _rowIndex  :: Int
+  ,  colIndex  :: Int
+  ,  component :: Identifier
+  ,  point     :: DisjointSet s
+  }
+
+
+rowIndex :: Vertex s -> Int
+rowIndex v = _rowIndex v `div` 2
+{-# INLINE rowIndex #-}
+
+
+freeEdge :: Identifier -> Int -> Int -> ST s (Edge s)
+freeEdge n i j = do
+    (x, y) <- pair
+    pure (Vertex (i * 2) j n x, Vertex (i * 2 + 1) j n y)
+
 
 
 determineFeedthroughs :: NetGraph -> LSC NetGraph
@@ -53,83 +75,101 @@ globalDetermineFeedthroughs top = do
         row g = top ^. supercell . rows ^? ix (g ^. space . b)
 
     assert "globalDetermineFeedthroughs: gates are not aligned to rows!"
-        $ all (isJust . row) $ top ^. gates
-
-    let builtInEdge :: Net -> (Gate, Pin) -> Edge
-        builtInEdge n (g, p)
-            = ((rowIndex * 2, colIndex, n ^. identifier), (rowIndex * 2 + 1, colIndex, n ^. identifier))
-            where rowIndex = fromJust (row g) ^. number
-                  colIndex = p ^. geometry . to (foldMap' id) . l
-
-    let rowDiff (u, _, _) (v, _, _) = div v 2 - div u 2 -- row(u) <= row(v)
+      $ all (isJust . row) $ top ^. gates
 
 
-    let builtInEdgesByRow net = fmap (builtInEdge net) <$> verticesByRow top net
+    let builtInEdge :: Identifier -> (Gate, Pin) -> ST s (Edge s)
+        builtInEdge n (g, p) = freeEdge n (fromJust (row g) ^. number) (p ^. geometry . to (foldMap' id) . l)
 
-    let sameRow net =
+    let sameRow zs = join
             [ [ (lupper, rupper), (llower, rlower) ] 
-            | xs <- builtInEdgesByRow net
+            | xs <- zs
             , ((lupper, llower), (rupper, rlower)) <- zip xs $ tail xs
             ]
 
-    let diffRow net =
+    let diffRow zs =
             [ (lower, upper)
-            | (x, y) <- distinctPairs $ builtInEdgesByRow net
-            , (_, lower) <- x
-            , (upper, _) <- y
+            | (xs, ys) <- distinctPairs zs
+            , (_, lower) <- xs
+            , (upper, _) <- ys
             ]
 
+    builtInEdges <- views nets forM top $ \ net ->
+        views identifier (mapM . builtInEdge) net `mapM` verticesByRow top net
+        -- ^ the built-in edges for all pins in the layout grouped by net and row
 
-    let edges = Vector.fromList $ foldMap
-            (\ n -> join (builtInEdgesByRow n) ++ join (sameRow n) ++ diffRow n)
-            (view nets top)
+    vertices <- newSTRef $ foldMap Vector.fromList <$> builtInEdges
 
-    graph <- unsafeThaw $ Just <$> edges
+    edges <- newSTRef $ foldMap (\ xs -> Seq.fromList $ sameRow xs ++ diffRow xs) builtInEdges
 
-    disjoint <- newDisjointSetSized $ 2 * sum (views members length <$> view nets top)
+    let weight ps (u, v)
+            = abs (colIndex u - colIndex v)
+            + wt * sum [ unsafeIndex ps i | i <- [ rowIndex u + 1 .. rowIndex v - 1] ]
+            -- rowIndex u <= rowIndex v
 
     penalties <- unsafeThaw
-        $ accumulate (+) (Vector.replicate (length rs) 0)
-        $ Vector.zip
-          (view number . fromJust . row <$> view gates top)
-          (gateWidth <$> view gates top)
+      $ accumulate (+) (Vector.replicate (length rs) 0)
+      $ Vector.zip
+        (view number . fromJust . row <$> view gates top)
+        (gateWidth <$> view gates top)
 
     feedthroughs <- newSTRef mempty
 
-
-    let weight ps ((u1, u2, _), (v1, v2, _))
-            = abs (u2 - v2)
-            + wt * sum [ ps ! i | i <- [div u1 2 + 1 .. div v1 2 - 1] ] -- row(u) <= row(v)
-
-    for_ edges $ \ _ -> do
+    whileM_ (not . null <$> readSTRef edges)
+      $ do
 
         ps <- Vector.freeze penalties
 
-        (pos, Just (u, v)) <- minimumOnST (foldMap $ Min . weight ps) graph
+        (_, (pos, (u, v))) <- foldlWithIndex'
+              (\ (w, (p, e)) q f -> let x = weight ps f in if x < w then (x, (q, f)) else (w, (p, e)))
+              (maxBound, ((-1), undefined))
+              <$> readSTRef edges -- find the minimum weighted edge and its position in the sequence
 
-        write graph pos Nothing
+        modifySTRef edges $ Seq.deleteAt pos
 
-        let intersections
-                = generate (rowDiff u v - 1)
-                $ \ i -> ( div (u^._1) 2 + succ i
-                         , u^._2 + div (succ i * (v^._2 - u^._2)) (rowDiff u v)
-                         ) -- row(u) <= row(v)
-
-        cyclic <- equivalent disjoint (hash u) (hash v)
+        cyclic <- equivalent (point u) (point v)
 
         unless cyclic
-          $ do
+          $ if rowIndex v - rowIndex u <= 1 -- rowIndex u <= rowIndex v
+            then union (point u) (point v)
+            else do
 
-            for_ intersections $ \ (i, _) -> modify penalties (+ ss!i ^. granularity) i
+                intersections <- sequence $ generate (rowIndex v - rowIndex u - 1) $ \ i ->
+                    freeEdge (component u)
+                    (rowIndex u + succ i)
+                    (colIndex u + div (succ i * (colIndex v - colIndex u)) (rowIndex v - rowIndex u))
+                    -- ^ the built-in edges for feedthroughs
 
-            modifySTRef feedthroughs $ HashMap.insertWith (<>) (u^._3) intersections
+                sequence_
+                  $ Vector.zipWith union
+                    (point . snd <$> intersections)
+                    (point . fst <$> Vector.tail intersections)
+                    -- ^ the chain of feedthroughs is interconnected
 
-            union disjoint (hash u) (hash v)
+                -- connect feedthroughs to every pin in the component
+                Just xs <- HashMap.lookup (component u) <$> readSTRef vertices
+                modifySTRef edges $ mappend $ foldMap id
+                    [ case rowIndex upperFeed `compare` rowIndex upperComp of
+                        GT -> pure (lowerComp, upperFeed)
+                        LT -> pure (lowerFeed, upperComp)
+                        EQ -> pure (upperFeed, upperComp) <> pure (lowerFeed, lowerComp)
+                    | (upperFeed, lowerFeed) <- toList intersections
+                    , (upperComp, lowerComp) <- toList xs
+                    ]
+
+                -- adjust penalties for rows containing feedthrough
+                for_ intersections $ \ (i, _) -> modify penalties (+ ss ! rowIndex i ^. granularity) (rowIndex i)
+
+                -- add feedthroughs to its component
+                modifySTRef vertices $ HashMap.insertWith (<>) (component u) intersections
+
+                -- save feedthroughs to the netgraph
+                modifySTRef feedthroughs $ HashMap.insertWith (<>) (component u) intersections
 
     intersections <- readSTRef feedthroughs
 
-    let locate :: (Int, Int) -> Gate -> Gate
-        locate (i, j) = space %~ relocateL j . relocateB (ss ! i ^. b)
+    let locate :: Edge s -> Gate -> Gate
+        locate (u, _) = space %~ relocateL (colIndex u) . relocateB (ss ! rowIndex u ^. b)
 
     pure $ top &~ do
         gates <>= HashMap.foldMapWithKey (fmap . flip locate . feedthroughGate) intersections
@@ -139,10 +179,14 @@ globalDetermineFeedthroughs top = do
 
 
 feedthroughGate :: Identifier -> Gate
-feedthroughGate net
-    = def
-    & identifier .~ ("FEEDTHROUGH." <> net)
-    & feedthrough .~ True
-    & wires .~ HashMap.singleton "FD" net
+feedthroughGate net = def &~ do
+    identifier .= ("FEEDTHROUGH." <> net)
+    feedthrough .= True
+    wires .= HashMap.singleton "FD" net
 
+
+
+foldlWithIndex' :: (b -> Int -> a -> b) -> b -> Seq a -> b
+foldlWithIndex' f y xs = foldl' (\ g x !i -> f (g (i - 1)) i x) (const y) xs (length xs - 1)
+{-# INLINE foldlWithIndex' #-}
 
