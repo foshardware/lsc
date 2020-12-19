@@ -1,0 +1,172 @@
+-- Copyright 2018 - Andreas Westerwick <westerwick@pconas.de>
+-- SPDX-License-Identifier: GPL-3.0-or-later
+
+{-# LANGUAGE DeriveFunctor, DeriveFoldable, DeriveTraversable #-}
+{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE TypeApplications #-}
+
+module Spec.LSC.Types
+    ( types
+    , maxRowWidth
+    , Given(..)
+    ) where
+
+import Control.Lens
+import Data.Char
+import Data.Default
+import Data.Foldable
+import qualified Data.HashMap.Lazy as HashMap
+import Data.IntMap (IntMap, fromDistinctAscList)
+import Data.List (sort)
+import qualified Data.Text as T
+import Data.Vector (Vector, fromListN)
+
+import Test.Tasty
+import Test.Tasty.HUnit
+import Test.Tasty.QuickCheck
+
+import LSC.Entropy hiding (Gen)
+import LSC.NetGraph
+import LSC.Types
+
+
+
+sizeOfNetGraph :: Int
+sizeOfNetGraph = 10000
+
+maxCellHeight :: Int
+maxCellHeight = 10000
+
+maxCellWidth :: Int
+maxCellWidth = 20000
+
+maxResolution :: Int
+maxResolution = 1000
+
+
+maxRowWidth :: Int
+maxRowWidth = maxCellsPerRow * maxCellWidth
+
+maxSiteCount :: Int
+maxSiteCount = maxRowWidth `div` maxResolution
+
+maxCellsPerRow :: Int
+maxCellsPerRow = ceiling @Double $ sqrt $ fromIntegral sizeOfNetGraph
+
+maxRowCount :: Int
+maxRowCount = ceiling @Double $ sqrt $ fromIntegral sizeOfNetGraph
+
+
+layoutArea :: Component l Int
+layoutArea = Rect 0 0 (maxCellsPerRow * maxCellWidth) (maxRowCount * maxCellHeight)
+
+
+
+newtype Given a = Given { say :: a }
+    deriving (Eq, Ord, Functor, Foldable, Traversable, Show)
+
+
+instance Arbitrary (Given NetGraph) where
+    arbitrary = do
+        gs <- say <$> resize sizeOfNetGraph arbitrary 
+        rs <- say <$> resize maxRowCount arbitrary
+        pure
+          $ Given
+          $ rebuildEdges
+          $ assignCellsToRows
+          $ def &~ do
+            gates .= gs
+            supercell %= set rows rs
+
+
+
+instance Arbitrary (Given (IntMap Row)) where
+    arbitrary = do
+        n <- getSize
+        v <- resize maxRowWidth $ vector n
+        pure
+          $ Given
+          $ fromDistinctAscList
+            [ (i * maxCellHeight, row & number .~ i & b .~ i * maxCellHeight)
+            | (i, row) <- [0 ..] `zip` fmap say v
+            ]
+
+
+instance Arbitrary (Given Row) where
+    arbitrary = do
+        n <- getSize
+        pure
+          $ Given
+          $ def &~ do
+            cardinality .= n `div` maxResolution
+            granularity .= n `div` maxSiteCount
+
+
+
+instance Arbitrary (Given (Vector Gate)) where
+    arbitrary = do
+        n <- getSize
+        gs <- resize n $ vector n
+        pure
+          $ Given
+          $ imap (set number)
+          $ fromListN n
+          $ say <$> gs
+
+
+instance Arbitrary (Given Gate) where
+    arbitrary = do
+
+        n <- getSize
+
+        x <- choose (0,  width layoutArea - maxCellWidth)
+        y <- choose (0, height layoutArea - maxCellHeight)
+        w <- (* maxResolution) . succ . (`div` maxResolution) <$> choose (0, pred maxCellWidth)
+
+        k <- choose (2, 6)
+        v <- sequence $ replicate k $ do
+            p <- T.map toUpper . base16Text <$> choose (0, 0xFF)
+            e <- base16Text <$> choose (0x100, 0x100 + div (n * 2) 3)
+            pure (p, e)
+
+        pure
+          $ Given
+          $ def &~ do
+            space .= Rect x y (x + w) (y + maxCellHeight)
+            wires .= HashMap.fromList v
+
+
+
+
+types :: TestTree
+types = testGroup "Types"
+  [ medians
+  , uniques
+  ]
+
+
+
+medians :: TestTree
+medians = testGroup "Median"
+  [ testCase "Random input"
+      $ do
+        rng <- create
+        med <- generate $ choose (1, 100000)
+        assertEqual "even median" (med - 1) . median . sort . toList =<< randomPermutation (2 * med) rng
+        assertEqual "odd median" med . median . sort . toList =<< randomPermutation (2 * med + 1) rng
+  , testCase "Large input" $ assertEqual "is median" 5000000 $ median [0..10000000 :: Int]
+  ]
+
+
+
+uniques :: TestTree
+uniques = testGroup "Unstable unique"
+  [ testCase "Random lists"
+      $ sequence_
+      $ replicate 100
+      $ do
+        n <- generate $ choose (1, 10000)
+        v <- generate $ vector @Int n
+        let xs = unstableUnique v
+        assertBool "unique and ordered" $ and $ zipWith (<) xs (tail xs)
+  ]

@@ -4,7 +4,7 @@
 module LSC.Improve where
 
 
-improve :: Monad m => Int -> (a -> a -> Int) -> a -> (a -> m a) -> m a
+improve :: Monad m => Word -> (a -> a -> Int) -> a -> (a -> m a) -> m a
 improve k criterion x action = do
 
     y <- improveStep k action criterion x
@@ -16,8 +16,8 @@ improve k criterion x action = do
 
 
 
-improveStep :: Monad m => Int -> (a -> m a) -> (a -> a -> Int) -> a -> m a
-improveStep k _ _ x | k <= 0 = pure x
+improveStep :: Monad m => Word -> (a -> m a) -> (a -> a -> Int) -> a -> m a
+improveStep 0      _         _ x = pure x
 improveStep k action criterion x = do
 
     y <- action x

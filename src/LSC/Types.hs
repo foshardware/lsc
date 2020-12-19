@@ -7,12 +7,13 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE FunctionalDependencies #-}
 {-# LANGUAGE DuplicateRecordFields #-}
 {-# LANGUAGE DeriveFunctor, DeriveFoldable, DeriveTraversable #-}
 {-# LANGUAGE DeriveGeneric #-}
-{-# LANGUAGE TupleSections #-}
+{-# LANGUAGE BangPatterns #-}
 
 
 module LSC.Types where
@@ -23,13 +24,16 @@ import Control.Concurrent.MSem (MSem)
 import Control.Exception
 import Control.Monad.ST
 import Control.Monad.ST.Unsafe
+import Data.Bits
 import Data.Default
 import Data.Foldable
 import Data.Function (on)
 import Data.Hashable
-import Data.IntMap (IntMap)
 import Data.HashMap.Lazy (HashMap, unionWith, lookup)
-import Data.List (sortBy, groupBy)
+import Data.IntMap (IntMap)
+import Data.IntSet (IntSet)
+import qualified Data.IntSet as IntSet
+import Data.List (sort, group)
 import Data.Semigroup
 import Data.Text (Text)
 import qualified Data.Text.Lazy as Lazy
@@ -126,7 +130,7 @@ data Gate = Gate
   { _identifier  :: Identifier
   , _space       :: Component Layer Int
   , _wires       :: HashMap Identifier Identifier
-  , _number      :: Number
+  , _number      :: Number  -- ^ pin     ^ net
   , _fixed       :: Bool
   , _feedthrough :: Bool
   } deriving (Generic, Show)
@@ -134,22 +138,21 @@ data Gate = Gate
 instance ToJSON Gate
 instance FromJSON Gate
 
-instance Hashable Gate where
-  hashWithSalt s = hashWithSalt s . encode
-
+instance Hashable Gate
 
 
 data Track = Track
   { _offset :: Int
   , _steps  :: Int
   , _trackSpace :: Int
-  , _z      :: [Layer]
+  , _z      :: IntSet
   } deriving (Generic, Show)
 
 instance ToJSON Track
 instance FromJSON Track
 
-instance Hashable Track
+instance Hashable Track where
+    hashWithSalt s = hashWithSalt s . encode
 
 
 
@@ -196,8 +199,7 @@ data Cell = Cell
 instance ToJSON Cell
 instance FromJSON Cell
 
-instance Hashable Cell where
-  hashWithSalt s = hashWithSalt s . encode
+instance Hashable Cell
 
 
 data Pin = Pin
@@ -236,7 +238,7 @@ data Layer
   | Metal8
   | Metal9
   | Metal10
-  deriving (Eq, Ord, Enum, Read, Generic, Show)
+  deriving (Eq, Ord, Enum, Generic, Show)
 
 instance ToJSON Layer
 instance FromJSON Layer
@@ -255,8 +257,7 @@ data Technology = Technology
 instance ToJSON Technology
 instance FromJSON Technology
 
-instance Hashable Technology where
-  hashWithSalt s = hashWithSalt s . encode
+instance Hashable Technology
 
 
 type Bootstrap = State Technology
@@ -278,12 +279,14 @@ type Agnostic = Identity
 technology :: LSC Technology
 technology = lift $ LST $ lift ask
 
-runGnosticT :: GnosticT m r -> Technology -> m r
-runGnosticT = runReaderT
+runGnosticT :: Technology -> GnosticT m r-> m r
+runGnosticT = flip runReaderT
 
 gnostic :: Bootstrap () -> Gnostic r -> r
 gnostic b a = a `runReader` freeze b
 
+
+type Workers = Maybe (MSem Word)
 
 data CompilerOpts = CompilerOpts
   { _jogs          :: Int
@@ -291,38 +294,26 @@ data CompilerOpts = CompilerOpts
   , _halt          :: Int
   , _enableDebug   :: Bool
   , _enableVisuals :: Bool
-  , _iterations    :: Int
+  , _iterations    :: Word
   , _workers       :: Workers
   }
 
-data Workers
-  = Singleton
-  | Workers (MSem Int)
 
 type Environment = CompilerOpts
 
-type EnvT m = ReaderT Environment m
+type EnvT = ReaderT Environment
 
 environment :: LSC CompilerOpts
 environment = lift $ LST ask
 
-runEnvT :: Monad m => EnvT m r -> Environment -> m r
+runEnvT :: Monad m => Environment -> EnvT m r -> m r
 runEnvT = evalEnvT
 
-evalEnvT :: Monad m => EnvT m r -> Environment -> m r
-evalEnvT = runReaderT
+evalEnvT :: Monad m => Environment -> EnvT m r -> m r
+evalEnvT = flip runReaderT
 
 
 type LSC = Codensity (LST IO)
-
-
-assert :: MonadFail m => String -> Bool -> m ()
-assert _ True = pure ()
-assert msg  _ = fail msg
-
-
-choice :: Alternative m => [m a] -> m a
-choice = foldr (<|>) empty
 
 
 newtype LST m a = LST { unLST :: EnvT (GnosticT m) a }
@@ -344,20 +335,26 @@ instance MonadIO m => MonadIO (LST m) where
 instance MonadIO m => MonadFail (LST m) where
   fail = throwLSC . Fail
 
+
 throwLSC :: MonadIO m => Fail -> m a
 throwLSC = liftIO . throwIO
 
-newtype Fail = Fail { unFail :: String }
+newtype Fail = Fail String
 
 instance Exception Fail
 
 instance Show Fail where
-  show = unFail
+  show (Fail msg) = msg
+
+
+assert :: MonadFail m => String -> Bool -> m ()
+assert _ True = pure ()
+assert msg  _ = fail msg
 
 
 
 data Orientation = N | S | W | E | FN | FS | FW | FE
-  deriving (Eq, Generic, Show)
+  deriving (Eq, Ord, Generic, Show)
 
 instance FromJSON Orientation
 instance ToJSON Orientation
@@ -430,27 +427,28 @@ type Ring l a = Component l (Component l a)
 
 data Component l a
   = Rect      { _l :: !a, _b :: !a, _r :: !a, _t :: !a }
-  | Component { _l :: !a, _b :: !a, _r :: !a, _t :: !a, _z :: [l], _orientation :: Orientation }
+  | Component { _l :: !a, _b :: !a, _r :: !a, _t :: !a, _z :: !IntSet, _orientation :: !Orientation }
   deriving (Functor, Foldable, Traversable, Generic, Show)
 
-instance (ToJSON l, ToJSON a) => ToJSON (Component l a)
-instance (FromJSON l, FromJSON a) => FromJSON (Component l a)
+instance ToJSON a => ToJSON (Component l a)
+instance FromJSON a => FromJSON (Component l a)
 
-instance (Hashable l, Hashable a) => Hashable (Component l a)
+instance ToJSON a => Hashable (Component l a) where
+    hashWithSalt s = hashWithSalt s . encode
 
 
 makeFieldsNoPrefix ''Component
 
 
 instance Ord a => Semigroup (Component l a) where
-    Rect b1 l1 r1 t1 <> Rect b2 l2 r2 t2
-        = Rect (min b1 b2) (min l1 l2) (max r1 r2) (max t1 t2)
-    Component b1 l1 r1 t1 ls o <> Rect b2 l2 r2 t2
-        = Component (min b1 b2) (min l1 l2) (max r1 r2) (max t1 t2) ls o
-    Rect b1 l1 r1 t1 <> Component b2 l2 r2 t2 ls o
-        = Component (min b1 b2) (min l1 l2) (max r1 r2) (max t1 t2) ls o
-    Component b1 l1 r1 t1 ls1 o1 <> Component b2 l2 r2 t2 ls2 o2
-        = Component (min b1 b2) (min l1 l2) (max r1 r2) (max t1 t2) (ls1 <> ls2) (o1 <> o2)
+    Rect l1 b1 r1 t1 <> Rect l2 b2 r2 t2
+        = Rect (min l1 l2) (min b1 b2) (max r1 r2) (max t1 t2)
+    Component l1 b1 r1 t1 ls o <> Rect l2 b2 r2 t2
+        = Component (min l1 l2) (min b1 b2) (max r1 r2) (max t1 t2) ls o
+    Rect l1 b1 r1 t1 <> Component l2 b2 r2 t2 ls o
+        = Component (min l1 l2) (min b1 b2) (max r1 r2) (max t1 t2) ls o
+    Component l1 b1 r1 t1 ls1 o1 <> Component l2 b2 r2 t2 ls2 o2
+        = Component (min l1 l2) (min b1 b2) (max r1 r2) (max t1 t2) (ls1 <> ls2) (o1 <> o2)
 
 
 instance (Ord a, Bounded a) => Monoid (Component l a) where
@@ -460,17 +458,19 @@ instance (Ord a, Bounded a) => Monoid (Component l a) where
 
 instance Eq a => Eq (Component l a) where
     x == y
-       =  x ^. l == y ^. l
+        = x ^. l == y ^. l
        && x ^. b == y ^. b
        && x ^. r == y ^. r
        && x ^. t == y ^. t
+       && x ^. orientation == y ^. orientation 
 
 
 instance Ord a => Ord (Component l a) where
     compare x y | x ^. l /= y ^. l = compare (x ^. l) (y ^. l)
     compare x y | x ^. b /= y ^. b = compare (x ^. b) (y ^. b)
     compare x y | x ^. r /= y ^. r = compare (x ^. r) (y ^. r)
-    compare x y = compare (x ^. t) (y ^. t)
+    compare x y | x ^. t /= y ^. t = compare (x ^. t) (y ^. t)
+    compare x y = compare (x ^. orientation) (y ^. orientation)
 
 
 
@@ -485,9 +485,16 @@ instance Hashable a => Hashable (Line a)
 makeFieldsNoPrefix ''Line
 
 
-center :: Integral a => Component l a -> Component l a
-center c = Rect (centerX c) (centerY c) (centerX c) (centerY c)
-{-# SPECIALIZE center :: Component l Int -> Component l Int #-}
+
+implode :: Integral a => Component l a -> Component l a
+implode c = Rect (centerX c) (centerY c) (centerX c) (centerY c)
+{-# SPECIALIZE implode :: Component l Int -> Component l Int #-}
+{-# INLINABLE implode #-}
+
+
+center :: Integral a => Component l a -> (a, a)
+center = liftA2 (,) centerX centerY
+{-# SPECIALIZE center :: Component l Int -> (Int, Int) #-}
 {-# INLINABLE center #-}
 
 
@@ -503,70 +510,93 @@ centerY p = div (p ^. t + p ^. b) 2
 {-# INLINABLE centerY #-}
 
 
+moveX :: Num a => a -> Component l a -> Component l a
+moveX x p = p &~ do
+    l += x
+    r += x
+{-# SPECIALIZE moveX :: Int -> Component l Int -> Component l Int #-}
+{-# INLINABLE moveX #-}
+
+
+moveY :: Num a => a -> Component l a -> Component l a
+moveY y p = p &~ do
+    b += y
+    t += y
+{-# SPECIALIZE moveY :: Int -> Component l Int -> Component l Int #-}
+{-# INLINABLE moveY #-}
+
+
 relocateL :: Num a => a -> Component l a -> Component l a
-relocateL f p = p & l +~ f-x & r +~ f-x
-    where x = p ^. l
+relocateL x p = p &~ do
+    l .= x
+    r += x - p ^. l
 {-# SPECIALIZE relocateL :: Int -> Component l Int -> Component l Int #-}
 {-# INLINABLE relocateL #-}
 
 
 relocateR :: Num a => a -> Component l a -> Component l a
-relocateR f p = p & l +~ f-x & r +~ f-x
-    where x = p ^. r
+relocateR x p = p &~ do
+    l += x - p ^. r
+    r .= x
 {-# SPECIALIZE relocateL :: Int -> Component l Int -> Component l Int #-}
 {-# INLINABLE relocateR #-}
 
 
 relocateB :: Num a => a -> Component l a -> Component l a
-relocateB f p = p & b +~ f-y & t +~ f-y
-    where y = p ^. b
+relocateB y p = p &~ do
+    b .= y
+    t += y - p ^. b
 {-# SPECIALIZE relocateB :: Int -> Component l Int -> Component l Int #-}
 {-# INLINABLE relocateB #-}
 
 
 relocateX :: Integral a => a -> Component l a -> Component l a
-relocateX f p = p & l +~ f-x & r +~ f-x
-    where x = centerX p
+relocateX x p = p &~ do
+    l += x - centerX p
+    r += x - centerX p
 {-# SPECIALIZE relocateL :: Int -> Component l Int -> Component l Int #-}
 {-# INLINABLE relocateX #-}
 
 
 relocateY :: Integral a => a -> Component l a -> Component l a
-relocateY f p = p & b +~ f-y & t +~ f-y
-    where y = centerY p
+relocateY y p = p &~ do
+    b += y - centerY p
+    t += y - centerY p
 {-# SPECIALIZE relocateL :: Int -> Component l Int -> Component l Int #-}
 {-# INLINABLE relocateY #-}
-
-
-projectNorth :: Component l a -> Component l a
-projectNorth p | FN <- p ^. orientation = projectNorth $ p & orientation .~ N
-projectNorth p | FS <- p ^. orientation = projectNorth $ p & orientation .~ S
-projectNorth p | FW <- p ^. orientation = projectNorth $ p & orientation .~ W
-projectNorth p | FE <- p ^. orientation = projectNorth $ p & orientation .~ E
-projectNorth p | W <- p ^. orientation = projectNorth $ p & orientation .~ E
-projectNorth p | E <- p ^. orientation = p & t .~ p^.r & r .~ p^.t
-projectNorth p = p
 
 
 width, height :: Num a => Component l a -> a
 width  p = p ^. r - p ^. l
 height p = p ^. t - p ^. b
+{-# SPECIALIZE width  :: Component l Int -> Int #-}
+{-# SPECIALIZE height :: Component l Int -> Int #-}
+{-# INLINABLE width  #-}
+{-# INLINABLE height #-}
 
 
-integrate :: [l] -> Component k a -> Component l a
-integrate    [] (Rect    x1 y1 x2 y2)       = Rect      x1 y1 x2 y2
-integrate layer (Component x1 y1 x2 y2 _ o) = Component x1 y1 x2 y2 layer o
-integrate layer (Rect    x1 y1 x2 y2)       = Component x1 y1 x2 y2 layer mempty
+layers :: (HasZ a IntSet, Enum l) => Lens' a [l]
+layers = lens
+    (map toEnum . IntSet.toList . view z)
+    (flip $ set z . IntSet.fromList . map fromEnum)
+{-# SPECIALIZE layers :: Lens' (Component Layer a) [Layer] #-}
+{-# SPECIALIZE layers :: Lens' Track [Layer] #-}
+{-# INLINABLE layers #-}
 
 
-flipComponent :: Component l a -> Component l a
-flipComponent p = p &~ do
-    r .= p ^. t
-    t .= p ^. r
+component :: Component k a -> Component l a
+component (Rect x1 y1 x2 y2) = Component x1 y1 x2 y2 mempty mempty
+component (Component x1 y1 x2 y2 ls o) = Component x1 y1 x2 y2 ls o
 
 
 
-inner, outer :: Ring l a -> Component l a
+integrate :: Enum l => [l] -> Component k a -> Component l a
+integrate ls = set layers ls . component
+{-# SPECIALIZE integrate :: [Layer] -> Component k a -> Component Layer a #-}
+{-# INLINABLE integrate #-}
+
+
+inner, outer :: Ring k a -> Component l a
 inner p = Rect (p ^. l . r) (p ^. b . t) (p ^. r . l) (p ^. t . b)
 outer p = Rect (p ^. l . l) (p ^. b . b) (p ^. r . r) (p ^. t . t)
 
@@ -592,6 +622,10 @@ makeFieldsNoPrefix ''Track
 
 makeFieldsNoPrefix ''Row
 
+instance Default Row where
+    def = Row mempty (-1) 0 0 mempty 0 1
+
+
 makeFieldsNoPrefix ''AbstractCell
 
 instance Default AbstractCell where
@@ -603,7 +637,6 @@ makeFieldsNoPrefix ''Net
 
 instance Eq Net where
   (==) = (==) `on` view identifier
-
 
 instance Ord Net where
   compare = compare `on` view identifier
@@ -640,11 +673,6 @@ instance Default Gate where
   def = Gate mempty mempty mempty (-1) False False
 
 
-type Arboresence a = (Net, a, a)
-
-data Circuit2D a = Circuit2D [(Gate, a)] [Arboresence a]
-  deriving (Eq, Show)
-
 
 makeFieldsNoPrefix ''Cell
 
@@ -672,7 +700,7 @@ invert pin = pin
 makeFieldsNoPrefix ''CompilerOpts
 
 instance Default CompilerOpts where
-  def = CompilerOpts 2 100000 (16 * 1000000) True True 1 Singleton
+  def = CompilerOpts 2 100000 (16 * 1000 * 1000) True True 1 Nothing
 
 
 
@@ -694,11 +722,11 @@ instance Show a => Trace ((->) a) a where
 
 
 runLSC :: Environment -> Bootstrap () -> LSC a -> IO a
-runLSC opts tech
-  = flip runGnosticT (freeze tech)
-  . flip runEnvT opts
-  . unLST
-  . lowerCodensity
+runLSC opts tech lsc = do
+    a <- runGnosticT (freeze tech) $ runEnvT opts $ unLST $ lowerCodensity lsc
+    flushConcurrentOutput
+    pure a
+
 
 evalLSC :: Environment -> Bootstrap () -> LSC a -> IO a
 evalLSC = runLSC
@@ -708,19 +736,27 @@ debug :: [String] -> LSC ()
 debug [msg] = do
   enabled <- view enableDebug <$> environment
   when enabled $ liftIO $ do
-    time <- intToString . round <$> getPOSIXTime
+    time <- base10String . round <$> getPOSIXTime
     errorConcurrent $ unwords ["->", time, msg]
-    flushConcurrentOutput
 debug msg = do
   enabled <- view enableDebug <$> environment
   when enabled $ unless (null msg) $ liftIO $ do
-    time <- intToString . round <$> getPOSIXTime
+    time <- base10String . round <$> getPOSIXTime
     errorConcurrent $ unlines $ unwords ["->", time] : toList msg
-    flushConcurrentOutput
 
 
-intToString :: Int -> String
-intToString = Lazy.unpack . toLazyText . decimal
+
+base10String :: Int -> String
+base10String = Lazy.unpack . toLazyText . decimal
+
+
+base16Text :: Int -> Text
+base16Text n
+    | x : _ <- Lazy.toChunks . toLazyTextWith (finiteBitSize n `shiftR` 2) $ hexadecimal n
+    = x
+base16Text _
+    = error "base16Text: no chunks"
+
 
 
 makeFieldsNoPrefix ''Technology
@@ -738,15 +774,13 @@ lambda tech = ceiling $ view scaleFactor tech * view featureSize tech
 
 
 distinctPairs :: [a] -> [(a, a)]
-distinctPairs (x : xs) = fmap (x, ) xs ++ distinctPairs xs
+distinctPairs (x : xs) = zip (repeat x) xs ++ distinctPairs xs
 distinctPairs _ = []
 
 
-
-uniqueBy :: (a -> a -> Ordering) -> [a] -> [a]
-uniqueBy f = fmap head . groupBy (\ x y -> f x y == EQ) . sortBy f
-{-# INLINE uniqueBy #-}
-
+unstableUnique :: Ord a => [a] -> [a]
+unstableUnique = map head . group . sort
+{-# INLINE unstableUnique #-}
 
 
 median :: Integral a => [a] -> a
@@ -762,4 +796,10 @@ medianElements zs = go zs zs
           go (x : y : _) (_ : _ : []) = [x, y]
           go (_ : xs)    (_ : _ : ys) = go xs ys
           go _ _ = error "medianElements: empty list"
+
+
+
+foldlWithIndex' :: Foldable f => (b -> Int -> a -> b) -> b -> f a -> b
+foldlWithIndex' f y xs = foldl' (\ g x !i -> f (g (i - 1)) i x) (const y) xs (length xs - 1)
+{-# INLINE foldlWithIndex' #-}
 

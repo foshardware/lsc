@@ -43,7 +43,7 @@ import LSC.Types
 
 
 boundingBox :: (Foldable f, Integral n, Bounded n) => f (Component l n) -> Component l n
-boundingBox = foldMap' center
+boundingBox = foldMap' implode 
 {-# SPECIALIZE boundingBox :: [Component l Int] -> Component l Int #-}
 {-# INLINABLE boundingBox #-}
 
@@ -51,23 +51,23 @@ boundingBox = foldMap' center
 
 coarseBoundingBox :: (Foldable f, Ord n, Bounded n) => f (Component l n) -> Component l n
 coarseBoundingBox = foldMap' id
+{-# SPECIALIZE coarseBoundingBox :: [Component l Int] -> Component l Int #-}
+{-# INLINABLE coarseBoundingBox #-}
 
 
 
 hpwl :: Net -> Int
-hpwl net = width box + height box
-  where box = foldMap' (\ g -> g ^. space . to center) (view members net)
+hpwl = liftA2 (+) width height . foldMap' (implode . view space) . view members
 
 
 
 hpwlDelta :: Foldable f => NetGraph -> f Gate -> Int
 hpwlDelta top gs = sum
-    [ width  after - width  before
-    + height after - height before
+    [ width after - width before + height after - height before
     | net <- hyperedges top gs
-    , let before = foldMap' (center . view space)
+    , let before = foldMap' (implode . view space)
                             (view members net)
-    , let after  = foldMap' (\ g -> maybe (g ^. space . to center) (center . view space) $ find (== g) gs)
+    , let after  = foldMap' (\ g -> maybe (g ^. space . to implode) (implode . view space) $ find (== g) gs)
                             (view members net)
     ]
 {-# SPECIALIZE hpwlDelta :: NetGraph -> [Gate] -> Int #-}
@@ -82,23 +82,22 @@ optimalRegion f
 optimalRegion f
     = Rect x1 y1 x2 y2
     where
-        boxes = foldr ((:) . foldMap' (center . view space)) [] f
+        boxes = foldr ((:) . foldMap' (implode . view space)) [] f
         [x1, x2] = medianElements $ sort $ foldMap (\ box -> [box ^. l, box ^. r]) boxes
         [y1, y2] = medianElements $ sort $ foldMap (\ box -> [box ^. b, box ^. t]) boxes
-{-# SPECIALIZE optimalRegion :: HashMap Identifier (Vector Gate) -> Component l Int #-}
-{-# INLINABLE optimalRegion #-}
+{-# INLINE optimalRegion #-}
 
 
 
 hyperedges :: Foldable f => NetGraph -> f Gate -> [Net]
-hyperedges top gs = uniqueBy compare
+hyperedges top gs = unstableUnique
     [ n
     | g <- toList gs
     , k <- toList $ view wires g
     , n <- toList $ top ^. nets ^? ix k
     ]
 {-# SPECIALIZE hyperedges :: NetGraph -> [Gate] -> [Net] #-}
-{-# INLINE hyperedges #-}
+{-# INLINABLE hyperedges #-}
 
 
 
@@ -110,9 +109,9 @@ adjacentByPin top g
 
 verticesByRow :: NetGraph -> Net -> [[(Gate, Pin)]]
 verticesByRow top net
-    = groupBy (on (==) $ view $ _1 . space . b)
-    $ sortOn (view $ _1 . space . b)
-    $ sortOn (view $ _2 . geometry . to (foldMap' id) . l)
+    = groupBy ((==) `on` view (_1 . space . b))
+    $ sortOn (view (_1 . space . b))
+    $ sortOn (view (_2 . geometry . to coarseBoundingBox . l))
       [ (view gates top ! i, p)
       | (i, ps) <- HashMap.toList $ net ^. contacts
       , i >= 0
@@ -231,10 +230,11 @@ estimations top = do
 
 
 significantHpwl :: NetGraph -> NetGraph -> Ordering
-significantHpwl m n = compare
-    (sum (hpwl <$> view nets m) `div` x)
-    (sum (hpwl <$> view nets n) `div` x)
-    where x = sum (hpwl <$> view nets m) `div` 20000
+significantHpwl m n = div p x `compare` div q x
+    where
+        x = max 1 $ div p 10000 -- delta below 0.01% is equal
+        p = sum $ hpwl <$> view nets m
+        q = sum $ hpwl <$> view nets n
 
 
 
@@ -242,7 +242,7 @@ getSegments :: Vector Gate -> [Vector Gate]
 getSegments gs
     = gs
     & toList
-    & sortOn (view $ space . b)
+    & sortOn (view (space . b))
     & groupBy ((==) `on` view (space . b))
    <&> sortOn (view space)
    <&> wordsBy (view fixed)
@@ -255,7 +255,7 @@ getRows :: Vector Gate -> [Vector Gate]
 getRows gs
     = gs
     & toList
-    & sortOn (view $ space . b)
+    & sortOn (view (space . b))
     & groupBy ((==) `on` view (space . b))
    <&> sortOn (view space)
    <&> V.fromList
@@ -303,7 +303,7 @@ gateGeometry top = do
       fw = maximum $ top ^. supercell . rows <&> view granularity
 
   let expand g | g ^. feedthrough = g & space %~ \ x -> x & r .~ x^.l + fw & t .~ x^.b + fh
-      expand g = g & space %~ maybe id drag (cells ^? ix (g ^. identifier) . dims)
+      expand g = g & space %~ maybe id drag (cells ^? views identifier ix g . dims)
       drag (w, h) p = p & r .~ view l p + w & t .~ view b p + h
 
   pure $ top &~ do
@@ -378,17 +378,44 @@ assignCellsToColumns top
 
 
 
+removeFeedthroughs :: NetGraph -> NetGraph
+removeFeedthroughs = gates %~ imap (set number) . filter (views feedthrough not)
+
+
+
 rebuildEdges :: NetGraph -> NetGraph
-rebuildEdges top = top & nets .~ generateEdges (top ^. gates)
+rebuildEdges = liftA2 (set nets) (generateEdges . view gates) id
+
 
 
 generateEdges :: Foldable f => f Gate -> HashMap Identifier Net
 generateEdges gs = HashMap.fromListWith (<>)
-    [ (net, Net net mempty (pure gate) (HashMap.singleton (gate ^. number) [pin]))
+    [ (i, Net i mempty (pure gate) (HashMap.singleton (gate ^. number) [pin]))
     | gate <- toList gs
-    , (contact, net) <- gate ^. wires & HashMap.toList
+    , (contact, i) <- HashMap.toList $ gate ^. wires
     , let pin = def & identifier .~ contact
     ]
+{-# SPECIALIZE generateEdges :: Vector Gate -> HashMap Identifier Net #-}
+{-# INLINABLE generateEdges #-}
+
+
+componentMap :: (Component Layer Int -> Component Layer Int) -> NetGraph -> NetGraph
+componentMap f top = top &~ do
+    gates %= fmap (space %~ f)
+    nets %= fmap (contacts %~ fmap (fmap (geometry %~ fmap f)))
+    supercell %= over pins (fmap (geometry %~ fmap f))
+
+
+
+netGraphArea :: NetGraph -> Component l Int
+netGraphArea top
+    = component
+    $ coarseBoundingBox (view space <$> view gates top) <> coarseBoundingBox (outerRim top)
+
+
+
+outerRim :: NetGraph -> HashMap Identifier (Component l Int)
+outerRim = fmap (component . coarseBoundingBox . view geometry) . view (supercell . pins)
 
 
 

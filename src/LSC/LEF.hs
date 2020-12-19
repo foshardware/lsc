@@ -62,7 +62,7 @@ macroPins _ [] = []
 
 
 macroPorts tech (MacroPinPort (MacroPinPortLayer ident xs : _) : rest)
-    = portLayerRectangles tech ident xs ++ macroPorts tech rest
+    = fmap (portLayerRectangle tech ident) xs ++ macroPorts tech rest
 macroPorts tech (_ : rest) = macroPorts tech rest
 macroPorts _ [] = []
 
@@ -73,19 +73,13 @@ portLayer "metal3" = Metal3
 portLayer _ = AnyLayer
 
 
-portLayerRectangles tech ident (xs : rest) = Component
-    (minimum x)
-    (minimum y)
-    (maximum x)
-    (maximum y)
-    (pure $ portLayer ident)
-    mempty 
-    : portLayerRectangles tech ident rest
+portLayerRectangle tech ident xs
+    = Component (minimum x) (minimum y) (maximum x) (maximum y) mempty mempty
+    & layers .~ [portLayer ident]
     where g = view scaleFactor (tech :: Technology)
           u = V.fromList $ round . (g *) <$> xs
           x = V.generate (length u `div` 2) (\ i -> V.unsafeIndex u (i * 2))
           y = V.generate (length u `div` 2) (\ i -> V.unsafeIndex u (i * 2 + 1))
-portLayerRectangles _ _ [] = []
 
 
 dimensions tech (MacroSize x y : _) = (round $ x * g, round $ y * g)

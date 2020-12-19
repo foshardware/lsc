@@ -2,14 +2,13 @@
 -- SPDX-License-Identifier: GPL-3.0-or-later
 
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE TupleSections #-}
-{-# LANGUAGE BangPatterns #-}
 
 module LSC.GlobalRouting
     ( determineFeedthroughs
     , globalDetermineFeedthroughs
     ) where
 
+import Control.Applicative
 import Control.Lens
 import Control.Monad
 import Control.Monad.IO.Class
@@ -18,9 +17,8 @@ import Control.Monad.ST
 import Data.Default
 import Data.Foldable
 import qualified Data.HashMap.Lazy as HashMap
-import Data.Sequence (Seq)
-import qualified Data.Sequence as Seq
 import Data.Maybe
+import qualified Data.Sequence as Seq
 import Data.STRef
 import Data.Vector ((!), fromListN, unsafeThaw, unsafeIndex, accumulate, generate)
 import qualified Data.Vector as Vector
@@ -40,22 +38,17 @@ type Edge s = (Vertex s, Vertex s)
 
 
 data Vertex s = Vertex
-  { _rowIndex  :: Int
-  ,  colIndex  :: Int
-  ,  component :: Identifier
-  ,  point     :: DisjointSet s
+  { rowIndex  :: Int
+  , colIndex  :: Int
+  , net       :: Identifier
+  , point     :: DisjointSet s
   }
-
-
-rowIndex :: Vertex s -> Int
-rowIndex v = _rowIndex v `div` 2
-{-# INLINE rowIndex #-}
 
 
 freeEdge :: Identifier -> Int -> Int -> ST s (Edge s)
 freeEdge n i j = do
     (x, y) <- pair
-    pure (Vertex (i * 2) j n x, Vertex (i * 2 + 1) j n y)
+    pure (Vertex i j n x, Vertex i j n y)
 
 
 
@@ -78,29 +71,24 @@ globalDetermineFeedthroughs top = do
       $ all (isJust . row) $ top ^. gates
 
 
-    let builtInEdge :: Identifier -> (Gate, Pin) -> ST s (Edge s)
-        builtInEdge n (g, p) = freeEdge n (fromJust (row g) ^. number) (p ^. geometry . to (foldMap' id) . l)
+    let builtInEdge :: Net -> Gate -> Pin -> ST s (Edge s)
+        builtInEdge n g p
+            = freeEdge (view identifier n)
+              (maybe 0 (view number) (row g))
+              (centerX $ coarseBoundingBox $ view geometry p)
 
-    let sameRow zs = join
-            [ [ (lupper, rupper), (llower, rlower) ] 
-            | xs <- zs
-            , ((lupper, llower), (rupper, rlower)) <- zip xs $ tail xs
-            ]
+    let sameRow ys = [ (x, y) | xs <- ys, ((x, _), (y, _)) <- zip xs (tail xs) ]
 
-    let diffRow zs =
-            [ (lower, upper)
-            | (xs, ys) <- distinctPairs zs
-            , (_, lower) <- xs
-            , (upper, _) <- ys
-            ]
+    let diffRow zs = [ (x, y) | (xs, ys) <- distinctPairs zs, (_, x) <- xs, (y, _) <- ys ]
 
-    builtInEdges <- views nets forM top $ \ net ->
-        views identifier (mapM . builtInEdge) net `mapM` verticesByRow top net
+    builtInEdges <- views nets forM top $ \ n ->
+        forM (verticesByRow top n) $ mapM $ uncurry $ builtInEdge n
         -- ^ the built-in edges for all pins in the layout grouped by net and row
+
 
     vertices <- newSTRef $ foldMap Vector.fromList <$> builtInEdges
 
-    edges <- newSTRef $ foldMap (\ xs -> Seq.fromList $ sameRow xs ++ diffRow xs) builtInEdges
+    edges <- newSTRef $ foldMap (Seq.fromList . liftA2 (++) sameRow diffRow) builtInEdges
 
     let weight ps (u, v)
             = abs (colIndex u - colIndex v)
@@ -110,7 +98,7 @@ globalDetermineFeedthroughs top = do
     penalties <- unsafeThaw
       $ accumulate (+) (Vector.replicate (length rs) 0)
       $ Vector.zip
-        (view number . fromJust . row <$> view gates top)
+        (maybe 0 (view number) . row <$> view gates top)
         (gateWidth <$> view gates top)
 
     feedthroughs <- newSTRef mempty
@@ -121,9 +109,9 @@ globalDetermineFeedthroughs top = do
         ps <- Vector.freeze penalties
 
         (_, (pos, (u, v))) <- foldlWithIndex'
-              (\ (w, (p, e)) q f -> let x = weight ps f in if x < w then (x, (q, f)) else (w, (p, e)))
-              (maxBound, ((-1), undefined))
-              <$> readSTRef edges -- find the minimum weighted edge and its position in the sequence
+            (\ (w, (p, e)) q f -> let x = weight ps f in if x < w then (x, (q, f)) else (w, (p, e)))
+            (maxBound, ((-1), undefined))
+            <$> readSTRef edges -- find the minimum weighted edge and its position in the sequence
 
         modifySTRef edges $ Seq.deleteAt pos
 
@@ -135,7 +123,7 @@ globalDetermineFeedthroughs top = do
             else do
 
                 intersections <- sequence $ generate (rowIndex v - rowIndex u - 1) $ \ i ->
-                    freeEdge (component u)
+                    freeEdge (net u)
                     (rowIndex u + succ i)
                     (colIndex u + div (succ i * (colIndex v - colIndex u)) (rowIndex v - rowIndex u))
                     -- ^ the built-in edges for feedthroughs
@@ -146,8 +134,8 @@ globalDetermineFeedthroughs top = do
                     (point . fst <$> Vector.tail intersections)
                     -- ^ the chain of feedthroughs is interconnected
 
-                -- connect feedthroughs to every pin in the component
-                Just xs <- HashMap.lookup (component u) <$> readSTRef vertices
+                -- connect feedthroughs to every pin in the net
+                Just xs <- HashMap.lookup (net u) <$> readSTRef vertices
                 modifySTRef edges $ mappend $ foldMap id
                     [ case rowIndex upperFeed `compare` rowIndex upperComp of
                         GT -> pure (lowerComp, upperFeed)
@@ -160,11 +148,11 @@ globalDetermineFeedthroughs top = do
                 -- adjust penalties for rows containing feedthrough
                 for_ intersections $ \ (i, _) -> modify penalties (+ ss ! rowIndex i ^. granularity) (rowIndex i)
 
-                -- add feedthroughs to its component
-                modifySTRef vertices $ HashMap.insertWith (<>) (component u) intersections
+                -- add feedthroughs to its net
+                modifySTRef vertices $ HashMap.insertWith (<>) (net u) intersections
 
                 -- save feedthroughs to the netgraph
-                modifySTRef feedthroughs $ HashMap.insertWith (<>) (component u) intersections
+                modifySTRef feedthroughs $ HashMap.insertWith (<>) (net u) intersections
 
     intersections <- readSTRef feedthroughs
 
@@ -179,14 +167,8 @@ globalDetermineFeedthroughs top = do
 
 
 feedthroughGate :: Identifier -> Gate
-feedthroughGate net = def &~ do
-    identifier .= ("FEEDTHROUGH." <> net)
+feedthroughGate n = def &~ do
+    identifier .= ("FEEDTHROUGH." <> n)
     feedthrough .= True
-    wires .= HashMap.singleton "FD" net
-
-
-
-foldlWithIndex' :: (b -> Int -> a -> b) -> b -> Seq a -> b
-foldlWithIndex' f y xs = foldl' (\ g x !i -> f (g (i - 1)) i x) (const y) xs (length xs - 1)
-{-# INLINE foldlWithIndex' #-}
+    wires .= HashMap.singleton "FD" n
 

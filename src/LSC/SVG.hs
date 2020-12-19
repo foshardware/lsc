@@ -6,31 +6,39 @@
 module LSC.SVG where
 
 import Control.Lens
-import Control.Monad
-import Data.Foldable
-import qualified Data.HashMap.Lazy as HashMap
-import Data.String
-import qualified Data.Text.Lazy    as Lazy
-import qualified Data.Text.Lazy.IO as Lazy
 
-import Data.Text.Lazy.Builder (toLazyText, fromText)
+import Data.Text (Text)
+import qualified Data.Text as T
+import qualified Data.Text.Lazy.IO as Lazy
+import Data.Text.Lazy.Builder (Builder, fromText)
 import Data.Text.Lazy.Builder.Int
 
-import Text.Blaze.Svg11 ((!), mkPath, toSvg)
+import Text.Blaze.Svg11 ((!), mkPath, toSvg, toValue)
 import qualified Text.Blaze.Svg11 as S
 import qualified Text.Blaze.Svg11.Attributes as A
 import Text.Blaze.Svg.Renderer.Text (renderSvg)
-
-import Prelude hiding (lookup)
 
 import LSC.NetGraph
 import LSC.Types
 
 
 
+pixelsPerMicron :: Int
+pixelsPerMicron = 60
+
+
+type Scale = Double
+
+zoomOut :: Scale -> Int -> Int
+zoomOut scale = round . (/ scale) . fromIntegral
+
+
+
 type Marker = Line Int
 
-type Circuit = (Circuit2D Path, [Marker])
+type Area = Component Layer Int
+
+
 
 type Svg = S.Svg
 
@@ -38,166 +46,119 @@ type Arg = S.AttributeValue
 
 type Args = (Arg, Arg)
 
-
-scaleFactor' :: Int
-scaleFactor' = 10
-
-
-m_, l_:: Int -> Int -> S.Path
+m_, l_ :: Int -> Int -> S.Path
 z_ :: S.Path
 m_ = S.m
 l_ = S.l
 z_ = S.z
 
 
-plotStdout :: NetGraph -> IO ()
-plotStdout = Lazy.putStr . plot
+
+plotStdout :: Scale -> NetGraph -> IO ()
+plotStdout scale = Lazy.putStr . renderSvg . plot scale
 
 
-plot :: NetGraph -> Lazy.Text
-plot = renderSvg . svgDoc . scaleDown scaleFactor' . svgPaths
+
+plot :: Scale -> NetGraph -> Svg
+plot = svgDoc
 
 
-svgDoc :: Circuit -> Svg
-svgDoc (Circuit2D ns edges, markers) = S.docTypeSvg
-  ! A.version "1.1"
-  ! A.width "10000000"
-  ! A.height "10000000"
-  $ do
-    place `mapM_` ns
-    route `mapM_` edges
-    drawL `mapM_` markers
+
+svgDoc :: Scale -> NetGraph -> Svg
+svgDoc scale top' = do
+
+    let top = componentMap pixelated $ quadrantI top'
+
+    S.docTypeSvg
+      ! A.version "1.1"
+      ! A.width  (toValue $ netGraphArea top ^. r)
+      ! A.height (toValue $ netGraphArea top ^. t)
+      $ do
+        place scale `mapM_` view gates top
+        route scale `mapM_` view nets top
+        drawA ("black", "lightyellow") `mapM_` outerRim top
+
+    where pixelated = fmap $ zoomOut scale . (* pixelsPerMicron)
+
+          quadrantI ckt
+              = flip componentMap ckt
+              $ moveX (abs . min 0 $ netGraphArea ckt ^. l)
+              . moveY (abs . min 0 $ netGraphArea ckt ^. b)
+
 
 
 drawL :: Marker -> Svg
 drawL (Line (x1, y1) (x2, y2)) = do
-  S.path
-    ! A.d (mkPath pen)
-    ! A.stroke "black"
-    ! A.fill "black"
-    ! A.strokeWidth "1"
-  where
-    pen = do
-      m_ x1 y1
-      l_ x2 y2
-      z_
+
+    S.path
+      ! A.d (mkPath pen)
+      ! A.stroke "black"
+      ! A.strokeWidth "1"
+
+    where pen = do
+            m_ x1 y1
+            l_ x2 y2
+            z_
 
 
-place :: (Gate, Path) -> Svg
-place (g, path@(p : _)) = do
 
-  let (x, y) = (p ^. l, p ^. b)
+place :: Scale -> Gate -> Svg
+place scale g = do
 
-  S.text_
-    ! A.x (S.toValue $ x + 42)
-    ! A.y (S.toValue $ y + 24)
-    ! A.fontSize "24"
-    ! A.fontFamily "monospace"
-    ! A.transform (fromString $ "rotate(90 "++ show (x + 8) ++","++ show (y + 24)  ++")")
-    $ renderText $ toLazyText $ decimal (view number g) <> ": " <> fromText (view identifier g)
+    let a = g ^. space
 
-  follow path
+    let x = a ^. l
+        y = a ^. b
 
-place _ = pure ()
+    let f = zoomOut scale . (* pixelsPerMicron) . (* 20)
 
+    drawA ("black", gateColor g) a
 
-route :: Arboresence Path -> Svg
-route (_, pin, path) = do
-  follow path
-  follow pin
+    S.text_
+      ! A.x (toValue $ x + f 4)
+      ! A.y (toValue $ y + f 12)
+      ! A.fontSize (toValue $ f 15)
+      ! A.fontFamily "monospace"
+      ! A.transform (toValue $ "rotate(90 " <> decimal (x + f 4) <> "," <> decimal (y + f 12) <> ")")
+      $ toSvg $ views number decimal g <> ": " <> views identifier (forShort 8) g
 
 
-follow :: Path -> Svg
-follow (p : xs) = do
 
-  S.path
-    ! A.d (mkPath pen)
-    ! A.stroke (p ^. z . to stroke)
-    ! A.fill (p ^. z . to fill)
-    ! A.strokeWidth "1"
-
-  follow xs
-
-  where
-
-    pen = do
-      m_ (p ^. l) (p ^. b)
-      l_ (p ^. l) (p ^. t)
-      l_ (p ^. r) (p ^. t)
-      l_ (p ^. r) (p ^. b)
-      z_
-
-follow _ = pure ()
+route :: Scale -> Net -> Svg
+route _ _ = do
+    pure ()
 
 
-stroke :: [Layer] -> Arg
-stroke (Metal2 : Metal3 : _) = "black"
-stroke (Metal1 : _) = "black"
-stroke (Metal2 : _) = "red"
-stroke (Metal3 : _) = "green"
-stroke _ = "black"
 
-fill :: [Layer] -> Arg
-fill (Metal2 : Metal3 : _) = "transparent"
-fill (Metal1 : _) = "transparent"
-fill (Metal2 : _) = "red"
-fill (Metal3 : _) = "green"
-fill _ = "transparent"
+drawA :: Args -> Area -> Svg
+drawA (border, background) a = do
 
+    S.path
+      ! A.d (mkPath pen)
+      ! A.stroke border
+      ! A.fill background
+      ! A.strokeWidth "1"
 
-svgPaths :: NetGraph -> Circuit
-svgPaths netlist = (Circuit2D gs ns, if null $ netlist ^. nets then markRouting netlist else [])
-
-  where
-
-    ns =
-      [ (net, (outerPins net ++) . inducePins =<< net ^. contacts . to HashMap.toList, net ^. geometry)
-      | net <- set geometry (netlist ^. supercell . mappend (vdd . geometry) (gnd . geometry)) mempty
-      : toList (netlist ^. nets)
-      ]
-
-    gs =
-      [ (gate, pure $ gate ^. space . to projectNorth)
-      | gate <- toList $ netlist ^. gates
-      ]
-
-    outerPins :: Net -> Path
-    outerPins net =
-      [ port
-      | pin <- toList $ netlist ^. supercell . pins
-      , view identifier pin == view identifier net
-      , port <- pin ^. geometry
-      ]
-
-    inducePins :: (Number, [Pin]) -> Path
-    inducePins (i, ps) =
-      [ q & l +~ p^.l & b +~ p^.b & r +~ p^.l & t +~ p^.b & integrate mempty
-      | pin <- ps
-      , p <- toList $ netlist ^. gates ^? ix i . space
-      , q <- take 1 $ pin ^. geometry
-      ]
+    where pen = do
+            m_ (a ^. l) (a ^. b)
+            l_ (a ^. l) (a ^. t)
+            l_ (a ^. r) (a ^. t)
+            l_ (a ^. r) (a ^. b)
+            z_
 
 
-scaleDown :: Int -> Circuit -> Circuit
-scaleDown n (Circuit2D ns edges, markers) = (Circuit2D
 
-  [ (gate, f (`div` n) path)
-  | (gate, path) <- ns
-  , let f = fmap . fmap
-  ]
-
-  [ (net, f (`div` n) ps, f (`div` n) path)
-  | (net, ps, path) <- edges
-  , let f = fmap . fmap
-  ]
-
-  , fmap (`div` n) <$> markers)
+gateColor :: Gate -> Arg
+gateColor g | g ^. feedthrough = "lightyellow"
+gateColor g | g ^. fixed = "lightblue"
+gateColor _ = "lightgrey"
 
 
-renderText :: Lazy.Text -> Svg
-renderText string
-    | Lazy.length string > 14
-    = renderText $ ".." <> Lazy.drop (Lazy.length string - 12) string
-renderText string
-    = toSvg string
+
+forShort :: Int -> Text -> Builder
+forShort n string
+    | T.length string > n
+    = fromText (T.take (n - 2) string) <> ".."
+forShort _ string
+    = fromText string
 

@@ -39,7 +39,7 @@ fromDEF :: DEF -> NetGraph
 fromDEF (DEF options area rs ts cs ps ns _) = def &~ do
     identifier .= identifierFrom options
     supercell .= supercellFrom area ts rs ps
-    gates .= (uncurry (set wires) <$> V.zip paths nodes)
+    gates .= V.zipWith (set wires) paths nodes
     nets .= edges
     where
 
@@ -103,7 +103,7 @@ fromPin (DEF.Pin p _ d layer placed) = def &~ do
         & b +~ fromIntegral y1
         & r +~ fromIntegral x2
         & t +~ fromIntegral y2
-        & z .~ [fromLayer q]
+        & layers .~ [fromLayer q]
       | (Layer q (x1, y1) (x2, y2), f) <- maybeToList $ (,) <$> layer <*> placed
       ]
 
@@ -117,10 +117,12 @@ fromDirection DEF.InputOutput = InOut
 fromTrack :: DEF.Track -> Either Rect.Track Rect.Track
 fromTrack (DEF.Track "X" a ss c d)
     = Right
-    $ Rect.Track (ceiling a) (fromIntegral ss) (ceiling c) [fromLayer d] 
+    $ Rect.Track (ceiling a) (fromIntegral ss) (ceiling c) mempty
+    & layers .~ [fromLayer d]
 fromTrack (DEF.Track   _ a ss c d)
     = Left
-    $ Rect.Track (ceiling a) (fromIntegral ss) (ceiling c) [fromLayer d]
+    $ Rect.Track (ceiling a) (fromIntegral ss) (ceiling c) mempty
+    & layers .~ [fromLayer d]
 
 
 fromRow :: DEF.Row -> Rect.Row
@@ -144,9 +146,9 @@ fromComponent (DEF.Component _ j placed) = def &~ do
 
 fromPlaced :: Placed -> Rect.Component Rect.Layer Int
 fromPlaced (Placed (x, y) ori)
-    = Rect.Component (ceiling x) (ceiling y) (ceiling x) (ceiling y) [Metal2, Metal3] (fromOrientation ori)
+    = Rect.Component (ceiling x) (ceiling y) (ceiling x) (ceiling y) mempty (fromOrientation ori)
 fromPlaced (Fixed (x, y) ori)
-    = Rect.Component (ceiling x) (ceiling y) (ceiling x) (ceiling y) [Metal2, Metal3] (fromOrientation ori)
+    = Rect.Component (ceiling x) (ceiling y) (ceiling x) (ceiling y) mempty (fromOrientation ori)
 fromPlaced _ = mempty 
 
 
@@ -201,10 +203,12 @@ toRow x = DEF.Row
 
 
 toTrack :: Either Rect.Track Rect.Track -> DEF.Track
-toTrack (Right (Rect.Track a ss c d))
-    = DEF.Track "X" (fromIntegral a) (fromIntegral ss) (fromIntegral c) (last $ toLayer <$> AnyLayer : d)
-toTrack (Left (Rect.Track a ss c d))
-    = DEF.Track "Y" (fromIntegral a) (fromIntegral ss) (fromIntegral c) (last $ toLayer <$> AnyLayer : d)
+toTrack (Right track@(Rect.Track a ss c _))
+    = DEF.Track "X" (fromIntegral a) (fromIntegral ss) (fromIntegral c)
+      (last $ toLayer <$> AnyLayer : track ^. layers)
+toTrack (Left track@(Rect.Track a ss c _))
+    = DEF.Track "Y" (fromIntegral a) (fromIntegral ss) (fromIntegral c)
+      (last $ toLayer <$> AnyLayer : track ^. layers)
 
 
 
@@ -256,7 +260,7 @@ toPin :: Rect.Pin -> DEF.Pin
 toPin pin = DEF.Pin (pin ^. identifier)
     (Just $ pin ^. identifier)
     (pin ^. dir <&> toDirection)
-    (listToMaybe [ Layer (toLayer $ last $ AnyLayer : p^.z) (0, 0)
+    (listToMaybe [ Layer (toLayer $ last $ AnyLayer : p ^. layers) (0, 0)
                          (fromIntegral $ width p, fromIntegral $ height p) | p <- pin ^. geometry ])
     (listToMaybe [ Fixed (fromIntegral $ p^.l, fromIntegral $ p^.b)
                          (toOrientation $ p ^. orientation) | p <- pin ^. geometry ])

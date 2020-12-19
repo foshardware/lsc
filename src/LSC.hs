@@ -17,6 +17,7 @@ import Control.Concurrent.Async
 import qualified Control.Concurrent.MSem as MSem
 import Control.Exception
 import Control.Lens
+import Control.Monad
 import Control.Monad.Trans
 import Control.Monad.Codensity hiding (improve)
 import Data.Foldable
@@ -45,24 +46,34 @@ stage1 :: Compiler' NetGraph
 stage1 = zeroArrow
 
 
+stage23 :: Compiler' NetGraph
+stage23 = id
+    >>> remote gateGeometry
+    >>> arr assignCellsToRows
+    >>> legalization >>> estimate
+    >>> stage2 >>> stage3
+    >>> strategy1 significantHpwl (stage2 >>> stage3)
+
+
 stage2 :: Compiler' NetGraph
 stage2 = id
     >>> remote gateGeometry
     >>> arr assignCellsToRows
     >>> legalization >>> estimate
     >>> detailedPlacement >>> estimate
-    >>> local legalizeRows
     >>> arr assignCellsToColumns
     >>> arr rebuildEdges >>> estimate
 
 
 stage3 :: Compiler' NetGraph
 stage3 = id
+    >>> arr removeFeedthroughs
     >>> remote gateGeometry
     >>> arr assignCellsToRows
     >>> legalization >>> estimate
     >>> remote pinGeometry
-    >>> globalRouting >>> estimate
+    >>> globalRouting
+    >>> estimate
 
 
 stage4 :: Compiler' NetGraph
@@ -80,29 +91,27 @@ globalRouting = id
     >>> remote gateGeometry >>> estimate
     >>> local legalizeRows
     >>> arr rebuildEdges >>> estimate
-    >>> strategy1 significantHpwl
+    >>> strategy2 significantHpwl
         (local singleSegmentClustering >>> arr rebuildEdges >>> estimate)
     >>> local legalizeRows
     >>> arr assignCellsToColumns
-    >>> arr rebuildEdges >>> estimate
-    >>> remote pinGeometry
+    >>> arr rebuildEdges
 
 
 
 detailedPlacement :: Compiler' NetGraph
 detailedPlacement = id
     -- >>> local singleSegmentClustering >>> arr rebuildEdges >>> estimate
-    >>> strategy1 significantHpwl
+    >>> strategy2 significantHpwl
         (id
+        >>> estimate
         >>> local globalSwap
-        >>> arr rebuildEdges
+        >>> local legalizeRows >>> arr rebuildEdges
         >>> local verticalSwap
-        >>> local legalizeRows
-        >>> arr rebuildEdges
+        >>> local legalizeRows >>> arr rebuildEdges
         >>> local localReordering
-        >>> local legalizeRows
-        >>> arr rebuildEdges
-        >>> estimate)
+        >>> local legalizeRows >>> arr rebuildEdges
+        >>> id)
     -- >>> strategy1 significantHpwl
     --     (local singleSegmentClustering >>> arr rebuildEdges >>> estimate)
 
@@ -160,28 +169,39 @@ local k = remote $ \ x -> do
   s <- thaw <$> technology
   o <- environment
   case o ^. workers of
-    Singleton -> k x
-    Workers i -> liftIO $ MSem.with i $ runLSC o s (k x)
+    Nothing -> k x
+    Just sm -> liftIO $ MSem.with sm $ runLSC o s (k x)
 
 
 
-strategy1 :: (a -> a -> Ordering) -> Compiler' a -> Compiler' a
-strategy1 f a = proc p -> do
-    i <- view iterations ^<< remote_ environment -< ()
-    q <- minimumBy f ^<< collect f a -< (i, [p])
-    case f p q of
-        GT -> strategy1 f a -< q
-        _  -> returnA -< p
+type Strategy a = Compiler' a -> Compiler' a
 
 
-collect :: ArrowChoice a => (b -> b -> Ordering) -> a b b -> a (Int, [b]) [b]
-collect f a = proc (i, ps) -> case ps of
-    p : _ | i > 0 -> do
-        q <- a -< p
-        case f p q of
-            EQ -> returnA -< q : ps
-            _  -> collect f a -< (pred $ abs i, q : ps)
-    _ -> returnA -< ps
+strategy0 :: Int -> Strategy a
+strategy0 n = foldl (>>>) id . replicate n
+
+
+strategy1 :: (a -> a -> Ordering) -> Strategy a
+strategy1 f a = proc x -> do
+    g <- remote_ environment -< ()
+    minimumBy f ^<< collect a -< (g ^. iterations, pure x)
+
+
+strategy2 :: (a -> a -> Ordering) -> Strategy a
+strategy2 f a = proc x -> do
+    y <- strategy1 f a -< x
+    if f x y /= GT
+    then returnA -< x
+    else strategy2 f a -< y
+
+
+
+collect :: (ArrowChoice a, ArrowApply a) => a b b -> a (Word, [b]) [b]
+collect a = proc (i, xs) ->
+    if i == 0 || null xs
+    then returnA -< xs
+    else collect a <<< (pred i, ) ^<< (: xs) ^<< a -<< head xs
+
 
 
 
@@ -190,9 +210,8 @@ env_ setter = env setter . const
 
 env :: Setter' CompilerOpts o -> (o -> o) -> Compiler a b -> Compiler a b
 env setter f k = remote $ \ x -> do
-  o <- environment
-  let p = o & setter %~ f
-  lift $ LST $ lift $ flip runEnvT p $ unLST $ lowerCodensity $ compiler k x
+  o <- over setter f <$> environment
+  lift $ LST $ lift $ runEnvT o $ unLST $ lowerCodensity $ compiler k x
 
 
 newtype LS a b = LS { unLS :: a -> LSC b }
@@ -219,8 +238,8 @@ instance Arrow LS where
     s <- thaw <$> technology
     o <- environment
     case o ^. workers of
-      Singleton -> liftIO $ (,) <$> runLSC o s (k x) <*> runLSC o s (m y)
-      Workers _ -> liftIO $ concurrently (runLSC o s (k x)) (runLSC o s (m y))
+      Nothing -> liftIO $ (,) <$> runLSC o s (k x) <*> runLSC o s (m y)
+      Just  _ -> liftIO $ concurrently (runLSC o s (k x)) (runLSC o s (m y))
 
 
 instance ArrowSelect LS where
@@ -228,16 +247,16 @@ instance ArrowSelect LS where
     s <- thaw <$> technology
     o <- environment
     case o ^. workers of
-      Singleton -> mapM k xs
-      Workers _ -> liftIO $ forConcurrently xs $ runLSC o s . k
+      Nothing -> mapM k xs
+      Just  _ -> liftIO $ forConcurrently xs $ runLSC o s . k
 
 instance ArrowRace LS where
   LS k /// LS m = LS $ \ (x, y) -> do
     s <- thaw <$> technology
     o <- environment
     case o ^. workers of
-      Singleton -> Left <$> k x
-      Workers _ -> liftIO $ do
+      Nothing -> Left <$> k x
+      Just  _ -> liftIO $ do
         withAsync (runLSC o s (k x)) $ \ wx ->
           withAsync (runLSC o s (m y)) $ \ wy ->
             waitEitherCatch wx wy >>= \ xy -> case xy of
@@ -253,12 +272,14 @@ instance ArrowRace LS where
                 Left <$> wait wx
 
 
-createWorkers :: Int -> IO Workers
-createWorkers n | n < 2 = pure Singleton
-createWorkers n = Workers <$> MSem.new n
+createWorkers :: Word -> IO Workers
+createWorkers 0 = pure Nothing
+createWorkers 1 = pure Nothing
+createWorkers n = Just <$> MSem.new n
+
 
 rtsWorkers :: IO Workers
-rtsWorkers = createWorkers =<< getNumCapabilities
+rtsWorkers = createWorkers . max 1 . pred . fromIntegral =<< getNumCapabilities
 
 
 instance ArrowZero LS where

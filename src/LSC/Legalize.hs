@@ -211,9 +211,9 @@ rowJuggling rc top = do
 
     matrix <- Vector.thaw table
 
-    ranked <- unsafeThaw . Vector.indexed =<< Vector.freeze surplus
-    Intro.sortBy (compare `on` negate . snd) ranked
-    loaded <- Vector.takeWhile ((> 0) . fst) <$> Vector.freeze ranked
+    loaded <- liftM2 (>>) (Intro.sortBy (compare `on` negate . snd)) unsafeFreeze
+          =<< unsafeThaw . Vector.filter ((0 <) . snd) . Vector.indexed
+          =<< Vector.freeze surplus
 
     for_ loaded $ \ (i, _) -> do
 
@@ -230,12 +230,13 @@ rowJuggling rc top = do
             for_ [ 0 .. length table - 1 ] $ \ k -> do
 
               let g = c & space %~ relocateB (y ! k)
-              let delta = hpwlDelta top [g]
+                  delta = hpwlDelta top [g]
 
               s <- read surplus k
               d <- readSTRef bestHpwl
 
-              when (s < 0 && abs s > gateWidth c && views fixed not c && delta < d)
+              unless (c ^. fixed || c ^. feedthrough)
+                $ when (s < 0 && abs s > gateWidth c && delta < d)
                 $ do
                   writeSTRef bestHpwl delta
                   writeSTRef bestRow  k
