@@ -49,10 +49,6 @@ type Marker = Line Int
 type Area = Component Layer Int
 
 
-
-newtype Gfx a = Gfx a
-
-
 type Svg = S.Svg
 
 type Arg = S.AttributeValue
