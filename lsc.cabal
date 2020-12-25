@@ -5,7 +5,7 @@ cabal-version: 1.12
 -- see: https://github.com/sol/hpack
 
 name:           lsc
-version:        0.2.1.0
+version:        0.2.1.1
 homepage:       https://github.com/foshardware/lsc#readme
 bug-reports:    https://github.com/foshardware/lsc/issues
 author:         Andreas Westerwick

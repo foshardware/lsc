@@ -29,14 +29,14 @@ import Prelude hiding (lookup)
 
 import Language.DEF.Builder
 import Language.DEF.Parser (parseDEF)
-import Language.DEF.Syntax as DEF
+import Language.DEF.Syntax as DEF hiding (Rect)
 
 import LSC.Types as Rect
 
 
 
 fromDEF :: DEF -> NetGraph
-fromDEF (DEF options area rs ts cs ps ns _) = def &~ do
+fromDEF (DEF options _ area rs ts _ _ cs ps ns _) = def &~ do
     identifier .= identifierFrom options
     supercell .= supercellFrom area ts rs ps
     gates .= V.zipWith (set wires) paths nodes
@@ -115,14 +115,14 @@ fromDirection DEF.InputOutput = InOut
 
 
 fromTrack :: DEF.Track -> Either Rect.Track Rect.Track
-fromTrack (DEF.Track "X" a ss c d)
+fromTrack (DEF.Track "X" a ss c ls)
     = Right
     $ Rect.Track (ceiling a) (fromIntegral ss) (ceiling c) mempty
-    & layers .~ [fromLayer d]
-fromTrack (DEF.Track   _ a ss c d)
+    & layers .~ map fromLayer ls
+fromTrack (DEF.Track   _ a ss c ls)
     = Left
     $ Rect.Track (ceiling a) (fromIntegral ss) (ceiling c) mempty
-    & layers .~ [fromLayer d]
+    & layers .~ map fromLayer ls
 
 
 fromRow :: DEF.Row -> Rect.Row
@@ -176,9 +176,12 @@ identifierFrom _ = "top"
 toDEF :: Double -> NetGraph -> DEF
 toDEF scale top = DEF
   (filter units (defaultOptions $ Just $ top ^. identifier) ++ [Units $ DistanceList $ ceiling scale])
+  mempty
   (dieArea $ listToMaybe $ top ^. supercell . geometry)
   (fmap toRow $ toList $ top ^. supercell . rows)
   (toList $ top ^. supercell . tracks <&> toTrack)
+  mempty
+  mempty
   (toList $ set number `imap` view gates top <&> toComponent)
   (toList $ top ^. supercell . pins <&> toPin)
   (toList $ view nets top <&> toNet top)
@@ -205,10 +208,10 @@ toRow x = DEF.Row
 toTrack :: Either Rect.Track Rect.Track -> DEF.Track
 toTrack (Right track@(Rect.Track a ss c _))
     = DEF.Track "X" (fromIntegral a) (fromIntegral ss) (fromIntegral c)
-      (last $ toLayer <$> AnyLayer : track ^. layers)
+      (track ^. layers <&> toLayer)
 toTrack (Left track@(Rect.Track a ss c _))
     = DEF.Track "Y" (fromIntegral a) (fromIntegral ss) (fromIntegral c)
-      (last $ toLayer <$> AnyLayer : track ^. layers)
+      (track ^. layers <&> toLayer)
 
 
 
