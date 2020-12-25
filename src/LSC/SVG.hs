@@ -5,6 +5,7 @@
 
 module LSC.SVG where
 
+import Control.Applicative
 import Control.Lens
 
 import Data.Text (Text)
@@ -13,7 +14,7 @@ import qualified Data.Text.Lazy.IO as Lazy
 import Data.Text.Lazy.Builder (Builder, fromText)
 import Data.Text.Lazy.Builder.Int
 
-import Text.Blaze.Svg11 ((!), mkPath, toSvg, toValue)
+import Text.Blaze.Svg11 ((!), toSvg, toValue)
 import qualified Text.Blaze.Svg11 as S
 import qualified Text.Blaze.Svg11.Attributes as A
 import Text.Blaze.Svg.Renderer.Text (renderSvg)
@@ -27,10 +28,19 @@ pixelsPerMicron :: Int
 pixelsPerMicron = 60
 
 
+
+gateColor :: Gate -> Arg
+gateColor g | g ^. feedthrough = "lightyellow"
+gateColor g | g ^. fixed = "lightblue"
+gateColor _ = "lightgrey"
+
+
+
 type Scale = Double
 
 zoomOut :: Scale -> Int -> Int
-zoomOut scale = round . (/ scale) . fromIntegral
+zoomOut scale | scale > 0 = round . (/ scale) . fromIntegral
+zoomOut scale = error $ "zoomOut: invalid scaling factor " ++ show scale
 
 
 
@@ -38,6 +48,9 @@ type Marker = Line Int
 
 type Area = Component Layer Int
 
+
+
+newtype Gfx a = Gfx a
 
 
 type Svg = S.Svg
@@ -60,98 +73,75 @@ plotStdout scale = Lazy.putStr . renderSvg . plot scale
 
 
 plot :: Scale -> NetGraph -> Svg
-plot = svgDoc
+plot scale = svgDoc . componentMap pixelated . liftA2 componentMap quadrantI id
+  where 
+     pixelated
+       = fmap
+       $ zoomOut scale
+       . (* pixelsPerMicron)
+     quadrantI
+       = liftA2 (.) (moveX . abs . min 0 . view l) (moveY . abs . min 0 . view b)
+       . netGraphArea
 
 
 
-svgDoc :: Scale -> NetGraph -> Svg
-svgDoc scale top' = do
-
-    let top = componentMap pixelated $ quadrantI top'
-
-    S.docTypeSvg
-      ! A.version "1.1"
-      ! A.width  (toValue $ netGraphArea top ^. r)
-      ! A.height (toValue $ netGraphArea top ^. t)
-      $ do
-        place scale `mapM_` view gates top
-        route scale `mapM_` view nets top
-        drawA ("black", "lightyellow") `mapM_` outerRim top
-
-    where pixelated = fmap $ zoomOut scale . (* pixelsPerMicron)
-
-          quadrantI ckt
-              = flip componentMap ckt
-              $ moveX (abs . min 0 $ netGraphArea ckt ^. l)
-              . moveY (abs . min 0 $ netGraphArea ckt ^. b)
+svgDoc :: NetGraph -> Svg
+svgDoc top = S.docTypeSvg
+  ! A.version "1.1"
+  ! A.width  (toValue $ netGraphArea top ^. r)
+  ! A.height (toValue $ netGraphArea top ^. t)
+  $ do
+    place `mapM_` view gates top
+    route `mapM_` view nets top
+    drawA ("black", "lightyellow") `mapM_` outerRim top
 
 
 
-drawL :: Marker -> Svg
-drawL (Line (x1, y1) (x2, y2)) = do
-
-    S.path
-      ! A.d (mkPath pen)
-      ! A.stroke "black"
-      ! A.strokeWidth "1"
-
-    where pen = do
-            m_ x1 y1
-            l_ x2 y2
-            z_
-
-
-
-place :: Scale -> Gate -> Svg
-place scale g = do
+place :: Gate -> Svg
+place g = do
 
     let a = g ^. space
 
-    let x = a ^. l
-        y = a ^. b
-
-    let f = zoomOut scale . (* pixelsPerMicron) . (* 20)
+    let x = a ^. l + height a `div` 32
+        y = a ^. b + height a `div` 24
+        k = height a `div` 9
 
     drawA ("black", gateColor g) a
 
     S.text_
-      ! A.x (toValue $ x + f 4)
-      ! A.y (toValue $ y + f 12)
-      ! A.fontSize (toValue $ f 15)
+      ! A.x (toValue x)
+      ! A.y (toValue y)
+      ! A.fontSize (toValue k)
       ! A.fontFamily "monospace"
-      ! A.transform (toValue $ "rotate(90 " <> decimal (x + f 4) <> "," <> decimal (y + f 12) <> ")")
+      ! A.transform (toValue $ "rotate(90 " <> decimal x <> "," <> decimal y <> ")")
       $ toSvg $ views number decimal g <> ": " <> views identifier (forShort 8) g
 
 
 
-route :: Scale -> Net -> Svg
-route _ _ = do
+route :: Net -> Svg
+route _ = do
     pure ()
 
 
 
 drawA :: Args -> Area -> Svg
-drawA (border, background) a = do
-
-    S.path
-      ! A.d (mkPath pen)
-      ! A.stroke border
-      ! A.fill background
-      ! A.strokeWidth "1"
-
-    where pen = do
-            m_ (a ^. l) (a ^. b)
-            l_ (a ^. l) (a ^. t)
-            l_ (a ^. r) (a ^. t)
-            l_ (a ^. r) (a ^. b)
-            z_
+drawA (border, background) a = S.rect
+  ! A.x (toValue $ a ^. l)
+  ! A.y (toValue $ a ^. b)
+  ! A.width (toValue $ width a)
+  ! A.height (toValue $ height a)
+  ! A.stroke border
+  ! A.fill background
 
 
 
-gateColor :: Gate -> Arg
-gateColor g | g ^. feedthrough = "lightyellow"
-gateColor g | g ^. fixed = "lightblue"
-gateColor _ = "lightgrey"
+drawL :: Arg -> Marker -> Svg
+drawL color (Line (x1, y1) (x2, y2)) = S.line
+  ! A.x1 (toValue x1)
+  ! A.y1 (toValue y1)
+  ! A.x2 (toValue x2)
+  ! A.y2 (toValue y2)
+  ! A.stroke color
 
 
 

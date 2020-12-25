@@ -1,0 +1,230 @@
+cabal-version: 1.12
+
+-- This file has been generated from package.yaml by hpack version 0.34.2.
+--
+-- see: https://github.com/sol/hpack
+
+name:           lsc
+version:        0.2.1.0
+homepage:       https://github.com/foshardware/lsc#readme
+bug-reports:    https://github.com/foshardware/lsc/issues
+author:         Andreas Westerwick
+maintainer:     westerwick@pconas.de
+copyright:      2019 Andreas Westerwick
+license:        GPL-3
+build-type:     Simple
+extra-source-files:
+    README.md
+
+source-repository head
+  type: git
+  location: https://github.com/foshardware/lsc
+
+library
+  exposed-modules:
+      LSC
+      LSC.BLIF
+      LSC.DEF
+      LSC.Entropy
+      LSC.FastDP
+      LSC.FIFO
+      LSC.FIR
+      LSC.FM
+      LSC.GlobalRouting
+      LSC.Improve
+      LSC.KGGGP
+      LSC.LEF
+      LSC.Legalize
+      LSC.Mincut
+      LSC.NetGraph
+      LSC.SuffixTree
+      LSC.SVG
+      LSC.Types
+      LSC.UnionFind
+      LSC.Verilog
+      LSC.Version
+      LSC.Web
+  other-modules:
+      Paths_lsc
+  hs-source-dirs:
+      src
+  ghc-options: -Wall -O2
+  build-depends:
+      SafeSemaphore
+    , aeson
+    , array
+    , arrowgant
+    , async
+    , base >=4.7 && <5
+    , base16-bytestring
+    , blaze-svg
+    , blif
+    , bytestring
+    , cabal-file-th
+    , cereal
+    , concurrent-output
+    , cond
+    , containers
+    , data-default
+    , data-default-class
+    , def
+    , entropy
+    , file-embed
+    , filepath
+    , firrtl
+    , hashable
+    , hashtables
+    , kan-extensions
+    , lef
+    , lens
+    , linear
+    , matrix
+    , mmorph
+    , monad-loops
+    , mtl
+    , mwc-random
+    , parallel
+    , parsec
+    , parsec-numbers
+    , primitive
+    , random
+    , split
+    , template-haskell
+    , text
+    , time
+    , transformers
+    , unordered-containers
+    , vector
+    , vector-algorithms
+    , verilog
+  default-language: Haskell2010
+
+executable lsc
+  main-is: Main.hs
+  other-modules:
+      Paths_lsc
+  hs-source-dirs:
+      app
+  ghc-options: -Wall -O2 -threaded -rtsopts -with-rtsopts=-N
+  build-depends:
+      SafeSemaphore
+    , aeson
+    , array
+    , arrowgant
+    , async
+    , base >=4.7 && <5
+    , base16-bytestring
+    , blaze-svg
+    , blif
+    , bytestring
+    , cabal-file-th
+    , cereal
+    , concurrent-output
+    , cond
+    , containers
+    , data-default
+    , data-default-class
+    , def
+    , entropy
+    , file-embed
+    , filepath
+    , firrtl
+    , hashable
+    , hashtables
+    , kan-extensions
+    , lef
+    , lens
+    , linear
+    , lsc
+    , matrix
+    , mmorph
+    , monad-loops
+    , mtl
+    , mwc-random
+    , parallel
+    , parsec
+    , parsec-numbers
+    , primitive
+    , random
+    , split
+    , template-haskell
+    , text
+    , time
+    , transformers
+    , unordered-containers
+    , vector
+    , vector-algorithms
+    , verilog
+  default-language: Haskell2010
+
+test-suite lsc-test
+  type: exitcode-stdio-1.0
+  main-is: Spec.hs
+  other-modules:
+      Spec.LSC
+      Spec.LSC.Entropy
+      Spec.LSC.FastDP
+      Spec.LSC.FIFO
+      Spec.LSC.FM
+      Spec.LSC.KGGGP
+      Spec.LSC.Legalize
+      Spec.LSC.NetGraph
+      Spec.LSC.Types
+      Spec.LSC.UnionFind
+      Paths_lsc
+  hs-source-dirs:
+      test
+  ghc-options: -Wall -O -threaded -rtsopts -with-rtsopts=-N
+  build-depends:
+      SafeSemaphore
+    , aeson
+    , array
+    , arrowgant
+    , async
+    , base >=4.7 && <5
+    , base16-bytestring
+    , blaze-svg
+    , blif
+    , bytestring
+    , cabal-file-th
+    , cereal
+    , concurrent-output
+    , cond
+    , containers
+    , data-default
+    , data-default-class
+    , def
+    , entropy
+    , file-embed
+    , filepath
+    , firrtl
+    , hashable
+    , hashtables
+    , kan-extensions
+    , lef
+    , lens
+    , linear
+    , lsc
+    , matrix
+    , mmorph
+    , monad-loops
+    , mtl
+    , mwc-random
+    , parallel
+    , parsec
+    , parsec-numbers
+    , primitive
+    , random
+    , split
+    , tasty
+    , tasty-hunit
+    , tasty-quickcheck
+    , template-haskell
+    , text
+    , time
+    , transformers
+    , unordered-containers
+    , vector
+    , vector-algorithms
+    , verilog
+  default-language: Haskell2010

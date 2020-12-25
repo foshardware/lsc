@@ -7,9 +7,15 @@ dist/
 *.svg
 *.prof
 *.sh
+*.def
+*.lef
+*.json
 
-stack.yaml.lock
+*.aux
+*.hp
+*.ps
+*.pdf
 
 .stack-work/
-lsc.cabal
-rocket-chip/
+stack.yaml.lock
+
