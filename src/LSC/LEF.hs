@@ -11,31 +11,35 @@ module LSC.LEF
   ) where
 
 import Control.Lens
-import Control.Monad.State (get)
 import Data.Default
+import Data.Foldable
 import Data.HashMap.Lazy as HashMap
 import qualified Data.Vector as V
 
 import Language.LEF.Parser (parseLEF)
 import Language.LEF.Syntax
 
+import LSC.Component
 import LSC.Types
 
 
 fromLEF :: LEF -> Bootstrap ()
 fromLEF (LEF options _ _ _ _ _ macros) = do
 
-  bootstrap $ set scaleFactor $ fromIntegral $ databaseUnits options
+  rescale $ fromIntegral $ databaseUnits options
 
-  tech <- get
-  bootstrap $ set stdCells $ HashMap.fromList
-    [ (,) name $ def &~ do
+  tech <- snapshot
+
+  stdCells .= fold
+      [ HashMap.singleton name $ def &~ do
         pins .= HashMap.fromList (macroPins tech macroOptions)
         dims .= dimensions tech macroOptions
         vdd  .= maybe def id (macroVdd tech macroOptions)
         gnd  .= maybe def id (macroGnd tech macroOptions)
-    | Macro name macroOptions _ <- macros
-    ]
+      | Macro name macroOptions _ <- macros
+      ]
+  stdCells <>= view stdCells tech
+
 
 macroVdd :: Technology -> [MacroOption] -> Maybe Pin
 macroVdd tech (MacroPin ident options _ : _)

@@ -2,8 +2,12 @@
 -- SPDX-License-Identifier: GPL-3.0-or-later
 
 {-# LANGUAGE Arrows #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE TupleSections #-}
-{-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE Rank2Types #-}
+{-# LANGUAGE DeriveAnyClass #-}
+{-# LANGUAGE TypeApplications #-}
 
 module LSC where
 
@@ -12,22 +16,23 @@ import Control.Arrow.Algebraic
 import Control.Arrow.Memo
 import Control.Arrow.Select
 import Control.Category
-import Control.Concurrent (getNumCapabilities)
 import Control.Concurrent.Async
 import qualified Control.Concurrent.MSem as MSem
+import Control.DeepSeq
 import Control.Exception
 import Control.Lens
 import Control.Monad
 import Control.Monad.Trans
-import Control.Monad.Codensity hiding (improve)
 import Data.Foldable
 import Prelude hiding ((.), id)
 
 import LSC.FastDP
 import LSC.GlobalRouting
 import LSC.Legalize
+import LSC.Logger
 import LSC.Mincut
 import LSC.NetGraph
+import LSC.Trace
 import LSC.Types
 import LSC.Version
 
@@ -49,10 +54,10 @@ stage1 = zeroArrow
 stage23 :: Compiler' NetGraph
 stage23 = id
     >>> remote gateGeometry
-    >>> arr assignCellsToRows
-    >>> legalization >>> estimate
+    >>> arr rebuildEdges >>> estimate
     >>> stage2 >>> stage3
     >>> strategy1 significantHpwl (stage2 >>> stage3)
+    >>> finalEstimate
 
 
 stage2 :: Compiler' NetGraph
@@ -91,8 +96,8 @@ globalRouting = id
     >>> remote gateGeometry >>> estimate
     >>> local legalizeRows
     >>> arr rebuildEdges >>> estimate
-    >>> strategy2 significantHpwl
-        (local singleSegmentClustering >>> arr rebuildEdges >>> estimate)
+    >>> strategy2 significantHpwl (local singleSegmentClustering >>> arr rebuildEdges)
+    >>> estimate
     >>> local legalizeRows
     >>> arr assignCellsToColumns
     >>> arr rebuildEdges
@@ -126,8 +131,14 @@ legalization = id
 
 estimate :: Compiler' NetGraph
 estimate = proc top -> do
-    () <- local estimations -< top
+    remote estimations -< top
     returnA -< top
+
+
+finalEstimate :: Compiler' NetGraph
+finalEstimate = proc top -> do
+    remote_ $ info ["Final estimate"] -< ()
+    estimate -< top
 
 
 
@@ -146,12 +157,7 @@ type Compiler = LSR LS
 
 
 compiler :: Compiler a b -> a -> LSC b
-compiler = unLS . reduce
-
-
-
-expensive :: (a -> b) -> Compiler a b
-expensive f = local $ pure . f
+compiler = unLS . (<+> zeroArrow) . reduce
 
 
 remote_ :: LSC b -> Compiler () b
@@ -166,12 +172,19 @@ local_ = local . const
 
 local :: (a -> LSC b) -> Compiler a b
 local k = remote $ \ x -> do
-  s <- thaw <$> technology
+  s <- technology
   o <- environment
   case o ^. workers of
     Nothing -> k x
     Just sm -> liftIO $ MSem.with sm $ runLSC o s (k x)
 
+
+expensive :: NFData b => (a -> b) -> Compiler a b
+expensive f = local $ liftIO . evaluate . force f
+
+
+instance Show a => Trace (Compiler a) a where
+  trace = const $ remote trace
 
 
 type Strategy a = Compiler' a -> Compiler' a
@@ -183,8 +196,8 @@ strategy0 n = foldl (>>>) id . replicate n
 
 strategy1 :: (a -> a -> Ordering) -> Strategy a
 strategy1 f a = proc x -> do
-    g <- remote_ environment -< ()
-    minimumBy f ^<< collect a -< (g ^. iterations, pure x)
+    it <- view iterations ^<< remote_ environment -< ()
+    minimumBy f ^<< collect a -< (it, pure x)
 
 
 strategy2 :: (a -> a -> Ordering) -> Strategy a
@@ -196,12 +209,11 @@ strategy2 f a = proc x -> do
 
 
 
-collect :: (ArrowChoice a, ArrowApply a) => a b b -> a (Word, [b]) [b]
-collect a = proc (i, xs) ->
-    if i == 0 || null xs
+collect :: ArrowChoice a => a b b -> a (Word, [b]) [b]
+collect a = proc (i, xs) -> do
+    if i == minBound || null xs
     then returnA -< xs
-    else collect a <<< (pred i, ) ^<< (: xs) ^<< a -<< head xs
-
+    else collect a <<< second (uncurry (:)) ^<< second (first a) -< (pred i, (head xs, xs))
 
 
 
@@ -209,9 +221,8 @@ env_ :: Setter' CompilerOpts o -> o -> Compiler a b -> Compiler a b
 env_ setter = env setter . const
 
 env :: Setter' CompilerOpts o -> (o -> o) -> Compiler a b -> Compiler a b
-env setter f k = remote $ \ x -> do
-  o <- over setter f <$> environment
-  lift $ LST $ lift $ runEnvT o $ unLST $ lowerCodensity $ compiler k x
+env setter f k = remote $ modifyEnv (over setter f) . compiler k
+
 
 
 newtype LS a b = LS { unLS :: a -> LSC b }
@@ -219,32 +230,27 @@ newtype LS a b = LS { unLS :: a -> LSC b }
 instance Category LS where
 
   id = LS pure
-
-  LS m . LS k = LS $ \ x -> do
-    s <- thaw <$> technology
-    o <- environment
-    y <- liftIO $ runLSC o s $ k x
-    liftIO $ runLSC o s $ m y
+  LS k . LS m = LS $ (=<<) k . m
 
 
 instance Arrow LS where
 
-  arr f = LS (pure . f)
+  arr f = LS $ pure . f
 
   first  (LS k) = LS $ \ (x, y) -> (, y) <$> k x
   second (LS k) = LS $ \ (x, y) -> (x, ) <$> k y
 
   LS k *** LS m = LS $ \ (x, y) -> do
-    s <- thaw <$> technology
+    s <- technology
     o <- environment
     case o ^. workers of
-      Nothing -> liftIO $ (,) <$> runLSC o s (k x) <*> runLSC o s (m y)
+      Nothing -> (,) <$> k x <*> m y
       Just  _ -> liftIO $ concurrently (runLSC o s (k x)) (runLSC o s (m y))
 
 
 instance ArrowSelect LS where
   select (LS k) = LS $ \ xs -> do
-    s <- thaw <$> technology
+    s <- technology
     o <- environment
     case o ^. workers of
       Nothing -> mapM k xs
@@ -252,7 +258,7 @@ instance ArrowSelect LS where
 
 instance ArrowRace LS where
   LS k /// LS m = LS $ \ (x, y) -> do
-    s <- thaw <$> technology
+    s <- technology
     o <- environment
     case o ^. workers of
       Nothing -> Left <$> k x
@@ -261,37 +267,34 @@ instance ArrowRace LS where
           withAsync (runLSC o s (m y)) $ \ wy ->
             waitEitherCatch wx wy >>= \ xy -> case xy of
 
-              Left (Right f) -> Left f <$ cancelWith wy (Fail "race lost")
-              Left (Left (SomeException e)) -> do
-                runLSC o s $ debug [displayException e]
+              Left (Right f) -> Left f <$ cancelWith wy LSZero
+              Left (Left er) -> do
+                runLSC o s $ logger Error [show @SomeException er]
                 Right <$> wait wy
 
-              Right (Right f) -> Right f <$ cancelWith wx (Fail "race lost")
-              Right (Left (SomeException e)) -> do
-                runLSC o s $ debug [displayException e]
+              Right (Right f) -> Right f <$ cancelWith wx LSZero
+              Right (Left er) -> do
+                runLSC o s $ logger Error [show @SomeException er]
                 Left <$> wait wx
 
 
-createWorkers :: Word -> IO Workers
-createWorkers 0 = pure Nothing
-createWorkers 1 = pure Nothing
-createWorkers n = Just <$> MSem.new n
+data LSZero = LSZero
+  deriving Exception
 
-
-rtsWorkers :: IO Workers
-rtsWorkers = createWorkers . max 1 . pred . fromIntegral =<< getNumCapabilities
-
+instance Show LSZero where
+  show = const $ "no result, " ++ versionString
 
 instance ArrowZero LS where
-  zeroArrow = LS $ const $ fail $ unwords ["start", versionString]
+  zeroArrow = throw LSZero
 
 instance ArrowPlus LS where
   LS k <+> LS m = LS $ \ x -> do
-    s <- thaw <$> technology
+    s <- technology
     o <- environment
-    liftIO $ do
-      runLSC o s (k x) `catch` \ (SomeException e) ->
-        runLSC o s (debug [displayException e] *> m x)
+    liftIO $ runLSC o s (k x) `catches`
+      [ Handler $ \ LSZero -> runLSC o s $ m x
+      , Handler $ \ er -> runLSC o s $ logger Error [show @SomeException er] *> m x
+      ]
 
 
 instance ArrowChoice LS where
@@ -343,3 +346,4 @@ instance ArrowPlus ls => ArrowPlus (LSR ls) where
 
 instance ArrowChoice ls => ArrowChoice (LSR ls) where
   LSR f +++ LSR g = LSR (mapReduce f +++ mapReduce g)
+

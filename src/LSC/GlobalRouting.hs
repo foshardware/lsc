@@ -9,9 +9,8 @@ module LSC.GlobalRouting
     ) where
 
 import Control.Applicative
-import Control.Lens
+import Control.Lens hiding (ifoldl')
 import Control.Monad
-import Control.Monad.IO.Class
 import Control.Monad.Loops
 import Control.Monad.ST
 import Data.Default
@@ -24,6 +23,7 @@ import Data.Vector ((!), fromListN, unsafeThaw, unsafeIndex, accumulate, generat
 import qualified Data.Vector as Vector
 import Data.Vector.Mutable (modify)
 
+import LSC.Component
 import LSC.NetGraph
 import LSC.Types
 import LSC.UnionFind
@@ -53,7 +53,9 @@ freeEdge n i j = do
 
 
 determineFeedthroughs :: NetGraph -> LSC NetGraph
-determineFeedthroughs = liftIO . stToIO . globalDetermineFeedthroughs
+determineFeedthroughs top = do
+    info ["Determine feedthroughs"]
+    realWorldST . globalDetermineFeedthroughs $ top
 
 
 -- | O(n^2) in the number of pins
@@ -67,7 +69,7 @@ globalDetermineFeedthroughs top = do
     let row :: Gate -> Maybe Row
         row g = top ^. supercell . rows ^? ix (g ^. space . b)
 
-    assert "globalDetermineFeedthroughs: gates are not aligned to rows!"
+    assume "globalDetermineFeedthroughs: gates are not aligned to rows!"
       $ all (isJust . row) $ top ^. gates
 
 
@@ -96,7 +98,7 @@ globalDetermineFeedthroughs top = do
             -- rowIndex u <= rowIndex v
 
     penalties <- unsafeThaw
-      $ accumulate (+) (Vector.replicate (length rs) 0)
+      $ accumulate (+) (0 <$ ss)
       $ Vector.zip
         (maybe 0 (view number) . row <$> view gates top)
         (gateWidth <$> view gates top)
@@ -108,18 +110,18 @@ globalDetermineFeedthroughs top = do
 
         ps <- Vector.freeze penalties
 
-        (_, (pos, (u, v))) <- foldlWithIndex'
-            (\ (w, (p, e)) q f -> let x = weight ps f in if x < w then (x, (q, f)) else (w, (p, e)))
-            (maxBound, ((-1), undefined))
-            <$> readSTRef edges -- find the minimum weighted edge and its position in the sequence
+        (_, pos, (u, v)) <- ifoldl'
+            (\ j (w, i, e) f -> let x = weight ps f in if x < w then (x, j, f) else (w, i, e))
+            (maxBound, (-1), undefined) <$> readSTRef edges
+            -- ^ find the minimum weighted edge and its position in the sequence
 
         modifySTRef edges $ Seq.deleteAt pos
 
-        cyclic <- equivalent (point u) (point v)
+        cyclic <- point u `equivalent` point v
 
         unless cyclic
           $ if rowIndex v - rowIndex u <= 1 -- rowIndex u <= rowIndex v
-            then union (point u) (point v)
+            then point u `union` point v
             else do
 
                 intersections <- sequence $ generate (rowIndex v - rowIndex u - 1) $ \ i ->
@@ -135,15 +137,14 @@ globalDetermineFeedthroughs top = do
                     -- ^ the chain of feedthroughs is interconnected
 
                 -- connect feedthroughs to every pin in the net
-                Just xs <- HashMap.lookup (net u) <$> readSTRef vertices
-                modifySTRef edges $ mappend $ foldMap id
-                    [ case rowIndex upperFeed `compare` rowIndex upperComp of
-                        GT -> pure (lowerComp, upperFeed)
-                        LT -> pure (lowerFeed, upperComp)
-                        EQ -> pure (upperFeed, upperComp) <> pure (lowerFeed, lowerComp)
-                    | (upperFeed, lowerFeed) <- toList intersections
-                    , (upperComp, lowerComp) <- toList xs
-                    ]
+                Just component <- HashMap.lookup (net u) <$> readSTRef vertices
+                modifySTRef edges $ mappend $ Seq.fromList
+                  [ if rowIndex upperFeed > rowIndex upperComp
+                    then (lowerComp, upperFeed)
+                    else (lowerFeed, upperComp)
+                  | (upperFeed, lowerFeed) <- toList intersections
+                  , (upperComp, lowerComp) <- toList component
+                  ]
 
                 -- adjust penalties for rows containing feedthrough
                 for_ intersections $ \ (i, _) -> modify penalties (+ ss ! rowIndex i ^. granularity) (rowIndex i)
@@ -160,7 +161,7 @@ globalDetermineFeedthroughs top = do
         locate (u, _) = space %~ relocateL (colIndex u) . relocateB (ss ! rowIndex u ^. b)
 
     pure $ top &~ do
-        gates <>= HashMap.foldMapWithKey (fmap . flip locate . feedthroughGate) intersections
+        gates <>= ifoldMap (fmap . flip locate . feedthroughGate) intersections
         gates  %= imap (set number)
 
 

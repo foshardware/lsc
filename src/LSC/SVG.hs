@@ -19,6 +19,7 @@ import qualified Text.Blaze.Svg11 as S
 import qualified Text.Blaze.Svg11.Attributes as A
 import Text.Blaze.Svg.Renderer.Text (renderSvg)
 
+import LSC.Component
 import LSC.NetGraph
 import LSC.Types
 
@@ -54,12 +55,6 @@ type Svg = S.Svg
 type Arg = S.AttributeValue
 
 type Args = (Arg, Arg)
-
-m_, l_ :: Int -> Int -> S.Path
-z_ :: S.Path
-m_ = S.m
-l_ = S.l
-z_ = S.z
 
 
 

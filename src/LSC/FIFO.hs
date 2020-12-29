@@ -1,7 +1,7 @@
 -- Copyright 2018 - Andreas Westerwick <westerwick@pconas.de>
 -- SPDX-License-Identifier: GPL-3.0-or-later
 
-{-# LANGUAGE BangPatterns #-}
+{-# LANGUAGE DeriveFunctor #-}
 
 module LSC.FIFO
     ( FIFO
@@ -13,7 +13,12 @@ import Control.Applicative
 import Data.Foldable
 
 
-data FIFO a = FIFO !Int !Int [a] [a]
+data FIFO a = FIFO
+  {-# UNPACK #-} !Int
+  {-# UNPACK #-} !Int
+  [a] [a]
+  deriving Functor
+
 
 fifo :: Int -> Int -> [a] -> [a] -> FIFO a
 fifo lf lr fs rs
@@ -42,37 +47,16 @@ fromList xs = FIFO (length xs) 0 xs []
 
 
 
-instance Functor FIFO where
-    fmap g (FIFO lf lr fs rs) = FIFO lf lr (fmap g fs) (fmap g rs)
-
-
 instance Applicative FIFO where
     pure x = FIFO 1 0 [x] []
-    FIFO lg ls gs ss <*> FIFO lf lr fs rs
-        = FIFO
-        (lf * (lg + ls))
-        (lr * (lg + ls))
-        (foldMap (<$> fs) (gs ++ reverse ss))
-        (foldMap (<$> rs) (ss ++ reverse gs))
+    FIFO lf lr fs rs <*> FIFO lg ls gs ss
+        = FIFO ((lf + lr) * (lg + ls)) 0 (fs ++ reverse rs <*> gs ++ reverse ss) []
 
 
 instance Alternative FIFO where
     empty = FIFO 0 0 [] []
     FIFO lf lr fs rs <|> FIFO lg ls gs ss
-        = fifo lf (lr + lg + ls) fs (rs ++ reverse gs ++ ss)
-
-
-instance Monad FIFO where
-    return = pure
-    FIFO _ _ fs rs >>= k
-        = fifo
-        (sum $ length <$> gs)
-        (sum $ length <$> ss)
-        (toList =<< gs)
-        (reverse . toList =<< ss)
-        where gs = k <$> fs
-              ss = k <$> rs
-
+        = FIFO (lf + lr + lg + ls) 0 (fs ++ reverse rs ++ gs ++ reverse ss) []
 
 
 instance Foldable FIFO where
@@ -83,7 +67,7 @@ instance Foldable FIFO where
     foldMap g (FIFO _ _ fs rs) = foldMap g fs <> foldMap g (reverse rs)
 
     foldl' g s (FIFO _ _ fs rs) = foldl' g s (fs ++ reverse rs)
-    foldMap' g (FIFO _ _ fs rs) = let !m = foldMap' g fs <> foldMap' g (reverse rs) in m
+    foldMap' g (FIFO _ _ fs rs) = case foldMap' g fs <> foldMap' g (reverse rs) of m -> m
 
     toList (FIFO _ _ fs rs) = fs ++ reverse rs
 
@@ -98,6 +82,10 @@ instance Foldable FIFO where
     product (FIFO _ _ fs rs) = product fs * product rs
 
 
+instance Traversable FIFO where
+    traverse f (FIFO lf lr fs rs)
+        = FIFO (lf + lr) 0 <$> ((++) <$> traverse f fs <*> traverse f (reverse rs)) <*> pure []
+
 
 instance Semigroup (FIFO a) where
     (<>) = (<|>)
@@ -105,6 +93,4 @@ instance Semigroup (FIFO a) where
 
 instance Monoid (FIFO a) where
     mempty = empty
-    mappend = (<>)
-
 

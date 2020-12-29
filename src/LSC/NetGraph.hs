@@ -9,34 +9,30 @@
 module LSC.NetGraph where
 
 import Control.Applicative
-import Control.Lens hiding (imap)
+import Control.Lens
 import Control.Monad
 import Control.Monad.IO.Class
 import Control.Monad.ST
-import Data.ByteString.Base16
 import Data.Default
 import Data.Foldable
 import Data.Function
-import Data.Hashable
 import Data.HashMap.Lazy (HashMap)
 import qualified Data.HashMap.Lazy as HashMap
 import qualified Data.IntMap as M
-import qualified Data.IntSet as S
-import Data.List (sort, sortOn, groupBy)
+import Data.List (sort, sortOn, sortBy, groupBy)
 import Data.List.Split (wordsBy)
 import Data.Maybe
 import Data.Monoid
-import Data.Serialize.Put
 import Data.Text (unpack)
-import Data.Text.Encoding
 import Data.Matrix (Matrix, nrows, ncols, getElem, getMatrixAsVector)
-import Data.Vector (Vector, (!), imap, filter, backpermute)
+import Data.Vector (Vector, (!), filter, backpermute)
 import Data.Vector.Unboxed (unsafeFreeze)
 import Data.Vector.Unboxed.Mutable (new, write)
 import qualified Data.Vector.Unboxed as U
 import qualified Data.Vector as V
 import Prelude hiding (lookup, filter)
 
+import LSC.Component
 import LSC.Entropy
 import LSC.Types
 
@@ -44,14 +40,12 @@ import LSC.Types
 
 boundingBox :: (Foldable f, Integral n, Bounded n) => f (Component l n) -> Component l n
 boundingBox = foldMap' implode 
-{-# SPECIALIZE boundingBox :: [Component l Int] -> Component l Int #-}
 {-# INLINABLE boundingBox #-}
 
 
 
 coarseBoundingBox :: (Foldable f, Ord n, Bounded n) => f (Component l n) -> Component l n
 coarseBoundingBox = foldMap' id
-{-# SPECIALIZE coarseBoundingBox :: [Component l Int] -> Component l Int #-}
 {-# INLINABLE coarseBoundingBox #-}
 
 
@@ -67,10 +61,9 @@ hpwlDelta top gs = sum
     | net <- hyperedges top gs
     , let before = foldMap' (implode . view space)
                             (view members net)
-    , let after  = foldMap' (\ g -> maybe (g ^. space . to implode) (implode . view space) $ find (== g) gs)
+    , let after  = foldMap' (\ g -> maybe (g ^. space . to implode) (implode . view space) $ find (eqNumber g) gs)
                             (view members net)
     ]
-{-# SPECIALIZE hpwlDelta :: NetGraph -> [Gate] -> Int #-}
 {-# INLINABLE hpwlDelta #-}
 
 
@@ -80,30 +73,29 @@ optimalRegion f
     | all null f
     = error "optimalRegion: empty nodes"
 optimalRegion f
-    = Rect x1 y1 x2 y2
+    = rect x1 y1 x2 y2
     where
         boxes = foldr ((:) . foldMap' (implode . view space)) [] f
         [x1, x2] = medianElements $ sort $ foldMap (\ box -> [box ^. l, box ^. r]) boxes
         [y1, y2] = medianElements $ sort $ foldMap (\ box -> [box ^. b, box ^. t]) boxes
-{-# INLINE optimalRegion #-}
+{-# INLINABLE optimalRegion #-}
 
 
 
 hyperedges :: Foldable f => NetGraph -> f Gate -> [Net]
-hyperedges top gs = unstableUnique
+hyperedges top gs = map head . groupBy eqIdentifier . sortBy ordIdentifier $
     [ n
     | g <- toList gs
     , k <- toList $ view wires g
     , n <- toList $ top ^. nets ^? ix k
     ]
-{-# SPECIALIZE hyperedges :: NetGraph -> [Gate] -> [Net] #-}
 {-# INLINABLE hyperedges #-}
 
 
 
 adjacentByPin :: NetGraph -> Gate -> HashMap Identifier (Vector Gate)
 adjacentByPin top g
-    = foldMap (filter (/= g) . view members) . (view nets top ^?) . ix <$> view wires g
+    = foldMap (filter (not . eqNumber g) . view members) . (view nets top ^?) . ix <$> view wires g
 
 
 
@@ -163,7 +155,7 @@ hpwlMatrix _ n | elem (n ^. identifier) ["clk"] = 1
 hpwlMatrix m n = width p + height p
   where
     p = boundingBox
-      [ Rect x y (succ x) (succ y)
+      [ rect x y (succ x) (succ y)
       | i <- n ^. contacts & HashMap.keys
       , (x, y) <- toList $ m ^? ix i
       ]
@@ -197,7 +189,7 @@ sumOfHpwlMatrix m = sum $ hpwlMatrix (coordsVector m) <$> generateEdges m
 estimationsMatrix :: Matrix Gate -> LSC ()
 estimationsMatrix m = do
 
-  debug
+  info
     [ show $ view number <$> m
     , unwords [show $ nrows m, "x", show $ ncols m]
     , unwords ["gate count:", show $ foldl' (\ a g -> if g ^. number < 0 then a else succ a :: Int) 0 m]
@@ -219,7 +211,7 @@ estimations top = do
       pivot = div (area ^. r + area ^. l) 2
   let (xs, ys) = V.partition ((<= pivot) . centerX) (view space <$> V.filter (views fixed not) gs)
 
-  debug
+  info
     [ unpack (view identifier top) ++ " layout area: " ++ show (width box, height box)
     , unpack (view identifier top) ++ " sum of hpwl: " ++ show (sum $ hpwl <$> ns)
     , unpack (view identifier top) ++ " gate count: "  ++ show (length gs)
@@ -239,40 +231,24 @@ significantHpwl m n = div p x `compare` div q x
 
 
 getSegments :: Vector Gate -> [Vector Gate]
-getSegments gs
-    = gs
-    & toList
-    & sortOn (view (space . b))
-    & groupBy ((==) `on` view (space . b))
-   <&> sortOn (view space)
-   <&> wordsBy (view fixed)
-    & join
-   <&> V.fromList
+getSegments
+    = map V.fromList
+    . join
+    . map (wordsBy (view fixed))
+    . map (sortOn (view space))
+    . groupBy ((==) `on` view (space . b))
+    . sortOn (view (space . b))
+    . toList
 
 
 
 getRows :: Vector Gate -> [Vector Gate]
-getRows gs
-    = gs
-    & toList
-    & sortOn (view (space . b))
-    & groupBy ((==) `on` view (space . b))
-   <&> sortOn (view space)
-   <&> V.fromList
-
-
-
-gateOverlap :: Gate -> Gate -> Bool
-gateOverlap i j
-    = or
-    [ i ^. space . l == j ^. space . l
-    , i ^. space . l < j ^. space . l && i ^. space . r > j ^. space . l
-    , j ^. space . l < i ^. space . l && j ^. space . r > i ^. space . l
-    ] && or
-    [ i ^. space . b == j ^. space . b
-    , i ^. space . b < j ^. space . b && i ^. space . t > j ^. space . b
-    , j ^. space . b < i ^. space . b && j ^. space . t > i ^. space . b
-    ]
+getRows
+    = map V.fromList
+    . map (sortOn (view space))
+    . groupBy ((==) `on` view (space . b))
+    . sortOn (view (space . b))
+    . toList
 
 
 
@@ -286,7 +262,7 @@ inlineGeometry top = pure $ rebuildEdges $ top &~ do
       gs = set number `imap` V.concat
         [ s ^. gates <&> project (view space g)
         | g <- toList $ top ^. gates
-        , s <- toList $ HashMap.lookup (g ^. identifier) (top ^. subcells)
+        , s <- toList $ top ^. subcells ^? views identifier ix g
         ]
 
       project :: Component Layer Int -> Gate -> Gate
@@ -297,13 +273,17 @@ inlineGeometry top = pure $ rebuildEdges $ top &~ do
 gateGeometry :: NetGraph -> LSC NetGraph
 gateGeometry top = do
 
-  cells <- view stdCells <$> technology
+  tech <- technology
 
-  let fh = maximum $ snd . view dims <$> cells
+  assume ("invalid scale factor: " ++ views scaleFactor show tech)
+    $ tech ^. scaleFactor > 0
+
+  let fh = maximum $ tech ^. stdCells <&> snd . view dims
       fw = maximum $ top ^. supercell . rows <&> view granularity
 
   let expand g | g ^. feedthrough = g & space %~ \ x -> x & r .~ x^.l + fw & t .~ x^.b + fh
-      expand g = g & space %~ maybe id drag (cells ^? views identifier ix g . dims)
+      expand g = g & space %~ maybe id drag (tech ^. stdCells ^? views identifier ix g . dims)
+
       drag (w, h) p = p & r .~ view l p + w & t .~ view b p + h
 
   pure $ top &~ do
@@ -314,34 +294,32 @@ gateGeometry top = do
 pinGeometry :: NetGraph -> LSC NetGraph
 pinGeometry top = do
 
-  cells <- view stdCells <$> technology
+  tech <- technology
 
-  let mark = contacts %~ HashMap.mapWithKey (\ i ps -> align (view gates top ^? ix i) <$> ps)
+  assume ("invalid scale factor: " ++ views scaleFactor show tech)
+    $ tech ^. scaleFactor > 0
 
-      align (Just g) p | g ^. feedthrough = p & geometry .~ pure (g ^. space)
+  let align g p | g ^. feedthrough = p & geometry .~ pure (g ^. space)
+      align g p = maybe p (absolute g) $ tech ^. stdCells ^? views identifier ix g . pins . views identifier ix p
 
-      align (Just g) p = maybe p (absolute g)
-          $ preview (ix (p ^. identifier)) =<< cells ^? ix (g ^. identifier) . pins
-
-      align  Nothing p = p
-
-      absolute g = geometry
-          %~ fmap (l +~ (g ^. space . l))
-           . fmap (r +~ (g ^. space . l))
-           . fmap (b +~ (g ^. space . b))
-           . fmap (t +~ (g ^. space . b))
+      absolute g = over geometry
+        $ fmap (l +~ g ^. space . l)
+        . fmap (r +~ g ^. space . l)
+        . fmap (b +~ g ^. space . b)
+        . fmap (t +~ g ^. space . b)
 
   pure $ top &~ do
-      nets %= fmap mark
+      nets %= fmap (over contacts . imap $ fmap . maybe id align . views gates (^?) top . ix)
+
 
 
 
 perturbGates :: NetGraph -> LSC NetGraph
 perturbGates top = do
-    let getVector = randomPermutation (top ^. gates . to length) :: Gen s -> ST s Permutation
-    v <- liftIO $ nonDeterministic getVector
+    let getVector = randomPermutation $ top ^. gates . to length :: Gen s -> ST s Permutation
+    v <- liftIO $ nonDeterministic Nothing getVector
     pure $ top &~ do
-        gates .= set number `imap` backpermute (top ^. gates) v
+        gates .= set number `imap` views gates backpermute top v
 
 
 
@@ -350,31 +328,29 @@ assignCellsToRows top
     | top ^. supercell . rows . to null
     = top
 assignCellsToRows top
-    = top &~ do
-        gates %= fmap (space %~ (relocateB =<< closest))
+    = top & gates %~ fmap (over space $ relocateB =<< closest)
     where
       rs = top ^. supercell . rows
       closest s
-          = fst
-          $ minimumBy (compare `on` \ (y, _) -> abs (s ^. b - y))
-          $ catMaybes [M.lookupGE (s ^. b) rs, M.lookupLE (s ^. b) rs]
+        = fst
+        $ minimumBy (compare `on` \ (y, _) -> abs (s ^. b - y))
+        $ catMaybes [M.lookupGE (s ^. b) rs, M.lookupLE (s ^. b) rs]
 
 
 assignCellsToColumns :: NetGraph -> NetGraph
 assignCellsToColumns top
-    = top &~ do
-        gates %= fmap (space %~ (relocateL =<< closest))
+    = top & gates %~ fmap (over space $ relocateL =<< closest)
     where
       rs = top ^. supercell . rows <&> \ s -> (s ^. l, s ^. granularity)
       closest s
-          | Just (off, step) <- rs ^? ix (s ^. b)
-          , 0 <- mod (s ^. l - off) step
-          = s ^. l
+        | Just (off, step) <- rs ^? ix (s ^. b)
+        , 0 <- mod (s ^. l - off) step
+        = s ^. l
       closest s
-          | Just (off, step) <- rs ^? ix (s ^. b)
-          = s ^. l + step - mod (s ^. l - off) step
+        | Just (off, step) <- rs ^? ix (s ^. b)
+        = s ^. l + step - mod (s ^. l - off) step
       closest s
-          = s ^. l
+        = s ^. l
 
 
 
@@ -395,27 +371,44 @@ generateEdges gs = HashMap.fromListWith (<>)
     , (contact, i) <- HashMap.toList $ gate ^. wires
     , let pin = def & identifier .~ contact
     ]
-{-# SPECIALIZE generateEdges :: Vector Gate -> HashMap Identifier Net #-}
 {-# INLINABLE generateEdges #-}
 
 
 componentMap :: (Component Layer Int -> Component Layer Int) -> NetGraph -> NetGraph
 componentMap f top = top &~ do
-    gates %= fmap (space %~ f)
-    nets %= fmap (contacts %~ fmap (fmap (geometry %~ fmap f)))
-    supercell %= over pins (fmap (geometry %~ fmap f))
+    supercell %= (over pins . fmap . over geometry . fmap) f
+    gates %= (fmap . over space) f
+    nets %= (fmap . over contacts . fmap . fmap . over geometry . fmap) f
 
 
 
 netGraphArea :: NetGraph -> Component l Int
 netGraphArea top
-    = component
+    = castLayer
     $ coarseBoundingBox (view space <$> view gates top) <> coarseBoundingBox (outerRim top)
 
 
 
-outerRim :: NetGraph -> HashMap Identifier (Component l Int)
-outerRim = fmap (component . coarseBoundingBox . view geometry) . view (supercell . pins)
+outerRim :: NetGraph -> HashMap Identifier (Component Layer Int)
+outerRim = fmap (coarseBoundingBox . view geometry) . view (supercell . pins)
+
+
+
+gateWidth, gateHeight :: Gate -> Int
+gateWidth  = width  . view space
+gateHeight = height . view space
+
+
+
+gateOverlap :: Gate -> Gate -> Bool
+gateOverlap x y = areaOverlap (x ^. space) (y ^. space)
+
+
+
+invert :: Pin -> Pin
+invert pin | pin ^. dir == pure  In = pin & dir .~ pure Out
+invert pin | pin ^. dir == pure Out = pin & dir .~ pure  In
+invert pin = pin
 
 
 
@@ -423,7 +416,7 @@ treeStructure :: NetGraph -> NetGraph
 treeStructure top = top & subcells .~ foldr collect mempty (top ^. gates)
   where
     scope = HashMap.fromList [ (x ^. identifier, x) | x <- flatten subcells top ]
-    collect g a = maybe a (descend a) $ HashMap.lookup (g ^. identifier) scope
+    collect g a = maybe a (descend a) $ scope ^? views identifier ix g
     descend a n = HashMap.insert (n ^. identifier) (n & subcells .~ foldr collect mempty (n ^. gates)) a
 
 
@@ -435,40 +428,7 @@ flatten descend netlist
 
 
 
-netGraphStats :: NetGraph -> String
-netGraphStats top = concat
-  [ unwords
-    [ top ^. identifier . to unpack <> ":"
-    , unpack $ goedelIdentifier $ hash top, "goedel,"
-    , top ^. subcells . to length . to show, "subcells,"
-    , top ^. supercell . pins . to length . to show, "pins,"
-    , top ^. gates ^. to length . to show, "gates,"
-    , top ^. nets ^. to length . to show, "nets"
-    ]
-  , unlines [ mempty | start ]
-  , unlines
-      [ netGraphStats n
-      | n <- top ^. subcells & HashMap.elems
-      ]
-  , unlines [ "" | start ]
-  , unlines [ top ^. subcells . to length . to show
-             <> " subcells." | start ]
-  , unlines [ show (S.size $ S.fromList $ top ^. subcells & HashMap.elems <&> hash)
-             <> " distinct subcells." | start ]
-  ] where
-      start = not $ top ^. subcells . to null
-
-
-goedelIdentifier :: Int -> Identifier
-goedelIdentifier = decodeUtf8 . encode . runPut . putInt64be . fromIntegral
-
-
-gateGoedel :: HashMap Identifier Int -> Gate -> Int
-gateGoedel ns g = hash [ (HashMap.lookup w ns, view identifier g) | w <- g ^. wires & HashMap.elems ]
-
-
-
 leaves :: NetGraph -> [NetGraph]
 leaves top | top ^. subcells . to null = pure top
-leaves top = join $ top ^. subcells & HashMap.elems <&> leaves
+leaves top = join $ top ^. subcells & toList <&> leaves
 

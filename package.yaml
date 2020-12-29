@@ -2,15 +2,27 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 
 name:                lsc
-version:             0.2.1.1
+version:             0.2.3.0
 github:              "foshardware/lsc"
 license:             GPL-3
 author:              "Andreas Westerwick"
 maintainer:          "westerwick@pconas.de"
 copyright:           "2019 Andreas Westerwick"
+build-type:          Custom
+
+flags:
+  debug:
+    default: false
+    manual: false
 
 extra-source-files:
 - README.md
+
+custom-setup:
+  dependencies:
+  - base >= 4.7 && < 5
+  - Cabal
+  - process
 
 dependencies:
 - base >= 4.7 && < 5
@@ -18,7 +30,6 @@ dependencies:
 - array
 - arrowgant
 - async
-- base16-bytestring
 - blaze-svg
 - blif
 - bytestring
@@ -28,7 +39,7 @@ dependencies:
 - containers
 - cond
 - data-default
-- data-default-class
+- deepseq
 - def
 - entropy
 - file-embed
@@ -48,14 +59,17 @@ dependencies:
 - parallel
 - parsec
 - parsec-numbers
+- pointed
+- pretty-terminal
 - primitive
-- random
 - SafeSemaphore
 - split
+- tasty
+- tasty-hunit
+- tasty-quickcheck
 - template-haskell
 - text
 - time
-- transformers
 - unordered-containers
 - vector
 - vector-algorithms
@@ -66,36 +80,62 @@ library:
   source-dirs: src
   ghc-options:
   - -Wall
-  - -O2
+  when:
+  - condition: flag(debug)
+    then:
+      cpp-options:
+      - -DDEBUG
+      ghc-options:
+      - -g
+      - -dcore-lint
+      - -debug
+    else:
+      ghc-options:
+      - -O2
 
 executables:
   lsc:
     main:                Main.hs
     source-dirs:         app
-    ghc-options:
-    - -Wall
-    - -O2
-    - -threaded
-    - -rtsopts
-    - -with-rtsopts=-N
     dependencies:
     - lsc
+    ghc-options:
+    - -Wall
+    - -rtsopts
+    when:
+    - condition: flag(debug)
+      then:
+        cpp-options:
+        - -DDEBUG
+        ghc-options:
+        - -g
+        - -dcore-lint
+        - -debug
+      else:
+        ghc-options:
+        - -O2
+        - -threaded
 
 tests:
   lsc-test:
     main:                Spec.hs
     source-dirs:         test
-    ghc-options:
-    - -Wall
-    - -O
-    - -threaded
-    - -rtsopts
-    - -with-rtsopts=-N
     dependencies:
     - lsc
-    - tasty
-    - tasty-hunit
-    - tasty-quickcheck
-    - lens
-    - data-default
-    - unordered-containers
+    ghc-options:
+    - -Wall
+    - -rtsopts
+    when:
+    - condition: flag(debug)
+      then:
+        cpp-options:
+        - -DDEBUG
+        ghc-options:
+        - -g
+        - -dcore-lint
+        - -debug
+      else:
+        ghc-options:
+        - -O
+        - -threaded
+

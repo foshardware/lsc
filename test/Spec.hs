@@ -1,12 +1,19 @@
 -- Copyright 2018 - Andreas Westerwick <westerwick@pconas.de>
 -- SPDX-License-Identifier: GPL-3.0-or-later
 
+import Control.Concurrent
+import Data.Foldable
+import Data.List
+import Data.Maybe
 
-import Data.List (isPrefixOf)
+import Text.Parsec (parse)
+import Text.ParserCombinators.Parsec.Number (decimal)
 
 import System.Environment
 
 import Test.Tasty
+
+import LSC.Version
 
 import Spec.LSC
 import Spec.LSC.Entropy
@@ -20,12 +27,28 @@ import Spec.LSC.UnionFind
 
 
 
+data TestArgs = TestArgs
+  { _j :: Maybe Int
+  }
+
+
 main :: IO ()
-main = defaultMain . lsc =<< getArgs
+main = do
+
+    args <- getArgs
+
+    j <- mapM (either (fail . show) pure . parse decimal "-j" . drop 2) (isPrefixOf "-j" `find` args)
+    mapM_ setNumCapabilities j
+
+    putStrLn []
+    defaultMain $ lsc TestArgs
+      { _j = j
+      }
 
 
-lsc :: [String] -> TestTree
-lsc args = testGroup "LSC" $
+
+lsc :: TestArgs -> TestTree
+lsc opts = testGroup versionString $
   [ types
   , fifo
   , unionFind
@@ -34,5 +57,5 @@ lsc args = testGroup "LSC" $
   , fm
   , legalize
   , fastdp
-  ] ++ [ concurrency | isPrefixOf "-j" `any` args ]
+  ] ++ [ concurrency | isJust $ _j opts ]
 

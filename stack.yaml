@@ -1,25 +1,24 @@
 # Copyright 2018 - Andreas Westerwick <westerwick@pconas.de>
 # SPDX-License-Identifier: GPL-3.0-or-later
 
+resolver: lts-16.23
 packages:
 - .
+allow-newer: true
 extra-deps:
 - git: https://github.com/foshardware/verilog.git
   commit: 8415f16e62e7eb3e4d2269e0838ac60ff34e9605
 - git: https://github.com/foshardware/arrowgant.git
-  commit: 09a45c91a1350e20f88af88cdfef89631e6ecdc9
+  commit: d343428f7f81419adf8e2045919f41c51e835b59
 - git: https://github.com/foshardware/firrtl.git
   commit: f9f4ed5cc1b46ea23a346e4f9c2c591a0d585a8b
 - git: https://github.com/foshardware/blif.git
-  commit: a2e87b4ea13f40873fcb18cce5c9382c65379b6a
+  commit: 0af63bc5bcb9b63740a73e87ce944c8f725e6b15
 - git: https://github.com/foshardware/def.git
-  commit: 3ccc7ad4749ea02a609853c3c8f3ff472fbded18
+  commit: c05f46555d5bd63198a416dd3c1372ca7c016d9e
 - git: https://github.com/foshardware/lef.git
-  commit: 169c7700e30bfc83a7fdc437feeda089361448df
+  commit: cf367ad8d07f2bf3defbba5e31217768867f78fb
 - arrows-0.4.4.2@sha256:a260222b766da922657e302aa7c0409451913e1e503798a47a213a61ba382460
 - Stream-0.4.7.2@sha256:ed78165aa34c4e23dc53c9072f8715d414a585037f2145ea0eb2b38300354c53
 - lazysmallcheck-0.6@sha256:dac7a1e4877681f1260309e863e896674dd6efc1159897b7945893e693f2a6bc
 - cabal-file-th-0.2.7@sha256:a84fddcf719cbea2314d853090fdd4129e26aa4fde7c210db70ed6362ba7f741,1157
-- unordered-containers-0.2.13.0@sha256:6310c636f92ed4908fdd0de582b6be31c2851c7b5f2ec14e9f416eb94df7a078,4978
-allow-newer: true
-resolver: lts-16.23

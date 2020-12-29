@@ -1,7 +1,6 @@
 -- Copyright 2018 - Andreas Westerwick <westerwick@pconas.de>
 -- SPDX-License-Identifier: GPL-3.0-or-later
 
-{-# LANGUAGE DeriveFunctor, DeriveFoldable, DeriveTraversable #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE TypeApplications #-}
 
@@ -11,20 +10,21 @@ module Spec.LSC.Types
     , Given(..)
     ) where
 
-import Control.Lens
+import Control.Lens hiding (indexed)
 import Data.Char
 import Data.Default
 import Data.Foldable
 import qualified Data.HashMap.Lazy as HashMap
-import Data.IntMap (IntMap, fromDistinctAscList)
+import Data.IntMap (fromDistinctAscList)
 import Data.List (sort)
 import qualified Data.Text as T
-import Data.Vector (Vector, fromListN)
+import Data.Vector (indexed, replicateM)
 
 import Test.Tasty
 import Test.Tasty.HUnit
 import Test.Tasty.QuickCheck
 
+import LSC.Component
 import LSC.Entropy hiding (Gen)
 import LSC.NetGraph
 import LSC.Types
@@ -58,38 +58,28 @@ maxRowCount = ceiling @Double $ sqrt $ fromIntegral sizeOfNetGraph
 
 
 layoutArea :: Component l Int
-layoutArea = Rect 0 0 (maxCellsPerRow * maxCellWidth) (maxRowCount * maxCellHeight)
+layoutArea = rect 0 0 (maxCellsPerRow * maxCellWidth) (maxRowCount * maxCellHeight)
 
 
 
 newtype Given a = Given { say :: a }
-    deriving (Eq, Ord, Functor, Foldable, Traversable, Show)
 
 
 instance Arbitrary (Given NetGraph) where
     arbitrary = do
-        gs <- say <$> resize sizeOfNetGraph arbitrary 
-        rs <- say <$> resize maxRowCount arbitrary
+        gs <- replicateM sizeOfNetGraph $ resize sizeOfNetGraph arbitrary 
+        rs <- replicateM maxRowCount $ resize maxRowWidth arbitrary
         pure
           $ Given
           $ rebuildEdges
           $ assignCellsToRows
           $ def &~ do
-            gates .= gs
-            supercell %= set rows rs
+            gates .= set number `imap` fmap say gs
+            supercell %= set rows (fromDistinctAscList
+                [ (i * maxCellHeight, row & number .~ i & b .~ i * maxCellHeight)
+                | (i, row) <- toList . indexed $ fmap say rs
+                ])
 
-
-
-instance Arbitrary (Given (IntMap Row)) where
-    arbitrary = do
-        n <- getSize
-        v <- resize maxRowWidth $ vector n
-        pure
-          $ Given
-          $ fromDistinctAscList
-            [ (i * maxCellHeight, row & number .~ i & b .~ i * maxCellHeight)
-            | (i, row) <- [0 ..] `zip` fmap say v
-            ]
 
 
 instance Arbitrary (Given Row) where
@@ -103,17 +93,6 @@ instance Arbitrary (Given Row) where
 
 
 
-instance Arbitrary (Given (Vector Gate)) where
-    arbitrary = do
-        n <- getSize
-        gs <- resize n $ vector n
-        pure
-          $ Given
-          $ imap (set number)
-          $ fromListN n
-          $ say <$> gs
-
-
 instance Arbitrary (Given Gate) where
     arbitrary = do
 
@@ -125,14 +104,14 @@ instance Arbitrary (Given Gate) where
 
         k <- choose (2, 6)
         v <- sequence $ replicate k $ do
-            p <- T.map toUpper . base16Text <$> choose (0, 0xFF)
-            e <- base16Text <$> choose (0x100, 0x100 + div (n * 2) 3)
+            p <- T.map toUpper . base16Identifier <$> choose (0, 0xFF)
+            e <- base16Identifier <$> choose (0x100, 0x100 + n)
             pure (p, e)
 
         pure
           $ Given
           $ def &~ do
-            space .= Rect x y (x + w) (y + maxCellHeight)
+            space .= rect x y (x + w) (y + maxCellHeight)
             wires .= HashMap.fromList v
 
 
@@ -170,3 +149,4 @@ uniques = testGroup "Unstable unique"
         let xs = unstableUnique v
         assertBool "unique and ordered" $ and $ zipWith (<) xs (tail xs)
   ]
+

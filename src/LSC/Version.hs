@@ -5,15 +5,23 @@
 
 module LSC.Version where
 
-import Data.Char
 import Data.FileEmbed
 import Distribution.PackageDescription.TH
 
+
+
 versionString :: String
-versionString = $(packageVariable package) ++ ", commit "++ commitString
+versionString = $(packageVariable package) ++ ", " ++ commitString
+
 
 commitString :: String
-commitString = reverse . dropWhile isSpace . reverse $
-  if "ref:" == take 4 $(embedStringFile ".git/HEAD")
-    then $(embedStringFile ".git/refs/heads/master")
-    else $(embedStringFile ".git/HEAD")
+commitString = $(embedStringFile ".status")
+
+
+gitHead :: String
+gitHead = $(embedStringFile ".git/HEAD")
+
+
+gitRefsMaster :: String
+gitRefsMaster = $(embedStringFile ".git/refs/heads/master")
+

@@ -1,18 +1,18 @@
-cabal-version: 1.12
+cabal-version: 1.24
 
 -- This file has been generated from package.yaml by hpack version 0.34.2.
 --
 -- see: https://github.com/sol/hpack
 
 name:           lsc
-version:        0.2.1.1
+version:        0.2.3.0
 homepage:       https://github.com/foshardware/lsc#readme
 bug-reports:    https://github.com/foshardware/lsc/issues
 author:         Andreas Westerwick
 maintainer:     westerwick@pconas.de
 copyright:      2019 Andreas Westerwick
 license:        GPL-3
-build-type:     Simple
+build-type:     Custom
 extra-source-files:
     README.md
 
@@ -20,10 +20,21 @@ source-repository head
   type: git
   location: https://github.com/foshardware/lsc
 
+custom-setup
+  setup-depends:
+      Cabal
+    , base >=4.7 && <5
+    , process
+
+flag debug
+  manual: False
+  default: False
+
 library
   exposed-modules:
       LSC
       LSC.BLIF
+      LSC.Component
       LSC.DEF
       LSC.Entropy
       LSC.FastDP
@@ -35,10 +46,12 @@ library
       LSC.KGGGP
       LSC.LEF
       LSC.Legalize
+      LSC.Logger
       LSC.Mincut
       LSC.NetGraph
       LSC.SuffixTree
       LSC.SVG
+      LSC.Trace
       LSC.Types
       LSC.UnionFind
       LSC.Verilog
@@ -48,7 +61,7 @@ library
       Paths_lsc
   hs-source-dirs:
       src
-  ghc-options: -Wall -O2
+  ghc-options: -Wall
   build-depends:
       SafeSemaphore
     , aeson
@@ -56,7 +69,6 @@ library
     , arrowgant
     , async
     , base >=4.7 && <5
-    , base16-bytestring
     , blaze-svg
     , blif
     , bytestring
@@ -66,7 +78,7 @@ library
     , cond
     , containers
     , data-default
-    , data-default-class
+    , deepseq
     , def
     , entropy
     , file-embed
@@ -86,17 +98,25 @@ library
     , parallel
     , parsec
     , parsec-numbers
+    , pointed
+    , pretty-terminal
     , primitive
-    , random
     , split
+    , tasty
+    , tasty-hunit
+    , tasty-quickcheck
     , template-haskell
     , text
     , time
-    , transformers
     , unordered-containers
     , vector
     , vector-algorithms
     , verilog
+  if flag(debug)
+    ghc-options: -g -dcore-lint -debug
+    cpp-options: -DDEBUG
+  else
+    ghc-options: -O2
   default-language: Haskell2010
 
 executable lsc
@@ -105,7 +125,7 @@ executable lsc
       Paths_lsc
   hs-source-dirs:
       app
-  ghc-options: -Wall -O2 -threaded -rtsopts -with-rtsopts=-N
+  ghc-options: -Wall -rtsopts
   build-depends:
       SafeSemaphore
     , aeson
@@ -113,7 +133,6 @@ executable lsc
     , arrowgant
     , async
     , base >=4.7 && <5
-    , base16-bytestring
     , blaze-svg
     , blif
     , bytestring
@@ -123,7 +142,7 @@ executable lsc
     , cond
     , containers
     , data-default
-    , data-default-class
+    , deepseq
     , def
     , entropy
     , file-embed
@@ -144,17 +163,25 @@ executable lsc
     , parallel
     , parsec
     , parsec-numbers
+    , pointed
+    , pretty-terminal
     , primitive
-    , random
     , split
+    , tasty
+    , tasty-hunit
+    , tasty-quickcheck
     , template-haskell
     , text
     , time
-    , transformers
     , unordered-containers
     , vector
     , vector-algorithms
     , verilog
+  if flag(debug)
+    ghc-options: -g -dcore-lint -debug
+    cpp-options: -DDEBUG
+  else
+    ghc-options: -O2 -threaded
   default-language: Haskell2010
 
 test-suite lsc-test
@@ -174,7 +201,7 @@ test-suite lsc-test
       Paths_lsc
   hs-source-dirs:
       test
-  ghc-options: -Wall -O -threaded -rtsopts -with-rtsopts=-N
+  ghc-options: -Wall -rtsopts
   build-depends:
       SafeSemaphore
     , aeson
@@ -182,7 +209,6 @@ test-suite lsc-test
     , arrowgant
     , async
     , base >=4.7 && <5
-    , base16-bytestring
     , blaze-svg
     , blif
     , bytestring
@@ -192,7 +218,7 @@ test-suite lsc-test
     , cond
     , containers
     , data-default
-    , data-default-class
+    , deepseq
     , def
     , entropy
     , file-embed
@@ -213,8 +239,9 @@ test-suite lsc-test
     , parallel
     , parsec
     , parsec-numbers
+    , pointed
+    , pretty-terminal
     , primitive
-    , random
     , split
     , tasty
     , tasty-hunit
@@ -222,9 +249,13 @@ test-suite lsc-test
     , template-haskell
     , text
     , time
-    , transformers
     , unordered-containers
     , vector
     , vector-algorithms
     , verilog
+  if flag(debug)
+    ghc-options: -g -dcore-lint -debug
+    cpp-options: -DDEBUG
+  else
+    ghc-options: -O -threaded
   default-language: Haskell2010

@@ -6,7 +6,6 @@ module LSC.Legalize where
 import Control.Applicative
 import Control.Lens
 import Control.Monad
-import Control.Monad.IO.Class
 import Control.Monad.Loops
 import Control.Monad.ST
 import Control.Monad.Writer
@@ -29,6 +28,7 @@ import qualified Data.Vector.Unboxed.Mutable as ST
 import Prelude hiding (read, lookup)
 import Text.Printf
 
+import LSC.Component
 import LSC.NetGraph
 import LSC.Types
 
@@ -37,15 +37,17 @@ import LSC.Types
 legalizeRows :: NetGraph -> LSC NetGraph
 legalizeRows top = do
 
-    assert "legalizeRows: gate vector indices do not match gate numbers"
+    info ["Row legalization"]
+
+    assume "legalizeRows: gate vector indices do not match gate numbers"
         $ and $ imap (==) $ view number <$> view gates top
 
-    segments <- liftIO . stToIO
+    segments <- realWorldST
         $ sequence
         $ rowLegalization top <$> getRows (top ^. gates)
 
     pure $ top &~ do
-        gates %= flip update (liftA2 (,) (view number) id <$> Vector.concat segments)
+        gates %= flip update (liftA2 (,) (view number) id <$> fold segments)
 
 
 rowLegalization :: NetGraph -> Vector Gate -> ST s (Vector Gate)
@@ -61,24 +63,24 @@ rowLegalization _ gs
     = pure gs
 rowLegalization top gs = do
 
-    assert "rowLegalization: row is unsorted!"
+    assume "rowLegalization: row is unsorted!"
         $ all (\ (g, h) -> g ^. space . l <= h ^. space . l) $ Vector.zip gs (Vector.tail gs)
 
-    let y = gs ! 0 ^. space . b
+    let y = Vector.head gs ^. space . b
 
-    assert "rowLegalization: row is not aligned!" $ all (\ g -> g ^. space . b == y) gs
+    assume "rowLegalization: row is not aligned!" $ all (\ g -> g ^. space . b == y) gs
 
     let row = top ^. supercell . rows ^? ix y
 
-    assert "rowLegalization: no corresponding row found!" $ isJust row
+    assume "rowLegalization: no corresponding row found!" $ isJust row
 
     let res = maybe 1 (view granularity) row
-        off = pred $ maybe 1 (view l) row `div` res
+        off = maybe 0 (subtract res . view l) row `div` res
 
     let w = (`div` res) . width . view space <$> gs
-        x = (flip (-) off) . (`div` res) . view (space . l) <$> gs
+        x = subtract off . (`div` res) . view (space . l) <$> gs
 
-    let n = succ $ maybe 0 (view cardinality) row
+    let n = maybe 1 (succ . view cardinality) row
         m = length gs
 
     let count = succ n * succ m
@@ -133,9 +135,9 @@ rowLegalization top gs = do
 
     let shortestPath = takeWhile (> 0) (iterate (Unbox.unsafeIndex predecessor) target)
 
-    let diagonal = tail $ fmap head $ groupBy (on (==) fst) $ site <$> shortestPath
+    let diagonal = tail . map head . groupBy (on (==) fst) . map site $ shortestPath
 
-    assert "rowLegalization: cannot legalize row!" $ not $ null diagonal
+    assume "rowLegalization: cannot legalize row!" $ not $ null diagonal
 
     pure $ unsafeUpd gs
       [ (i, gs ! i & space %~ relocateL ((pos + off) * res))
@@ -143,7 +145,8 @@ rowLegalization top gs = do
       ]
 
 
-
+-- | This is here to facilitate the writing of reference implementations
+--
 topologicalShortestPath :: (Edge -> Int) -> Graph -> Int -> ST s [Int]
 topologicalShortestPath weight graph target = do
 
@@ -176,14 +179,16 @@ topologicalShortestPath weight graph target = do
 juggleCells :: NetGraph -> LSC NetGraph
 juggleCells top = do
 
-    assert "juggleCells: gate vector indices do not match gate numbers"
+    info ["Row juggling"]
+
+    assume "juggleCells: gate vector indices do not match gate numbers"
         $ and $ imap (==) $ view number <$> view gates top
 
     debugRowCapacities top
 
     rc <- view rowCapacity <$> environment
 
-    result <- liftIO $ stToIO $ rowJuggling rc top
+    result <- realWorldST $ rowJuggling rc top
 
     debugRowCapacities result
 
@@ -245,7 +250,7 @@ rowJuggling rc top = do
           k <- readSTRef bestRow
           c <- readSTRef bestCell
 
-          assert "rowJuggling: no space left to juggle - increase row capacity!"
+          assume "rowJuggling: no space left to juggle - increase row capacity!"
               $ k > minBound
 
           modify matrix (views number delete c) i

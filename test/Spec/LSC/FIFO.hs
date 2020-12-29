@@ -8,6 +8,7 @@ module Spec.LSC.FIFO
   ) where
 
 import Data.Maybe
+import Data.Foldable
 
 import Test.Tasty
 import Test.Tasty.HUnit
@@ -24,11 +25,13 @@ fifo = testGroup "FIFO"
       $ replicate 100
       $ do
         n <- generate $ choose (1000, 10000)
+        k <- generate $ choose (2, 20)
         v <- generate $ vector @Int n
         let q = foldl (flip enqueue) mempty v
         assertEqual "first element" (listToMaybe v) (fst $ dequeue q)
         assertEqual "sum" (sum v) (sum q)
         assertEqual "maximum" (maximum v) (maximum q)
         assertEqual "length" (length v) (length q)
+        assertEqual "fmap" (fmap (* k) v) (toList $ fmap (* k) q)
   ]
 

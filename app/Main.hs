@@ -5,13 +5,15 @@
 
 module Main where
 
+import Control.Concurrent
 import Control.Lens
 import Control.Monad
-import Control.Concurrent
 import Data.Aeson (encode, eitherDecode)
 import Data.ByteString.Builder (toLazyByteString)
 import qualified Data.ByteString.Lazy as Lazy
 import Data.Default
+import Data.List (intersperse)
+import Data.Maybe
 import Data.Text.Encoding (encodeUtf8Builder)
 import qualified Data.Text.IO as Text
 import System.Console.GetOpt
@@ -27,6 +29,7 @@ import LSC.LEF     (parseLEF, fromLEF)
 import LSC.DEF     (printDEF, toDEF, fromDEF, parseDEF)
 
 import LSC
+import LSC.Logger
 import LSC.NetGraph
 import LSC.SVG
 import LSC.Types
@@ -40,8 +43,6 @@ main = program
 
 program :: IO ()
 program = do
-
-  hPutStrLn stderr $ versionString
 
   (flags, inputs) <- compilerFlags =<< getArgs
   opts <- compilerOpts flags
@@ -61,38 +62,37 @@ program = do
   when (arg Lef)
     $ do
 
-      tech <- either (fail . show) (pure . fromLEF) . parseLEF =<< Text.readFile (head $ lst Lef)
+      tech <- either (die . show) (pure . freeze . fromLEF) . parseLEF =<< Text.readFile (head $ lst Lef)
 
-      let scale = freeze tech ^. scaleFactor
+      let scale = tech ^. scaleFactor
 
       netlist <- readNetGraph inputs
 
       when (arg DetailedPlacement || arg GlobalRouting)
         $ do
           circuit2d <- evalLSC opts tech $ compiler stage23 netlist
-          printStdout scale circuit2d $ lst Output
+          last $ printStdout scale circuit2d <$> lst Output
           exitSuccess
 
       when (arg GlobalRouting)
         $ do
           circuit2d <- evalLSC opts tech $ compiler stage3 netlist
-          printStdout scale circuit2d $ lst Output
+          last $ printStdout scale circuit2d <$> lst Output
           exitSuccess
 
       when (arg Legalize)
         $ do
           circuit2d <- evalLSC opts tech $ compiler stage0 netlist
-          printStdout scale circuit2d $ lst Output
+          last $ printStdout scale circuit2d <$> lst Output
           exitSuccess
 
       when (arg LayoutEstimation)
         $ do
-          circuit2d <- evalLSC opts tech $ compiler estimate . rebuildEdges =<< gateGeometry netlist
-          printStdout scale circuit2d $ lst Output
+          evalLSC opts tech $ estimations . rebuildEdges =<< gateGeometry netlist
           exitSuccess
 
       circuit2d <- evalLSC opts tech $ gateGeometry netlist
-      printStdout scale circuit2d $ lst Output
+      last $ printStdout scale circuit2d <$> lst Output
       exitSuccess
 
 
@@ -106,14 +106,14 @@ readNetGraph inputs = case splitExtension <$> inputs of
             ".blif" -> either (die . show) pure $ fromBLIF <$> parseBLIF file
             ".def"  -> either (die . show) pure $ fromDEF <$> parseDEF file
             ".json" -> either (die . show) pure $ eitherDecode $ toLazyByteString $ encodeUtf8Builder file
-            ""      -> die $ "missing file extension: " ++ path
-            _       -> die $ "unknown file extension: " ++ extension
+            ""      -> die $ unwords ["missing file extension:", path]
+            _       -> die $ unwords ["unknown file extension:", extension]
 
 
 
-printStdout :: Double -> NetGraph -> [FlagValue] -> IO ()
-printStdout scale ckt ("def" : _) = printDEF $ toDEF scale ckt
-printStdout scale ckt ("svg" : _) = plotStdout scale ckt
+printStdout :: Double -> NetGraph -> String -> IO ()
+printStdout scale ckt "def" = printDEF $ toDEF scale ckt
+printStdout scale ckt "svg" = plotStdout scale ckt
 printStdout _ ckt _ = Lazy.putStr $ encode ckt
 
 
@@ -122,8 +122,10 @@ type Flag = (FlagKey, FlagValue)
 
 data FlagKey
   = Help
-  | Debug
+  | Verbose
+  | LogLevel
   | Lef
+  | Seed
   | Legalize
   | RowCapacity
   | GlobalRouting
@@ -132,21 +134,27 @@ data FlagKey
   | Output
   | Visuals
   | Iterations
-  | Cores
   deriving Eq
 
 type FlagValue = String
 
 
 header :: String
-header = "Usage: lsc [arg...] input"
+header = unlines
+  [ versionString
+  , "Usage: lsc [arg...] input"
+  ]
+
 
 args :: [OptDescr Flag]
 args =
-  [ Option ['v', 'd'] ["verbose"]               (NoArg (Debug, ""))
-    "verbose output on stderr"
-  , Option ['h']      ["help"]                  (NoArg (Help, ""))
+  [ Option ['h']      ["help"]                  (NoArg (Help, ""))
     "print usage"
+
+  , Option ['v', 'd'] ["verbose"]               (NoArg (Verbose, ""))
+    "verbose output on stderr"
+  , Option []         ["log-level"]             (ReqArg (LogLevel, ) "0,1,2,3,4")
+    "set log level"
 
   , Option ['l']      ["lef"]                   (ReqArg (Lef, ) "FILE")
     "LEF file"
@@ -166,14 +174,22 @@ args =
 --    , Option ['g']      ["visuals"]    (NoArg  (Visuals, mempty))   "show visuals"
   , Option ['i']      ["iterations"]            (ReqArg (Iterations, ) "n")
     "iterations"
-  , Option ['j']      ["cores"]                 (ReqArg (Cores, ) "count")
-    "limit number of cores"
 
-  , Option ['o']      ["output"]                (ReqArg (Output, ) "svg,def,magic")
+  , Option ['s']      ["seed"]                  (NoArg (Seed, ""))
+    "seed from stdin"
+
+  , Option ['o']      ["output"]    (ReqArg (Output, ) (join . intersperse "," . take 3 $ outputFormats))
     "output format"
 
   ]
 
+
+outputFormats :: [String]
+outputFormats =
+  [ "svg"
+  , "def"
+  , "json"
+  ]
 
 
 compilerOpts :: [Flag] -> IO CompilerOpts
@@ -181,20 +197,27 @@ compilerOpts flags = do
 
     let lst x = [ v | (k, v) <- flags, k == x ]
 
-    n <- pred . max 1 . fromIntegral <$> getNumCapabilities
+    let known = last $ True : map (`elem` outputFormats) (lst Output)
+    unless known $ die $ unwords ["unknown format:", head $ lst Output]
 
     c <- last $ pure 1 : (either (die . show) pure . (parse fractional "--row-capacity") <$> lst RowCapacity)
     i <- last $ pure 3 : (either (die . show) pure . (parse decimal "-i") <$> lst Iterations)
-    j <- last $ pure n : (either (die . show) pure . (parse decimal "-j") <$> lst Cores)
 
-    ws <- createWorkers j
+    let ks = either (die . show) (pure . toEnum) . (parse decimal "--log-level") <$> lst LogLevel
+    k <- last $ pure Warning : (pure Debug <$ lst Verbose) ++ ks
+
+    j <- rtsWorkers
+
+    n <- getNumCapabilities
+    unless (n < 2 || null (lst Seed))
+      $ die "cannot seed from file descriptor in concurrent setting"
 
     pure $ def &~ do
-      enableVisuals .= not (null $ lst Visuals)
-      enableDebug .= not (null $ lst Debug)
+      logLevel .= k
       rowCapacity .= c
       iterations .= i
-      workers .= ws
+      workers .= j
+      seedHandle .= listToMaybe (stdin <$ lst Seed)
 
 
 

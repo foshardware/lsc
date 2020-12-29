@@ -47,7 +47,7 @@ dualCore n = do
   ws <- createWorkers 2
   let inc = local_ $ incrementWithDelay (2*n) counter
       act = fst ^<< inc &&& inc &&& inc &&& inc &&& inc &&& inc
-      tech = thaw def
+      tech = def
       opts = def & workers .~ ws
   _ <- forkIO $ runLSC opts tech $ compiler act mempty
   threadDelay (3*n)
@@ -64,7 +64,7 @@ quadCore n = do
   ws <- createWorkers 4
   let inc = local_ $ incrementWithDelay (2*n) counter
       act = fst . snd ^<< (inc &&& inc) &&& inc &&& (inc &&& inc &&& inc)
-      tech = thaw def
+      tech = def
       opts = def & workers .~ ws
   _ <- forkIO $ runLSC opts tech $ compiler act mempty
   threadDelay (3*n)
@@ -81,7 +81,7 @@ stream n = do
   ws <- createWorkers 4
   let inc = local_ $ incrementWithDelay (2*n) counter
       act = select inc
-      tech = thaw def
+      tech = def
       opts = def & workers .~ ws
   _ <- forkIO $ runLSC opts tech $ () <$ compiler act (replicate 8 ())
   threadDelay (3*n)
@@ -100,7 +100,7 @@ remoteProcess n = do
   let inc1 = local_ $ incrementWithDelay (2*n) counter1
       inc2 = remote_ $ incrementWithDelay (2*n) counter2
       act = fst ^<< inc1 &&& inc1 &&& inc2 &&& inc1 &&& inc2 &&& inc1 &&& inc1 &&& inc1 &&& inc1 &&& inc1 &&& inc1
-      tech = thaw def
+      tech = def
       opts = def & workers .~ ws
   _ <- forkIO $ runLSC opts tech $ () <$ compiler act mempty
   threadDelay (7*n)
@@ -116,7 +116,7 @@ raceCondition n = do
   ws <- createWorkers 4
   let inc k = local_ $ incrementWithDelay (2*k*n) counter
       act = inc 1 \\\ inc 2 \\\ inc 3 \\\ inc 4 \\\ inc 5 \\\ inc 6
-      tech = thaw def
+      tech = def
       opts = def & workers .~ ws
   runLSC opts tech $ compiler act mempty
   result1 <- readMVar counter

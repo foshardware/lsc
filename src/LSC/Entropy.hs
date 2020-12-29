@@ -9,22 +9,28 @@ module LSC.Entropy
   ) where
 
 import Control.Monad.Primitive
-import Data.Foldable
+import Data.ByteString hiding (replicate)
 import Data.Serialize.Get
 import Data.Vector
 import Data.Vector.Mutable (unsafeSwap)
 import Data.Word
-import Prelude hiding (replicate, sequence)
+import Prelude hiding (replicate, sequence_)
 
 import System.Entropy
+import System.IO
 import System.Random.MWC
 
 
 
-nonDeterministic :: PrimBase m => (Gen (PrimState m) -> m a) -> IO a
-nonDeterministic action = do
+nonDeterministic :: PrimBase m => Maybe Handle -> (Gen (PrimState m) -> m a) -> IO a
+nonDeterministic Nothing action = do
     v <- entropyVector32 258
     unsafePrimToIO $ action =<< initialize v
+nonDeterministic (Just handle) action = do
+    seed <- hGet handle $ 258 * 4
+    v <- either fail pure $ replicateM 258 getWord32be `runGet` seed
+    unsafePrimToIO $ action =<< initialize v
+{-# INLINABLE nonDeterministic #-}
 
 
 type Permutation = Vector Int
@@ -49,20 +55,21 @@ type Permutation = Vector Int
 --
 randomPermutation :: PrimBase m => Int -> Gen (PrimState m) -> m Permutation
 randomPermutation n gen = do
-  v <- unsafeThaw $ generate n id
-  for_ [0 .. n - 2] $ \ i -> unsafeSwap v i =<< uniformR (i, n - 1) gen
-  unsafeFreeze v
+    v <- unsafeThaw $ generate n id
+    sequence_ $ generate (n - 1) $ \ i -> unsafeSwap v i =<< uniformR (i, n - 1) gen
+    unsafeFreeze v
+{-# INLINABLE randomPermutation #-}
 
 
 
 entropyVector32 :: Int -> IO (Vector Word32)
 entropyVector32 n = do
-    bytes <- getEntropy $ 4 * n
-    either error pure $ sequence (replicate n getWord32be) `runGet` bytes
+    seed <- getEntropy $ 4 * n
+    either fail pure $ replicateM n getWord32be `runGet` seed
 
 
 entropyVectorInt :: Int -> IO (Vector Int)
 entropyVectorInt n = do
-    bytes <- getEntropy $ 8 * n
-    either error pure $ sequence (replicate n $ fromIntegral <$> getInt64be) `runGet` bytes
+    seed <- getEntropy $ 8 * n
+    either fail (pure . fmap fromIntegral) $ replicateM n getInt64be `runGet` seed
 

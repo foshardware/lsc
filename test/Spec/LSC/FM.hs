@@ -88,11 +88,11 @@ fmRandomPartition = do
     (v, e) <- arbitraryHypergraph 1000
 
     xs <- generate $ vectorOf 20 $ choose (0, length v - 1)
-    Bisect p q <- nonDeterministic $ runFMWithGen $ bipartitionRandom (v, e) (Lock (fromList xs) mempty)
+    Bisect p q <- nonDeterministic Nothing $ runFMWithGen $ bipartitionRandom (v, e) (Lock (fromList xs) mempty)
     assertEqual "duplicates" (size p + size q) (length v)
 
     ys <- generate $ vectorOf 20 $ choose (0, length v - 1)
-    Bisect p1 q1 <- nonDeterministic $ runFMWithGen $ bipartitionRandom (v, e) (Lock mempty (fromList ys))
+    Bisect p1 q1 <- nonDeterministic Nothing $ runFMWithGen $ bipartitionRandom (v, e) (Lock mempty (fromList ys))
     assertEqual "duplicates" (size p1 + size q1) (length v)
 
 
@@ -101,7 +101,7 @@ fmRandomPartition = do
 fmMulti :: Int -> (V, E) -> IO ()
 fmMulti cut h = do
   let predicate p = cutSize h p <= cut
-  p <- iterateUntil predicate $ nonDeterministic $ runFMWithGen
+  p <- iterateUntil predicate $ nonDeterministic Nothing $ runFMWithGen
     $ fmMultiLevel h mempty coarseningThreshold matchingRatio
   assertBool "unexpected cut size" $ cutSize h p <= cut
 
@@ -110,12 +110,12 @@ fmMulti cut h = do
 fmMatch :: IO ()
 fmMatch = do
   (v, e) <- arbitraryHypergraph 10000
-  (clustering, _) <- nonDeterministic $ runFMWithGen $ do
+  (clustering, _) <- nonDeterministic Nothing $ runFMWithGen $ do
       u <- st . randomPermutation (length v) =<< prng
       st $ match (v, e) mempty matchingRatio u
 
   assertEqual "length does not match" (length v) (sum $ size <$> clustering)
-  assertBool "elements do not match" $ foldMap id clustering == fromAscList [0 .. length v - 1]
+  assertBool "elements do not match" $ fold clustering == fromAscList [0 .. length v - 1]
   assertBool "clustering" $ length clustering <= length v
 
 
@@ -124,13 +124,12 @@ fmRebalance :: IO ()
 fmRebalance = do
   let v = 10000
   pivot <- generate $ choose (0, v)
-  (p, q) <- nonDeterministic $ runFMWithGen $ do
-      u <- st . randomPermutation v =<< prng
-      let p = Bisect
-            (fromList [u!i | i <- [0 .. pivot-1]])
-            (fromList [u!i | i <- [pivot .. v-1]])
-      (p, ) <$> rebalance p
-  let it = show (bisectBalance p, bisectBalance q)
+  q <- nonDeterministic Nothing $ runFMWithGen $ do
+    u <- st . randomPermutation v =<< prng
+    rebalance $ Bisect
+      (fromList [u!i | i <- [0 .. pivot-1]])
+      (fromList [u!i | i <- [pivot .. v-1]])
+  let it = show v 
   assertBool it $ bisectBalance q % v < 5%8
 
 

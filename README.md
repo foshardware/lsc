@@ -42,6 +42,10 @@ SPDX-License-Identifier: GPL-3.0-or-later
 
 `lsc -l sample/osu035.lef --output=svg sample/map9v3.def > result.svg`  
 
+### Set number of capabilities
+
+`lsc +RTS -N8 -RTS`  
+
 
 ## Stacktraces
 
@@ -51,6 +55,11 @@ SPDX-License-Identifier: GPL-3.0-or-later
 ## Profiling
 
 `stack build --profile && stack exec --profile -- lsc +RTS -p -hc -RTS`  
+
+
+## Debug build
+
+`stack build --flag lsc:debug && stack exec -- lsc`  
 
 
 ## Tests
