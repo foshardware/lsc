@@ -15,13 +15,5 @@ versionString = $(packageVariable package) ++ ", " ++ commitString
 
 
 commitString :: String
-commitString = $(embedStringFile ".status")
-
-
-gitHead :: String
-gitHead = $(embedStringFile ".git/HEAD")
-
-
-gitRefsMaster :: String
-gitRefsMaster = $(embedStringFile ".git/refs/heads/master")
+commitString = $(embedStringFile =<< makeRelativeToProject ".status")
 
