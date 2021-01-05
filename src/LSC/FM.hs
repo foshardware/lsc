@@ -15,7 +15,7 @@ module LSC.FM where
 import Data.Semigroup (Endo(..))
 #else
 import Data.Semigroup
-import Data.Monoid
+import Data.Monoid hiding ((<>))
 #endif
 
 import Control.Conditional (whenM)
