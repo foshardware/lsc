@@ -22,7 +22,7 @@ status = $(strToExp =<< makeRelativeToProject ".status")
 
 main :: IO ()
 main = do
-  checkGitTree `catch` \ (SomeException e) -> hPutStrLn stderr (show e)
+  checkGitTree
   defaultMain
 
 
@@ -33,7 +33,9 @@ checkGitTree = do
   git ["status", "--short"] $ \ files -> do
     if null files
     then git ["rev-parse", "HEAD"] $ \ commit -> do
-         writeFile status . ("commit " ++) . take 40 $ commit
+      if null commit
+      then pure ()
+      else writeFile status . ("commit " ++) . take 40 $ commit
     else writeFile status "dirty"
 
 

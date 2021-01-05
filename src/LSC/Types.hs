@@ -1,6 +1,7 @@
 -- Copyright 2018 - Andreas Westerwick <westerwick@pconas.de>
 -- SPDX-License-Identifier: GPL-3.0-or-later
 
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE FlexibleContexts #-}
@@ -42,12 +43,19 @@ import Data.Vector (Vector)
 
 import Data.Aeson (encode, FromJSON, ToJSON)
 
-import Control.Monad
 import Control.Monad.IO.Class
 import Control.Monad.Codensity
 import Control.Monad.Morph
+#if MIN_VERSION_base(4,10,0)
+import Control.Monad hiding (fail)
+import Control.Monad.Fail
+import Control.Monad.Reader hiding (fail)
+import Control.Monad.State hiding (fail)
+#else
+import Control.Monad
 import Control.Monad.Reader
 import Control.Monad.State
+#endif
 
 import System.Console.Concurrent
 
@@ -83,6 +91,10 @@ instance Semigroup AbstractGate where
 
 instance Monoid AbstractGate where
   mempty = AbstractGate mempty mempty
+#if MIN_VERSION_base(4,11,0)
+#else
+  mappend = (<>)
+#endif
 
 
 data LogicPort = LogicPort
@@ -139,6 +151,10 @@ instance Semigroup Net where
 
 instance Monoid Net where
   mempty = Net "" mempty mempty mempty
+#if MIN_VERSION_base(4,11,0)
+#else
+  mappend = (<>)
+#endif
 
 
 
@@ -399,10 +415,9 @@ instance MonadTrans LST where
 instance MonadIO m => MonadIO (LST m) where
   liftIO = LST . liftIO
 
-
+#if MIN_VERSION_base(4,10,0)
 instance MonadIO m => MonadFail (LST m) where
   fail = catchFail . Fail
-
 
 newtype Fail = Fail { unFail :: String }
   deriving Exception
@@ -414,9 +429,12 @@ instance Show Fail where
 catchFail :: MonadIO m => Fail -> LST m a
 catchFail = liftIO . throwIO
 
-
 assume :: MonadFail m => String -> Bool -> m ()
 assume = flip unless . fail
+#else
+assume :: Monad m => String -> Bool -> m ()
+assume = flip unless . fail
+#endif
 
 
 instance (MonadIO m, Show a) => Trace (LST m) a where
@@ -539,3 +557,9 @@ ifoldl' :: Foldable f => (Int -> b -> a -> b) -> b -> f a -> b
 ifoldl' f y xs = foldl' (\ g x !i -> f i (g (i - 1)) x) (const y) xs (length xs - 1)
 {-# INLINE ifoldl' #-}
 
+#if MIN_VERSION_base(4,13,0)
+#else
+foldMap' :: (Foldable f, Monoid m) => (a -> m) -> f a -> m
+foldMap' f = foldl' (\ acc a -> acc `mappend` f a) mempty
+{-# INLINE foldMap' #-}
+#endif

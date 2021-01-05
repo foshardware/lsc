@@ -1,6 +1,7 @@
 -- Copyright 2018 - Andreas Westerwick <westerwick@pconas.de>
 -- SPDX-License-Identifier: GPL-3.0-or-later
 
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE FunctionalDependencies #-}
@@ -9,6 +10,11 @@
 {-# LANGUAGE DeriveFunctor, DeriveFoldable, DeriveTraversable #-}
 
 module LSC.Component where
+
+#if MIN_VERSION_base(4,10,0)
+#else
+import Data.Semigroup
+#endif
 
 import Control.Applicative
 import Control.DeepSeq
@@ -94,6 +100,10 @@ instance Semigroup Orientation where
 
 instance Monoid Orientation where
   mempty = N
+#if MIN_VERSION_base(4,11,0)
+#else
+  mappend = (<>)
+#endif
 
 
 
@@ -123,6 +133,10 @@ instance Ord a => Semigroup (Component l a) where
 
 instance (Ord a, Bounded a) => Monoid (Component l a) where
     mempty = getBoundingBox mempty
+#if MIN_VERSION_base(4,11,0)
+#else
+    mappend = (<>)
+#endif
 
 
 newtype BoundingBox l a = BoundingBox { getBoundingBox :: Component l a }
@@ -133,6 +147,10 @@ instance Ord a => Semigroup (BoundingBox l a) where
 
 instance (Ord a, Bounded a) => Monoid (BoundingBox l a) where
     mempty = BoundingBox (rect maxBound maxBound minBound minBound)
+#if MIN_VERSION_base(4,11,0)
+#else
+    mappend = (<>)
+#endif
 
 
 newtype Overlap l a = Overlap { getOverlap :: Component l a }
@@ -143,6 +161,10 @@ instance Ord a => Semigroup (Overlap l a) where
 
 instance (Ord a, Bounded a) => Monoid (Overlap l a) where
     mempty = Overlap (rect minBound minBound maxBound maxBound)
+#if MIN_VERSION_base(4,11,0)
+#else
+    mappend = (<>)
+#endif
 
 
 data Line a = Line (a, a) (a, a)

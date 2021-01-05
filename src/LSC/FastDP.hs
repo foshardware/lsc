@@ -1,10 +1,16 @@
 -- Copyright 2018 - Andreas Westerwick <westerwick@pconas.de>
 -- SPDX-License-Identifier: GPL-3.0-or-later
 
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TupleSections #-}
 
 module LSC.FastDP where
+
+#if MIN_VERSION_base(4,10,0)
+#else
+import Data.Semigroup
+#endif
 
 import Control.Applicative
 import Control.Lens

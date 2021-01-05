@@ -23,7 +23,7 @@ source-repository head
 custom-setup
   setup-depends:
       Cabal
-    , base >=4.7 && <5
+    , base >=4.9.1 && <5
     , file-embed
     , filepath
     , process
@@ -70,7 +70,7 @@ library
     , array
     , arrowgant
     , async
-    , base >=4.7 && <5
+    , base >=4.9.1 && <5
     , blaze-svg
     , blif
     , bytestring
@@ -78,7 +78,7 @@ library
     , cereal
     , concurrent-output
     , cond
-    , containers
+    , containers >=0.5.8
     , data-default
     , deepseq
     , def
@@ -134,7 +134,7 @@ executable lsc
     , array
     , arrowgant
     , async
-    , base >=4.7 && <5
+    , base >=4.9.1 && <5
     , blaze-svg
     , blif
     , bytestring
@@ -142,7 +142,7 @@ executable lsc
     , cereal
     , concurrent-output
     , cond
-    , containers
+    , containers >=0.5.8
     , data-default
     , deepseq
     , def
@@ -210,7 +210,7 @@ test-suite lsc-test
     , array
     , arrowgant
     , async
-    , base >=4.7 && <5
+    , base >=4.9.1 && <5
     , blaze-svg
     , blif
     , bytestring
@@ -218,7 +218,7 @@ test-suite lsc-test
     , cereal
     , concurrent-output
     , cond
-    , containers
+    , containers >=0.5.8
     , data-default
     , deepseq
     , def

@@ -1,6 +1,7 @@
 -- Copyright 2018 - Andreas Westerwick <westerwick@pconas.de>
 -- SPDX-License-Identifier: GPL-3.0-or-later
 
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE DeriveFunctor #-}
 
 module LSC.FIFO
@@ -8,6 +9,11 @@ module LSC.FIFO
     , enqueue, dequeue, deq
     , fromList
     ) where
+
+#if MIN_VERSION_base(4,10,0)
+#else
+import Data.Semigroup
+#endif
 
 import Control.Applicative
 import Data.Foldable
@@ -64,10 +70,16 @@ instance Foldable FIFO where
     foldr g s (FIFO _ _ fs rs) = foldr g s (fs ++ reverse rs)
     foldl g s (FIFO _ _ fs rs) = foldl g s (fs ++ reverse rs)
 
+#if MIN_VERSION_base(4,10,0)
     foldMap g (FIFO _ _ fs rs) = foldMap g fs <> foldMap g (reverse rs)
+#else
+    foldMap g (FIFO _ _ fs rs) = foldMap g fs `mappend` foldMap g (reverse rs)
+#endif
 
     foldl' g s (FIFO _ _ fs rs) = foldl' g s (fs ++ reverse rs)
+#if MIN_VERSION_base(4,13,0)
     foldMap' g (FIFO _ _ fs rs) = case foldMap' g fs <> foldMap' g (reverse rs) of m -> m
+#endif
 
     toList (FIFO _ _ fs rs) = fs ++ reverse rs
 
@@ -93,4 +105,8 @@ instance Semigroup (FIFO a) where
 
 instance Monoid (FIFO a) where
     mempty = empty
+#if MIN_VERSION_base(4,11,0)
+#else
+    mappend = (<>)
+#endif
 
