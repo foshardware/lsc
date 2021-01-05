@@ -4,6 +4,7 @@
 {-# LANGUAGE TemplateHaskell #-}
 
 import Control.Exception
+import Control.Monad
 
 import Data.FileEmbed
 
@@ -33,9 +34,8 @@ checkGitTree = do
   git ["status", "--short"] $ \ files -> do
     if null files
     then git ["rev-parse", "HEAD"] $ \ commit -> do
-      if null commit
-      then pure ()
-      else writeFile status . ("commit " ++) . take 40 $ commit
+      unless (length (take 40 commit) < 4)
+        $ writeFile status . ("commit " ++) $ take 40 commit
     else writeFile status "dirty"
 
 
