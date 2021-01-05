@@ -14,10 +14,8 @@ extra-deps:
   commit: f9f4ed5cc1b46ea23a346e4f9c2c591a0d585a8b
 - git: https://github.com/foshardware/blif.git
   commit: a2c8a1292569b0721fa24cd03a2850fd38016011
-- git: https://github.com/foshardware/def.git
-  commit: 23839751fe879c305f6b4af470c006bd0ea4d36a
-- git: https://github.com/foshardware/lef.git
-  commit: cf367ad8d07f2bf3defbba5e31217768867f78fb
+- git: https://github.com/foshardware/lefdef.git
+  commit: c711a9a309aac34814542d57def2d01f51089e82
 - arrows-0.4.4.2@sha256:a260222b766da922657e302aa7c0409451913e1e503798a47a213a61ba382460
 - Stream-0.4.7.2@sha256:ed78165aa34c4e23dc53c9072f8715d414a585037f2145ea0eb2b38300354c53
 - lazysmallcheck-0.6@sha256:dac7a1e4877681f1260309e863e896674dd6efc1159897b7945893e693f2a6bc

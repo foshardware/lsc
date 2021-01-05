@@ -42,7 +42,6 @@ dependencies:
 - cond
 - data-default
 - deepseq
-- def
 - entropy
 - file-embed
 - filepath
@@ -50,7 +49,7 @@ dependencies:
 - hashable
 - hashtables
 - kan-extensions
-- lef
+- lefdef
 - lens
 - linear
 - matrix

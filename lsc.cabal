@@ -81,7 +81,6 @@ library
     , containers >=0.5.8
     , data-default
     , deepseq
-    , def
     , entropy
     , file-embed
     , filepath
@@ -89,7 +88,7 @@ library
     , hashable
     , hashtables
     , kan-extensions
-    , lef
+    , lefdef
     , lens
     , linear
     , matrix
@@ -145,7 +144,6 @@ executable lsc
     , containers >=0.5.8
     , data-default
     , deepseq
-    , def
     , entropy
     , file-embed
     , filepath
@@ -153,7 +151,7 @@ executable lsc
     , hashable
     , hashtables
     , kan-extensions
-    , lef
+    , lefdef
     , lens
     , linear
     , lsc
@@ -221,7 +219,6 @@ test-suite lsc-test
     , containers >=0.5.8
     , data-default
     , deepseq
-    , def
     , entropy
     , file-embed
     , filepath
@@ -229,7 +226,7 @@ test-suite lsc-test
     , hashable
     , hashtables
     , kan-extensions
-    , lef
+    , lefdef
     , lens
     , linear
     , lsc
