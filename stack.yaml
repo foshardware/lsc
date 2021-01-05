@@ -9,13 +9,13 @@ extra-deps:
 - git: https://github.com/foshardware/verilog.git
   commit: 8415f16e62e7eb3e4d2269e0838ac60ff34e9605
 - git: https://github.com/foshardware/arrowgant.git
-  commit: d343428f7f81419adf8e2045919f41c51e835b59
+  commit: 2ce7fbab9f2dd2af00c12ffec61cee190c6d81ef
 - git: https://github.com/foshardware/firrtl.git
   commit: f9f4ed5cc1b46ea23a346e4f9c2c591a0d585a8b
 - git: https://github.com/foshardware/blif.git
-  commit: 0af63bc5bcb9b63740a73e87ce944c8f725e6b15
+  commit: a2c8a1292569b0721fa24cd03a2850fd38016011
 - git: https://github.com/foshardware/def.git
-  commit: c05f46555d5bd63198a416dd3c1372ca7c016d9e
+  commit: 23839751fe879c305f6b4af470c006bd0ea4d36a
 - git: https://github.com/foshardware/lef.git
   commit: cf367ad8d07f2bf3defbba5e31217768867f78fb
 - arrows-0.4.4.2@sha256:a260222b766da922657e302aa7c0409451913e1e503798a47a213a61ba382460
