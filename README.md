@@ -9,12 +9,7 @@ SPDX-License-Identifier: GPL-3.0-or-later
 
 ### Build dependencies
 
-- [stack](https://www.stackage.org/)
-
-
-### Runtime dependencies
-
-- [yices-smt2](http://yices.csl.sri.com/)
+- [stack](https://docs.haskellstack.org/en/stable/install_and_upgrade/)
 
 
 ## Installation
@@ -72,6 +67,10 @@ Pass the argument `-j4` for enabling concurrency tests with 4 jobs to run simult
 
 `stack test --test-arguments -j4`
 
+## Licensing
+
+This program is available as open source under the terms of the GPL-3.0-or-later. However, some elements are being licensed under CC0-1.0. For accurate information, please check individual files.
+
 ## References
 
 ### LSC.FM
@@ -94,7 +93,4 @@ Pass the argument `-j4` for enabling concurrency tests with 4 jobs to run simult
 ### LSC.UnionFind
 
 - Tarjan (1975): Efficiency of a Good But Not Linear Set Union Algorithm [10.1145/321879.321884](https://doi.org/10.1145/321879.321884)
-
-## Licensing:
-This program is available as open source under the terms of the GPL-3.0-or-later. However, some elements are being licensed under CC0-1.0. For accurate information, please check individual files.
 

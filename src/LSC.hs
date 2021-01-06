@@ -196,8 +196,8 @@ strategy0 n = foldl (>>>) id . replicate n
 
 strategy1 :: (a -> a -> Ordering) -> Strategy a
 strategy1 f a = proc x -> do
-    it <- view iterations ^<< remote_ environment -< ()
-    minimumBy f ^<< collect a -< (it, pure x)
+    i <- view iterations ^<< remote_ environment -< ()
+    minimumBy f ^<< iterator i a -<< [x]
 
 
 strategy2 :: (a -> a -> Ordering) -> Strategy a
@@ -209,11 +209,16 @@ strategy2 f a = proc x -> do
 
 
 
-collect :: ArrowChoice a => a b b -> a (Word, [b]) [b]
-collect a = proc (i, xs) -> do
-    if i == minBound || null xs
+iterator :: ArrowChoice a => Word -> a b b -> a [b] [b]
+iterator i a = proc xs -> do
+    if null xs
     then returnA -< xs
-    else collect a <<< second (uncurry (:)) ^<< second (first a) -< (pred i, (head xs, xs))
+    else iterator1 i a -< xs
+
+
+iterator1 :: Arrow a => Word -> a b b -> a [b] [b]
+iterator1 0 _ = id
+iterator1 i a = iterator1 (pred i) a <<< uncurry (:) ^<< first a <<^ head &&& id
 
 
 

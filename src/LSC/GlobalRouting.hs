@@ -116,9 +116,9 @@ globalDetermineFeedthroughs top = do
 
         ps <- Vector.freeze penalties
 
-        (_, pos, (u, v)) <- ifoldl'
-            (\ j (w, i, e) f -> let x = weight ps f in if x < w then (x, j, f) else (w, i, e))
-            (maxBound, (-1), undefined) <$> readSTRef edges
+        (_, (pos, (u, v))) <- ifoldl'
+            (\ i (w, e) f -> let x = weight ps f in if x < w then (x, (i, f)) else (w, e))
+            (maxBound, undefined) <$> readSTRef edges
             -- ^ find the minimum weighted edge and its position in the sequence
 
         modifySTRef edges $ Seq.deleteAt pos
@@ -143,7 +143,7 @@ globalDetermineFeedthroughs top = do
                     -- ^ the chain of feedthroughs is interconnected
 
                 -- connect feedthroughs to every pin in the net
-                Just component <- HashMap.lookup (net u) <$> readSTRef vertices
+                component <- view (ix (net u)) <$> readSTRef vertices
                 modifySTRef edges $ mappend $ Seq.fromList
                   [ if rowIndex upperFeed > rowIndex upperComp
                     then (lowerComp, upperFeed)

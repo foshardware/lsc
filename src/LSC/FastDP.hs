@@ -250,52 +250,52 @@ benefit top g penalty (Left a)
 
 
 findSwaps :: Bool -> Gate -> Area -> Layout -> [(Penalty, Either Area Gate)]
-findSwaps vertical g area layout =
-    [ (max 0 penalty, h)
-    | (cut, segmentH) <- if vertical
-                         then verticalSwapSegments g layout
-                         else globalSwapSegments area layout
-    , h <- toList cut
-    , let segmentG = fold $ layout ^? ix (rowIndex g)
-    , let penalty = either (penaltyForSpace g segmentH) (penaltyForCell segmentG g segmentH) h
-    ]
+findSwaps vertical i a layout =
+    [ (max 0 penalty, j)
+    | (cut, segj) <- if vertical
+                     then verticalSwapSegments i layout
+                     else globalSwapSegments a layout
+    , j <- toList cut
+    , let penalty = either (penaltyForSpace i segj) (penaltyForCell segi i segj) j
+    ] where segi = fold $ layout ^? ix (rowIndex i)
 
 
 verticalSwapSegments :: Gate -> Layout -> [(Segment, Segment)]
-verticalSwapSegments g layout
+verticalSwapSegments g
     = map (liftA2 (,) (cutSegment (g ^. space . l, g ^. space . r)) id)
-    $ toList (snd <$> lookupLT (rowIndex g) layout) ++ toList (snd <$> lookupGT (rowIndex g) layout)
+    . fmap snd
+    . liftA2 (++) (toList . lookupLT (rowIndex g)) (toList . lookupGT (rowIndex g))
 
 
 globalSwapSegments :: Area -> Layout -> [(Segment, Segment)]
-globalSwapSegments area layout
-    = map (liftA2 (,) (cutSegment (area ^. l, area ^. r)) id)
-    $ toList
-    $ cutLayout (area ^. b, area ^. t) layout
+globalSwapSegments a
+    = map (liftA2 (,) (cutSegment (a ^. l, a ^. r)) id)
+    . toList
+    . cutLayout (a ^. b, a ^. t)
 
 
 
 penaltyForSpace :: Gate -> Segment -> Area -> Penalty
-penaltyForSpace i segment s
+penaltyForSpace i segj s
     = fromIntegral (gateWidth i - width s) * wt1
     + fromIntegral (gateWidth i - (s1 + width s + s2)) * wt2
-    where s1 = maybe 0 width $ listToMaybe $ spaces  leftNext 2 segment s
-          s2 = maybe 0 width $ listToMaybe $ spaces rightNext 2 segment s 
+    where s1 = maybe 0 width $ listToMaybe $ spaces  leftNext 2 segj s
+          s2 = maybe 0 width $ listToMaybe $ spaces rightNext 2 segj s
 
 
 penaltyForCell :: Segment -> Gate -> Segment -> Gate -> Penalty
-penaltyForCell _ i segmentJ j
+penaltyForCell _ i segj j
     | gateWidth i >= gateWidth j
     = fromIntegral ((gateWidth i - gateWidth j) - (s2 + s3)) * wt1
     + fromIntegral ((gateWidth i - gateWidth j) - (s1 + s2 + s3 + s4)) * wt2
-    where ls = spaces  leftNext 3 segmentJ (j ^. space)
-          rs = spaces rightNext 3 segmentJ (j ^. space)
+    where ls = spaces  leftNext 3 segj (j ^. space)
+          rs = spaces rightNext 3 segj (j ^. space)
           s1 = maybe 0 width $ listToMaybe $ drop 1 ls
           s2 = maybe 0 width $ listToMaybe ls
           s3 = maybe 0 width $ listToMaybe rs
           s4 = maybe 0 width $ listToMaybe $ drop 1 rs
-penaltyForCell segmentI i segmentJ j
-    = penaltyForCell segmentJ j segmentI i
+penaltyForCell segi i segj j
+    = penaltyForCell segj j segi i
 
 
 
@@ -382,16 +382,15 @@ clusterSegment top segment = do
     let area = coarseBoundingBox $ view space <$> segment
 
     let order i
-            = HashMap.lookup i
-            $ foldMap' (\ (k, g) -> HashMap.singleton (g ^. number) k) (Vector.indexed segment)
+            = preview (ix i)
+            $ ifoldMap (\ k g -> HashMap.singleton (g ^. number) k) segment
 
     mX <- T.new n
-    let getX c = T.read mX (clusterIndex order c)
-    let setX c x
+    let getX = T.read mX . clusterIndex order
+    let setX c
           = T.write mX (clusterIndex order c)
-          $ min (area ^. r - div (sum $ gateWidth <$> c) 2)
-          $ max (area ^. l + div (sum $ gateWidth <$> c) 2)
-          $ x
+          . min (area ^. r - div (sum $ gateWidth <$> c) 2)
+          . max (area ^. l + div (sum $ gateWidth <$> c) 2)
 
 
     sequence_
