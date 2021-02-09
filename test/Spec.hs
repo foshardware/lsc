@@ -22,6 +22,7 @@ import Spec.LSC.FIFO
 import Spec.LSC.FM
 import Spec.LSC.KGGGP
 import Spec.LSC.Legalize
+import Spec.LSC.SegmentTree
 import Spec.LSC.Types
 import Spec.LSC.UnionFind
 
@@ -51,6 +52,7 @@ lsc :: TestArgs -> TestTree
 lsc opts = testGroup versionString $
   [ types
   , fifo
+  , segmentTree
   , unionFind
   , entropy
   , gggp

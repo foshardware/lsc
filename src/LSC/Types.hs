@@ -133,10 +133,11 @@ instance Default NetGraph where
 
 
 data Net = Net
-  { _identifier :: Identifier
-  , _geometry   :: [Component Layer Int]
-  , _members    :: Vector Gate
-  , _contacts   :: HashMap Number [Pin]
+  { _identifier  :: Identifier
+  , _geometry    :: [Component Layer Int]
+  , _netSegments :: [Line Int]
+  , _members     :: Vector Gate
+  , _contacts    :: HashMap Number [Pin]
   } deriving (Generic, NFData, FromJSON, ToJSON, Show)
 
 instance Hashable Net where
@@ -144,13 +145,13 @@ instance Hashable Net where
 
 
 instance Semigroup Net where
-  Net "" xs ns as <> Net is ys os bs
-      = Net is (xs <> ys) (ns <> os) (unionWith (<>) as bs)
-  Net is xs ns as <> Net  _ ys os bs
-      = Net is (xs <> ys) (ns <> os) (unionWith (<>) as bs)
+  Net "" xs ss ns as <> Net is ys ts os bs
+      = Net is (xs <> ys) (ss <> ts) (ns <> os) (unionWith (<>) as bs)
+  Net is xs ss ns as <> Net  _ ys ts os bs
+      = Net is (xs <> ys) (ss <> ts) (ns <> os) (unionWith (<>) as bs)
 
 instance Monoid Net where
-  mempty = Net "" mempty mempty mempty
+  mempty = Net "" mempty mempty mempty mempty
 #if MIN_VERSION_base(4,11,0)
 #else
   mappend = (<>)

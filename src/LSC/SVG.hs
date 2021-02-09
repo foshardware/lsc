@@ -14,6 +14,7 @@ import Data.Semigroup ((<>))
 import Control.Applicative
 import Control.Lens
 
+import Data.Hashable
 import Data.Text (Text)
 import qualified Data.Text as T
 import qualified Data.Text.Lazy.IO as Lazy
@@ -40,6 +41,17 @@ gateColor :: Gate -> Arg
 gateColor g | g ^. feedthrough = "lightyellow"
 gateColor g | g ^. fixed = "lightblue"
 gateColor _ = "lightgrey"
+
+
+identColor :: Identifier -> Arg
+identColor
+  = toValue
+  . T.cons '#'
+  . T.justifyRight 6 '0'
+  . base16Identifier
+  . flip mod 0x666666
+  . hash
+
 
 
 
@@ -116,8 +128,15 @@ place g = do
 
 
 route :: Net -> Svg
-route _ = do
+route n
+  | views geometry null n
+  = do
+    drawL (views identifier identColor n) `mapM_` view netSegments n
+
+route _
+  = do
     pure ()
+    
 
 
 
@@ -133,12 +152,14 @@ drawA (border, background) a = S.rect
 
 
 drawL :: Arg -> Marker -> Svg
+drawL _ (Line (x1, y1) (x2, y2)) | x1 == x2 && y1 == y2 = pure ()
 drawL color (Line (x1, y1) (x2, y2)) = S.line
   ! A.x1 (toValue x1)
   ! A.y1 (toValue y1)
   ! A.x2 (toValue x2)
   ! A.y2 (toValue y2)
   ! A.stroke color
+  ! A.strokeWidth "3"
 
 
 

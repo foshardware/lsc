@@ -168,7 +168,13 @@ instance (Ord a, Bounded a) => Monoid (Overlap l a) where
 
 
 data Line a = Line (a, a) (a, a)
-  deriving (Eq, Ord, Functor, Foldable, Traversable, Generic, FromJSON, ToJSON, Hashable, Show)
+  deriving (Eq, Ord, Functor, Foldable, Traversable, Generic, NFData, FromJSON, ToJSON, Hashable, Show)
+
+
+line :: Iso' ((a, a), (a, a)) (Line a)
+line = iso
+  (\ ((x1, y1), (x2, y2)) -> (Line (x1, y1) (x2, y2)))
+  (\ (Line (x1, y1) (x2, y2)) -> ((x1, y1), (x2, y2)))
 
 
 
@@ -280,4 +286,8 @@ outer p = rect (p ^. l . l) (p ^. b . b) (p ^. r . r) (p ^. t . t)
 
 hypothenuse :: Component l a -> Line a
 hypothenuse c = Line (c ^. l, c ^. b) (c ^. r, c ^. t)
+
+
+component :: Line a -> Component l a
+component (Line (x1, y1) (x2, y2)) = Component x1 y1 x2 y2 mempty mempty
 

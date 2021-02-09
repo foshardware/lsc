@@ -24,11 +24,12 @@ import qualified Data.HashMap.Lazy as HashMap
 import Data.IntMap
     ( IntMap
     , lookupLE, lookupLT, lookupGT
-    , splitLookup
+    , split, splitLookup
     , insert, alter
     , adjust, delete
     , singleton
     , fromAscList, toAscList
+    , toDescList
     )
 import qualified Data.IntMap as IntMap
 import Data.List (sort, permutations)
@@ -89,16 +90,16 @@ type Slot = (Int, Either Area Gate)
 type Area = Component Layer Int
 
 
-type SegmentIterator = Segment -> Int -> [Maybe Slot]
+type SegmentIterator = Segment -> Int -> [Slot]
 
 
 leftNext, rightNext :: SegmentIterator
-leftNext  segment = tail . iterate (flip lookupLT segment . fst =<<) . pure . (, undefined)
-rightNext segment = tail . iterate (flip lookupGT segment . fst =<<) . pure . (, undefined)
+leftNext  segment k = toDescList $ delete k $ fst $ split k segment
+rightNext segment k = toAscList  $ delete k $ snd $ split k segment
 
 
 spaces :: SegmentIterator -> Int -> Segment -> Area -> [Area]
-spaces it n segment = lefts . map snd . catMaybes . take n . it segment . centerX
+spaces it n segment = lefts . map snd . take n . it segment . centerX
 
 
 

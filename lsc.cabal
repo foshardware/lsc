@@ -51,6 +51,7 @@ library
       LSC.Logger
       LSC.Mincut
       LSC.NetGraph
+      LSC.SegmentTree
       LSC.SuffixTree
       LSC.SVG
       LSC.Trace
@@ -196,6 +197,7 @@ test-suite lsc-test
       Spec.LSC.KGGGP
       Spec.LSC.Legalize
       Spec.LSC.NetGraph
+      Spec.LSC.SegmentTree
       Spec.LSC.Types
       Spec.LSC.UnionFind
       Paths_lsc

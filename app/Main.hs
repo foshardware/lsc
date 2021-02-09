@@ -68,15 +68,15 @@ program = do
 
       netlist <- readNetGraph inputs
 
-      when (arg DetailedPlacement || arg GlobalRouting)
+      when (arg DetailedPlacement)
         $ do
-          circuit2d <- evalLSC opts tech $ compiler stage23 netlist
+          circuit2d <- evalLSC opts tech $ compiler stage2 netlist
           last $ printStdout scale circuit2d <$> lst Output
           exitSuccess
 
       when (arg GlobalRouting)
         $ do
-          circuit2d <- evalLSC opts tech $ compiler stage3 netlist
+          circuit2d <- evalLSC opts tech $ compiler stage3 =<< compiler stage2 netlist
           last $ printStdout scale circuit2d <$> lst Output
           exitSuccess
 

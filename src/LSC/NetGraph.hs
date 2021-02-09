@@ -103,7 +103,12 @@ verticesByRow :: NetGraph -> Net -> [[(Gate, Pin)]]
 verticesByRow top net
     = groupBy ((==) `on` view (_1 . space . b))
     $ sortOn (view (_1 . space . b))
-    $ sortOn (view (_2 . geometry . to coarseBoundingBox . l))
+    $ verticesOf top net
+
+
+verticesOf :: NetGraph -> Net -> [(Gate, Pin)]
+verticesOf top net
+    = sortOn (view (_2 . geometry . to head . to centerX))
       [ (view gates top ! i, p)
       | (i, ps) <- HashMap.toList $ net ^. contacts
       , i >= 0
@@ -112,8 +117,8 @@ verticesByRow top net
 
 
 
-markRouting :: NetGraph -> [Line Int]
-markRouting top = join [ either horizontal vertical track | track <- top ^. supercell . tracks ]
+markTracks :: NetGraph -> [Line Int]
+markTracks top = join [ either horizontal vertical track | track <- top ^. supercell . tracks ]
 
   where
 
@@ -130,23 +135,6 @@ markRouting top = join [ either horizontal vertical track | track <- top ^. supe
       , let x = i * p ^. trackSpace + p ^. offset
       , y <- top ^. supercell . geometry <&> view t 
       ]
-
-
-
-
-markEdges :: NetGraph -> [Line Int]
-markEdges top =
-    [ Line (p^.l + po^.l, p^.b + po^.b) (q^.l + qo^.l, q^.b + qo^.b)
-    | net <- toList $ top ^. nets
-    , (i, src) <- net ^. contacts & HashMap.toList
-    , any (\c -> c ^. dir == Just Out) src
-    , (j, snk) <- net ^. contacts & HashMap.toList
-    , i /= j
-    , p <- toList $ top ^. gates ^? ix i . space
-    , q <- toList $ top ^. gates ^? ix j . space
-    , po <- join $ take 1 src <&> view geometry
-    , qo <- join $ take 1 snk <&> view geometry
-    ]
 
 
 
@@ -211,13 +199,17 @@ estimations top = do
       pivot = div (area ^. r + area ^. l) 2
   let (xs, ys) = V.partition ((<= pivot) . centerX) (view space <$> V.filter (views fixed not) gs)
 
-  info
-    [ unpack (view identifier top) ++ " layout area: " ++ show (width box, height box)
-    , unpack (view identifier top) ++ " sum of hpwl: " ++ show (sum $ hpwl <$> ns)
-    , unpack (view identifier top) ++ " gate count: "  ++ show (length gs)
-    , unpack (view identifier top) ++ " row balance: "
-      ++ show (sum $ width <$> xs) ++ " | " ++ show (sum $ width <$> ys)
+  let segs = sum $ length . view netSegments <$> ns
+
+  let k = views identifier unpack top
+
+  info $
+    [ k ++ " layout area: " ++ show (width box, height box)
+    , k ++ " sum of hpwl: " ++ show (sum $ hpwl <$> ns)
+    , k ++ " gate count: "  ++ show (length gs)
     ]
+    ++ [ k ++ " net segments: " ++ show segs | segs > 0 ]
+    ++ [ k ++ " row balance: " ++ show (sum $ width <$> xs) ++ " | " ++ show (sum $ width <$> ys) ]
 
 
 
@@ -366,7 +358,7 @@ rebuildEdges = liftA2 (set nets) (generateEdges . view gates) id
 
 generateEdges :: Foldable f => f Gate -> HashMap Identifier Net
 generateEdges gs = HashMap.fromListWith (<>)
-    [ (i, Net i mempty (pure gate) (HashMap.singleton (gate ^. number) [pin]))
+    [ (i, Net i mempty mempty (pure gate) (HashMap.singleton (gate ^. number) [pin]))
     | gate <- toList gs
     , (contact, i) <- HashMap.toList $ gate ^. wires
     , let pin = def & identifier .~ contact
@@ -379,6 +371,7 @@ componentMap f top = top &~ do
     supercell %= (over pins . fmap . over geometry . fmap) f
     gates %= (fmap . over space) f
     nets %= (fmap . over contacts . fmap . fmap . over geometry . fmap) f
+    nets %= (fmap . over netSegments . fmap) (hypothenuse . f . component)
 
 
 

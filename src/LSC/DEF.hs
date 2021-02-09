@@ -64,6 +64,7 @@ fromDEF (DEF options _ area rs ts _ _ cs ps ns _) = def &~ do
 fromNet :: (Ident -> Gate) -> DEF.Net -> Rect.Net
 fromNet gate (DEF.Net i cs _) = Rect.Net i
     mempty
+    mempty
     (V.fromList $ gate . fst <$> rights cs)
     (HashMap.fromListWith (++)
         [ (g ^. number, [def & identifier .~ p]) | (g, p) <- either (def, ) (first gate) <$> cs ])

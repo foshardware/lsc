@@ -17,7 +17,6 @@ import Data.Either
 import Data.Foldable
 import Data.IntMap (findMax)
 import qualified Data.IntMap as IntMap
-import Data.Maybe
 import Data.Vector (accum, replicate, update)
 
 import Prelude hiding (replicate)
@@ -168,7 +167,7 @@ segmentIterators = testGroup "Segment iterators"
 
         k <- generate $ choose (0, n)
 
-        let xs = reverse . fmap snd . catMaybes . takeWhile isJust . leftNext seg $ k
+        let xs = reverse . map snd . leftNext seg $ k
         let ys = toList . fst . IntMap.split k $ seg
 
         assertEqual "occupants"
@@ -188,7 +187,7 @@ segmentIterators = testGroup "Segment iterators"
 
         k <- generate $ choose (0, n)
 
-        let xs = fmap snd . catMaybes . takeWhile isJust . rightNext seg $ k
+        let xs = map snd . rightNext seg $ k
         let ys = toList . snd . IntMap.split k $ seg
 
         assertEqual "occupants"

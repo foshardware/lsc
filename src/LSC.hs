@@ -41,7 +41,6 @@ import LSC.Version
 stage0 :: Compiler' NetGraph
 stage0 = id
     >>> remote gateGeometry
-    >>> arr assignCellsToRows
     >>> legalization >>> estimate
     >>> arr assignCellsToColumns >>> estimate
     >>> arr rebuildEdges >>> estimate
@@ -51,34 +50,36 @@ stage1 :: Compiler' NetGraph
 stage1 = zeroArrow
 
 
-stage23 :: Compiler' NetGraph
-stage23 = id
-    >>> remote gateGeometry
-    >>> arr rebuildEdges >>> estimate
-    >>> stage2 >>> stage3
-    >>> strategy1 significantHpwl (stage2 >>> stage3)
-    >>> finalEstimate
-
-
 stage2 :: Compiler' NetGraph
 stage2 = id
     >>> remote gateGeometry
-    >>> arr assignCellsToRows
+    >>> arr rebuildEdges >>> estimate
+    >>> stage2'
+    >>> strategy1 significantHpwl stage2'
+    >>> finalEstimate
+
+
+stage2' :: Compiler' NetGraph
+stage2' = id
+    >>> remote gateGeometry
     >>> legalization >>> estimate
+
     >>> detailedPlacement >>> estimate
+
+    >>> arr removeFeedthroughs
     >>> arr assignCellsToColumns
     >>> arr rebuildEdges >>> estimate
+    >>> legalization >>> estimate
+    >>> remote pinGeometry
+
+    >>> globalRouting >>> estimate
 
 
 stage3 :: Compiler' NetGraph
 stage3 = id
-    >>> arr removeFeedthroughs
-    >>> remote gateGeometry
-    >>> arr assignCellsToRows
-    >>> legalization >>> estimate
     >>> remote pinGeometry
-    >>> globalRouting
-    >>> estimate
+    >>> local determineNetSegments
+    >>> finalEstimate
 
 
 stage4 :: Compiler' NetGraph
@@ -124,6 +125,7 @@ detailedPlacement = id
 
 legalization :: Compiler' NetGraph
 legalization = id
+    >>> arr assignCellsToRows
     >>> local juggleCells
     >>> local legalizeRows
     >>> arr rebuildEdges
