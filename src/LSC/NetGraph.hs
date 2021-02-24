@@ -294,11 +294,7 @@ pinGeometry top = do
   let align g p | g ^. feedthrough = p & geometry .~ pure (g ^. space)
       align g p = maybe p (absolute g) $ tech ^. stdCells ^? views identifier ix g . pins . views identifier ix p
 
-      absolute g = over geometry
-        $ fmap (l +~ g ^. space . l)
-        . fmap (r +~ g ^. space . l)
-        . fmap (b +~ g ^. space . b)
-        . fmap (t +~ g ^. space . b)
+      absolute g = over geometry $ fmap $ moveX (g ^. space . l) . moveY (g ^. space . b)
 
   pure $ top &~ do
       nets %= fmap (over contacts . imap $ fmap . maybe id align . views gates (^?) top . ix)

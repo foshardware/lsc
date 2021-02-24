@@ -116,6 +116,19 @@ instance Arbitrary (Given Gate) where
 
 
 
+instance Arbitrary (Given Pin) where
+    arbitrary = do
+        x <- choose (0, maxCellWidth)
+        w <- (* maxResolution) . succ . (`div` maxResolution) <$> choose (0, pred maxCellWidth)
+        v <- T.map toUpper . base16Identifier <$> choose (0, 0xFF)
+        pure
+          $ Given
+          $ def &~ do
+            identifier .= v
+            geometry .= [rect x 0 (x + w) maxCellHeight]
+
+
+
 
 types :: TestTree
 types = testGroup "Types"

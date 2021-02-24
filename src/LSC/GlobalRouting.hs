@@ -6,11 +6,10 @@
 {-# LANGUAGE OverloadedStrings #-}
 
 module LSC.GlobalRouting
-    ( determineFeedthroughs
-    , globalDetermineFeedthroughs
-    , determineNetSegments
-    , globalDetermineNetSegments
-    ) where
+  ( determineFeedthroughs, globalDetermineFeedthroughs
+  , determineNetSegments, globalDetermineNetSegments
+  , determineRowSpacing, densityRowSpacing
+  ) where
 
 #if MIN_VERSION_base(4,10,0)
 #else
@@ -29,13 +28,16 @@ import Data.Function (on)
 import Data.Graph hiding (Vertex, vertices, edges, components)
 import qualified Data.Graph as Graph
 import qualified Data.HashMap.Lazy as HashMap
-import Data.List (sortOn, groupBy)
+import Data.IntMap (insertWith, keys)
+import Data.List (sortOn, groupBy, partition)
 import Data.Maybe
 import qualified Data.Sequence as Seq
 import Data.STRef
-import Data.Vector ((!), fromListN, unsafeThaw, unsafeIndex, accumulate, generate)
+import Data.Vector ((!), fromListN, unsafeThaw, unsafeIndex, accum, accumulate, generate, replicate, unsafeUpd)
 import qualified Data.Vector as Vector
 import Data.Vector.Mutable (modify)
+
+import Prelude hiding (replicate)
 
 import LSC.Component
 import LSC.NetGraph
@@ -64,7 +66,8 @@ data Vertex a = Vertex
 
 
 channelIndex :: Vertex Int -> Int
-channelIndex u = rowIndex u + point u `mod` 2
+channelIndex u | even $ point u = pred $ rowIndex u
+channelIndex u = succ $ rowIndex u
 
 
 enumEdge :: STRef s Int -> Identifier -> Int -> Int -> ST s EnumEdge
@@ -230,20 +233,31 @@ globalDetermineNetSegments top = do
             (maybe 0 (view number) (row g))
             (centerX $ head $ view geometry p)
 
+    let simplifiedNetConnectionGraph = simplifiedNetConnection <$> builtInEdges
 
     let vertices = foldMap (\ (u, v) -> Vector.fromList [u, v]) <$> builtInEdges
 
-    edges <- newSTRef $ buildGraph . liftA2 (++) id simplifiedNetConnection <$> builtInEdges
+    edges <- newSTRef $ buildGraph <$> HashMap.unionWith (++) builtInEdges simplifiedNetConnectionGraph
 
     cycles <- newSTRef . fmap edgesInSomeCycle =<< readSTRef edges
 
-    let weight xs (u, v) = rowIndex (xs ! v) - rowIndex (xs ! u) + abs (colIndex (xs ! u) - colIndex (xs ! v))
+    densities <- unsafeThaw
+      $ fmap constructSegmentTree
+      $ accum (flip (:)) (replicate (length rs + 1) [])
+      $ map (liftA2 (,) (channelIndex . fst) (bimap colIndex colIndex))
+      $ fold 
+      $ simplifiedNetConnectionGraph
+
+    let weight _ xs (u, v) | even $ point (xs ! u), 1 <- point (xs ! v) - point (xs ! u) = 0
+        weight d xs (u, v) = densityRatio (colIndex $ xs ! u, colIndex $ xs ! v) (d ! (channelIndex $ xs ! u))
 
 
     whileM_ (not . all null <$> readSTRef cycles)
       $ do
 
-        (xs, (u, v)) <- maximumBy (compare `on` uncurry weight) . ifoldMap (\ i g -> (vertices ^. ix i, ) <$> g)
+        d <- Vector.freeze densities
+
+        (xs, (u, v)) <- maximumBy (compare `on` uncurry (weight d)) . ifoldMap (\ i g -> (vertices ^. ix i, ) <$> g)
             <$> readSTRef cycles
 
         let n = xs ^. ix u . to net
@@ -253,6 +267,7 @@ globalDetermineNetSegments top = do
         modifySTRef edges  $ HashMap.insert n $ unburdened
         modifySTRef cycles $ HashMap.insert n $ edgesInSomeCycle unburdened
 
+        modify densities (pull (colIndex $ xs ! u, colIndex $ xs ! v)) (channelIndex $ xs ! u) 
 
     components <- readSTRef edges
 
@@ -307,4 +322,51 @@ delete (u, v) g = g // [ (u, filter (/= v) (g ^. ix u)), (v, filter (/= u) (g ^.
 
 upwards :: Graph -> [Edge]
 upwards g = [ (u, v) | (u, v) <- Graph.edges g, u < v ]
+
+
+
+
+determineRowSpacing :: NetGraph -> LSC NetGraph
+determineRowSpacing top
+  | all (views netSegments null) (view nets top)
+  = do
+    info ["Determine row spacing"]
+    pure . oneRowSpacing $ top
+determineRowSpacing top
+  = do
+    info ["Determine row spacing"]
+    debugChannelDensities top
+    realWorldST . densityRowSpacing $ top
+
+
+
+oneRowSpacing :: NetGraph -> NetGraph
+oneRowSpacing top = top &~ do
+
+    gates %= flip unsafeUpd (liftA2 (,) (view number) id <$> fold relocated)
+
+    where
+
+    swaps zs (e : es) (x : xs) = swaps (e : x : zs) es xs
+    swaps zs es xs = left ++ zs ++ xs ++ right where (left, right) = splitAt (length es `div` 2) es
+
+    relocated
+      = zipWith (map . over space . relocateB) (top ^. supercell . rows . to keys)
+      . uncurry (swaps [])
+      . partition (all $ \ g -> g ^. fixed || g ^. feedthrough)
+      . toList
+      $ foldl' (\ a g -> insertWith (++) (g ^. space . b) [g] a)
+        (top ^. supercell . rows <&> const [])
+        (top ^. gates)
+
+
+
+densityRowSpacing :: NetGraph -> ST s NetGraph
+densityRowSpacing top = do
+    pure top
+
+
+
+debugChannelDensities :: NetGraph -> LSC ()
+debugChannelDensities _ = pure ()
 
