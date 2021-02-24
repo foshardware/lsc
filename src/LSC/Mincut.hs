@@ -1,3 +1,6 @@
+-- Copyright 2018 - Andreas Westerwick <westerwick@pconas.de>
+-- SPDX-License-Identifier: GPL-3.0-or-later
+
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE FlexibleContexts #-}
@@ -8,9 +11,9 @@ module LSC.Mincut where
 import Control.Lens
 import Control.Monad
 import Control.Monad.IO.Class
-import Control.Monad.Trans.Class
 import Control.Monad.ST
 import Control.Monad.State (execStateT, get, put)
+import Control.Monad.Trans
 import Data.Default
 import Data.Foldable hiding (concat)
 import Data.Function
@@ -27,11 +30,12 @@ import Data.Vector.Mutable (new, write)
 import qualified Data.Vector as V
 import Prelude hiding (concat, lookup, read, unzip)
 
+import LSC.Component
 import LSC.Entropy
 import LSC.Improve
 import LSC.FM as FM
 import LSC.NetGraph
-import LSC.Types hiding (thaw)
+import LSC.Types
 
 
 
@@ -72,13 +76,13 @@ placeQuad top = do
 
     cells <- view stdCells <$> technology
 
-    let geo g = g & space .~ foldMap id (maybe (padCell g) (gate g) $ cells ^? ix (g ^. identifier) . dims)
+    let geo g = g & space .~ fold (maybe (padCell g) (gate g) $ cells ^? ix (g ^. identifier) . dims)
 
         gate g (w, h) = region ^? ix (g ^. number)
-            <&> \ (x, y) -> Component x y (x + w) (y + h) [Metal2, Metal3] N
+            <&> \ (x, y) -> rect x y (x + w) (y + h)
 
         padCell g = region ^? ix (g ^. number)
-            <&> \ (x, y) -> Component x y (x + fst std) (y + snd std) [Metal1] N
+            <&> \ (x, y) -> rect x y (x + fst std) (y + snd std)
 
         region = runST $ do
             u <- new $ succ $ maximum $ view number <$> m
@@ -197,7 +201,7 @@ placeMatrix m = do
 
     it <- view iterations <$> environment
 
-    (q1, q2, q3, q4) <- liftIO $ nonDeterministic $ runFMWithGen $ do
+    (q1, q2, q3, q4) <- liftIO $ nonDeterministic Nothing $ runFMWithGen $ do
 
         by <- st $ hypergraph (set number `imap` v) e
         Bisect q21 q34 <- improve it ((-) `on` cutSize by) (bisect by mempty) $ \ _ ->

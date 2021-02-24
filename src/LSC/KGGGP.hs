@@ -1,3 +1,6 @@
+-- Copyright 2018 - Andreas Westerwick <westerwick@pconas.de>
+-- SPDX-License-Identifier: GPL-3.0-or-later
+
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE FunctionalDependencies #-}
@@ -18,7 +21,7 @@ import Data.Maybe
 import Data.Monoid
 import Data.HashTable.ST.Cuckoo (HashTable)
 import Data.HashTable.ST.Cuckoo (mutate, lookup, new)
-import Data.IntSet hiding (filter, null, foldr, foldl', toList)
+import Data.IntSet hiding (filter, null, fold, foldr, foldl', toList)
 import qualified Data.IntSet as S
 import Data.Ratio
 import Data.STRef
@@ -146,7 +149,7 @@ kgggp (v, e) fixed = do
         write partitioning q $ fixed ! q
 
     free <- view freeCells <$> ask
-    st $ writeSTRef free $ fromDistinctAscList [0 .. length v - 1] \\ foldMap id fixed
+    st $ writeSTRef free $ fromDistinctAscList [0 .. length v - 1] \\ fold fixed
 
 
     hreg <- st $ initialDisplacements (v, e) "hreg" fixed
@@ -270,7 +273,7 @@ newGains v name k = do
 initialDisplacements :: (V, E) -> String -> Partitioning -> ST s (Gain s Int)
 initialDisplacements (v, e) name fixed = do
 
-    let free = fromDistinctAscList [0 .. length v - 1] \\ foldMap id fixed
+    let free = fromDistinctAscList [0 .. length v - 1] \\ fold fixed
 
     let zeroes n = n <$ mutate n 0 (const (Just (elems free), ()))
 
@@ -311,7 +314,7 @@ removeGain :: Int -> Int -> Gain s Int -> ST s (Maybe Int)
 removeGain c i (Gain _ maxg nodes buckets) = do
 
     g <- read (nodes ! i) c
-    b <- foldMap id <$> lookup (buckets ! i) g
+    b <- fold <$> lookup (buckets ! i) g
 
     when (b == [c]) $ do
         modify (snd maxg) (delete g) i

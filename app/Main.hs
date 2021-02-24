@@ -1,19 +1,25 @@
+-- Copyright 2018 - Andreas Westerwick <westerwick@pconas.de>
+-- SPDX-License-Identifier: GPL-3.0-or-later
+
 {-# LANGUAGE TupleSections #-}
 
 module Main where
 
-import Control.Arrow
+import Control.Concurrent
 import Control.Lens
 import Control.Monad
-import Control.Monad.Trans
-import Control.Monad.Trans.Maybe
-import Control.Concurrent
+import Data.Aeson (encode, eitherDecode)
+import Data.ByteString.Builder (toLazyByteString)
+import qualified Data.ByteString.Lazy as Lazy
 import Data.Default
-import Data.Either
+import Data.List (intersperse)
+import Data.Maybe
+import Data.Text.Encoding (encodeUtf8Builder)
 import qualified Data.Text.IO as Text
 import System.Console.GetOpt
 import System.Environment
 import System.FilePath
+import System.Exit
 import System.IO
 import Text.Parsec (parse)
 import Text.ParserCombinators.Parsec.Number (decimal, fractional)
@@ -23,195 +29,200 @@ import LSC.LEF     (parseLEF, fromLEF)
 import LSC.DEF     (printDEF, toDEF, fromDEF, parseDEF)
 
 import LSC
+import LSC.Logger
 import LSC.NetGraph
 import LSC.SVG
 import LSC.Types
 import LSC.Version
 
 
-type App = MaybeT IO
+
 main :: IO ()
-main = void $ runMaybeT program
+main = program
 
-exit :: App ()
-exit = guard False
 
-program :: App ()
+program :: IO ()
 program = do
 
-  (flags, inputs) <- liftIO $ compilerFlags =<< getArgs
-  opts <- liftIO $ compilerOpts flags
+  (flags, inputs) <- compilerFlags =<< getArgs
+  opts <- compilerOpts flags
 
   let arg x = or [ k == x | (k, _) <- flags ]
-      list x = [ v | (k, v) <- flags, k == x ]
+      lst x = [ v | (k, v) <- flags, k == x ]
 
-  when (null flags) exit
-
-  -- print version string
-  when (arg Version)
+  when (arg Help)
     $ do
-      liftIO $ hPutStrLn stderr $ versionString
-      exit
+      hPutStrLn stderr $ usageInfo header args
+      exitSuccess
 
+  when (null flags) exitSuccess
 
-  when (arg Lef && not (null inputs))
+  unless (arg Lef) $ die "no library given"
+
+  when (arg Lef)
     $ do
 
-      tech <- liftIO $ either (ioError . userError . show) (pure . fromLEF) . parseLEF
-          =<< Text.readFile (head $ list Lef)
+      tech <- either (die . show) (pure . freeze . fromLEF) . parseLEF =<< Text.readFile (head $ lst Lef)
 
-      let scale = freeze tech ^. scaleFactor
+      let scale = tech ^. scaleFactor
 
-      netlist <- liftIO $ readNetGraph inputs
+      netlist <- readNetGraph inputs
 
-      when (arg DetailedPlacement || arg GlobalRouting)
+      when (arg DetailedPlacement)
         $ do
-          circuit2d <- liftIO $ evalLSC opts tech $ compiler (stage2 >>> stage3) netlist
-          liftIO $ printStdout scale circuit2d $ list Output
-          exit
+          circuit2d <- evalLSC opts tech $ compiler stage2 netlist
+          last $ printStdout scale circuit2d <$> lst Output
+          exitSuccess
 
       when (arg GlobalRouting)
         $ do
-          circuit2d <- liftIO $ evalLSC opts tech $ compiler stage3 netlist
-          liftIO $ printStdout scale circuit2d $ list Output
-          exit
+          circuit2d <- evalLSC opts tech $ compiler stage3 =<< compiler stage2 netlist
+          last $ printStdout scale circuit2d <$> lst Output
+          exitSuccess
 
       when (arg Legalize)
         $ do
-          circuit2d <- liftIO $ evalLSC opts tech $ compiler stage0 netlist
-          liftIO $ printStdout scale circuit2d $ list Output
-          exit
+          circuit2d <- evalLSC opts tech $ compiler stage0 netlist
+          last $ printStdout scale circuit2d <$> lst Output
+          exitSuccess
 
       when (arg LayoutEstimation)
         $ do
-          circuit2d <- liftIO $ evalLSC opts tech $ compiler estimate netlist
-          liftIO $ printStdout scale circuit2d $ list Output
-          exit
+          evalLSC opts tech $ estimations . rebuildEdges =<< gateGeometry netlist
+          exitSuccess
 
-      circuit2d <- liftIO $ evalLSC opts tech $ gateGeometry netlist
-      liftIO $ printStdout scale circuit2d $ list Output
-      exit
-
-
-  when (null inputs)
-    $ do
-      void $ liftIO $ ioError $ userError "no inputs given"
-      exit
-
-  unless (null inputs)
-    $ do
-      netlist <- liftIO $ readNetGraph inputs
-      liftIO $ printStdout 1 netlist $ list Output
-      exit
-
-  unless (arg Lef)
-    $ do
-      void $ liftIO $ ioError $ userError "no library given"
-      exit
+      circuit2d <- evalLSC opts tech $ gateGeometry netlist
+      last $ printStdout scale circuit2d <$> lst Output
+      exitSuccess
 
 
 
 readNetGraph :: [FilePath] -> IO NetGraph
 readNetGraph inputs = case splitExtension <$> inputs of
-      (path, extension) : _ -> do
-            file <- Text.readFile $ path ++ extension
-            case extension of
-              ".blif" -> either (ioError . userError . show) pure $ fromBLIF <$> parseBLIF file
-              ".def"  -> either (ioError . userError . show) pure $ fromDEF  <$> parseDEF file
-              ""      -> ioError $ userError $ "no file extension: "++ path
-              _       -> ioError $ userError $ "unknown file extension: "++ extension
-      _ -> ioError $ userError "no input given"
+    [] -> die "no input given"
+    (path, extension) : _ -> do
+        file <- Text.readFile $ path ++ extension
+        case extension of
+            ".blif" -> either (die . show) pure $ fromBLIF <$> parseBLIF file
+            ".def"  -> either (die . show) pure $ fromDEF <$> parseDEF file
+            ".json" -> either (die . show) pure $ eitherDecode $ toLazyByteString $ encodeUtf8Builder file
+            ""      -> die $ unwords ["missing file extension:", path]
+            _       -> die $ unwords ["unknown file extension:", extension]
 
 
 
-printStdout :: Double -> NetGraph -> [FlagValue] -> IO ()
-printStdout scale ckt ("def" : _) = printDEF $ toDEF scale ckt
-printStdout _ ckt _ = plotStdout ckt
+printStdout :: Double -> NetGraph -> String -> IO ()
+printStdout scale ckt "def" = printDEF $ toDEF scale ckt
+printStdout scale ckt "svg" = plotStdout scale ckt
+printStdout _ ckt _ = Lazy.putStr $ encode ckt
 
 
 
 type Flag = (FlagKey, FlagValue)
 
 data FlagKey
-  = Verbose
-  | Version
-  | Blif
+  = Help
+  | Verbose
+  | LogLevel
   | Lef
-  | Def
+  | Seed
   | Legalize
   | RowCapacity
   | GlobalRouting
   | DetailedPlacement
   | LayoutEstimation
-  | Compile
   | Output
   | Visuals
   | Iterations
-  | CutRatio
-  | Smt
-  | Cores
-  | Debug
-  | Register
-  | Rtl
-  | Firrtl
-  | Verilog
-  | Json
-  deriving (Eq, Show)
+  deriving Eq
 
 type FlagValue = String
 
+
+header :: String
+header = unlines
+  [ versionString
+  , "Usage: lsc [arg...] input"
+  ]
+
+
 args :: [OptDescr Flag]
 args =
-    [ Option ['v', 'd'] ["verbose"]    (NoArg  (Debug, mempty))     "chatty output on stderr"
-    , Option ['V', '?'] ["version"]    (NoArg  (Version, mempty))   "show version number"
+  [ Option ['h']      ["help"]                  (NoArg (Help, ""))
+    "print usage"
 
-    , Option ['l']      ["lef"]        (ReqArg (Lef,  ) "FILE")     "LEF file"
-    , Option ['y']      ["legalize"]   (NoArg (Legalize, mempty))   "legalize"
-    , Option ['p']      ["detailed-placement"]   (NoArg (DetailedPlacement, mempty))  "detailed placement"
-    , Option ['g']      ["global-routing"]       (NoArg (GlobalRouting, mempty))  "global routing"
-    , Option [ ]        ["row-capacity"]  (ReqArg (RowCapacity, ) "ratio")  "set row capacity (e.g. 0.7)"
-    , Option ['x']      ["estimate-layout"] (NoArg (LayoutEstimation, mempty)) "estimate area"
+  , Option ['v', 'd'] ["verbose"]               (NoArg (Verbose, ""))
+    "verbose output on stderr"
+  , Option []         ["log-level"]             (ReqArg (LogLevel, ) "0,1,2,3,4")
+    "set log level"
+
+  , Option ['l']      ["lef"]                   (ReqArg (Lef, ) "FILE")
+    "LEF file"
+
+  , Option ['y']      ["legalize"]              (NoArg (Legalize, ""))
+    "legalize"
+  , Option []         ["row-capacity"]          (ReqArg (RowCapacity, ) "ratio")
+    "set row capacity (e.g. 0.7)"
+
+  , Option ['p']      ["detailed-placement"]    (NoArg (DetailedPlacement, ""))
+    "detailed placement"
+  , Option ['g']      ["global-routing"]        (NoArg (GlobalRouting, ""))
+    "global routing"
+  , Option ['x']      ["estimate-layout"]       (NoArg (LayoutEstimation, ""))
+    "estimate area"
 
 --    , Option ['g']      ["visuals"]    (NoArg  (Visuals, mempty))   "show visuals"
-    , Option ['i']      ["iterations"]
-        (OptArg  ((Iterations, ) . maybe "2" id) "n")               "iterations"
+  , Option ['i']      ["iterations"]            (ReqArg (Iterations, ) "n")
+    "iterations"
 
---    , Option ['c']      ["compile"]    (NoArg (Compile, mempty))    "compile"
+  , Option ['s']      ["seed"]                  (NoArg (Seed, ""))
+    "seed from stdin"
 
-    , Option ['o']      ["output"]
-        (OptArg ((Output,  ) . maybe "svg" id) "svg,def,magic")     "output format"
+  , Option ['o']      ["output"]    (ReqArg (Output, ) (join . intersperse "," . take 3 $ outputFormats))
+    "output format"
 
---    , Option ['s']      ["smt"]        (ReqArg (Smt, ) "yices,z3")  "specify smt backend"
-    , Option ['j']      ["cores"]      (ReqArg (Cores,  ) "count")  "limit number of cores"
---    , Option ['J']      ["json"]       (NoArg  (Json, mempty))      "export json"
---    , Option ['f']      ["firrtl"]     (ReqArg (Firrtl, ) "FILE")   "firrtl file"
---    , Option ['u']      ["verilog"]    (ReqArg (Verilog, ) "FILE")  "verilog file"
-    ]
+  ]
+
+
+outputFormats :: [String]
+outputFormats =
+  [ "svg"
+  , "def"
+  , "json"
+  ]
 
 
 compilerOpts :: [Flag] -> IO CompilerOpts
-compilerOpts xs = do
+compilerOpts flags = do
 
-  n <- getNumCapabilities
-  let j = last $ n : rights [ parse decimal "-j" v | (k, v) <- xs, k == Cores ]
-  setNumCapabilities j
-  ws <- createWorkers j
+    let lst x = [ v | (k, v) <- flags, k == x ]
 
-  let i = last $ 2 : rights [ parse decimal "-i" v | (k, v) <- xs, k == Iterations ]
+    let known = last $ True : map (`elem` outputFormats) (lst Output)
+    unless known $ die $ unwords ["unknown format:", head $ lst Output]
 
-  let rc = last $ 1 : rights [ parse fractional "--row-capacity" v | (k, v) <- xs, k == RowCapacity ]
+    c <- last $ pure 1 : (either (die . show) pure . (parse fractional "--row-capacity") <$> lst RowCapacity)
+    i <- last $ pure 3 : (either (die . show) pure . (parse decimal "-i") <$> lst Iterations)
 
-  pure $ def &~ do
-      enableDebug .= elem Debug (fst <$> xs)
-      enableVisuals .= elem Visuals (fst <$> xs)
+    let ks = either (die . show) (pure . toEnum) . (parse decimal "--log-level") <$> lst LogLevel
+    k <- last $ pure Warning : (pure Debug <$ lst Verbose) ++ ks
+
+    j <- rtsWorkers
+
+    n <- getNumCapabilities
+    unless (n < 2 || null (lst Seed))
+      $ die "cannot seed from file descriptor in concurrent setting"
+
+    pure $ def &~ do
+      logLevel .= k
+      rowCapacity .= c
       iterations .= i
-      rowCapacity .= rc
-      workers .= ws
+      workers .= j
+      seedHandle .= listToMaybe (stdin <$ lst Seed)
+
 
 
 compilerFlags :: [String] -> IO ([Flag], [String])
-compilerFlags argv =
-    case getOpt Permute args argv of
-        (o, n, []  ) -> pure (o, n)
-        (_, _, errs) -> mempty <$ hPutStrLn stderr (concat errs ++ usageInfo header args)
-     where header = "Usage: lsc [arg...] input"
+compilerFlags argv = case getOpt Permute args argv of
+    (o, n, []) -> pure (o, n)
+    (_, _, es) -> die $ concat es ++ usageInfo header args
+

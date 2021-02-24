@@ -1,33 +1,72 @@
+-- Copyright 2018 - Andreas Westerwick <westerwick@pconas.de>
+-- SPDX-License-Identifier: GPL-3.0-or-later
+
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE OverloadedStrings #-}
 
 module LSC.SVG where
 
-import Control.Lens
-import Control.Monad
-import Data.Foldable
-import qualified Data.HashMap.Lazy as HashMap
-import Data.String
-import qualified Data.Text.Lazy    as Lazy
-import qualified Data.Text.Lazy.IO as Lazy
+#if MIN_VERSION_base(4,10,0)
+#else
+import Data.Semigroup ((<>))
+#endif
 
-import Data.Text.Lazy.Builder (toLazyText, fromText)
+import Control.Applicative
+import Control.Lens
+
+import Data.Hashable
+import Data.Text (Text)
+import qualified Data.Text as T
+import qualified Data.Text.Lazy.IO as Lazy
+import Data.Text.Lazy.Builder (Builder, fromText)
 import Data.Text.Lazy.Builder.Int
 
-import Text.Blaze.Svg11 ((!), mkPath, toSvg)
+import Text.Blaze.Svg11 ((!), toSvg, toValue)
 import qualified Text.Blaze.Svg11 as S
 import qualified Text.Blaze.Svg11.Attributes as A
 import Text.Blaze.Svg.Renderer.Text (renderSvg)
 
-import Prelude hiding (lookup)
-
+import LSC.Component
 import LSC.NetGraph
 import LSC.Types
 
 
 
+pixelsPerMicron :: Int
+pixelsPerMicron = 60
+
+
+
+gateColor :: Gate -> Arg
+gateColor g | g ^. feedthrough = "lightyellow"
+gateColor g | g ^. fixed = "lightblue"
+gateColor _ = "lightgrey"
+
+
+identColor :: Identifier -> Arg
+identColor
+  = toValue
+  . T.cons '#'
+  . T.justifyRight 6 '0'
+  . base16Identifier
+  . flip mod 0x666666
+  . hash
+
+
+
+
+type Scale = Double
+
+zoomOut :: Scale -> Int -> Int
+zoomOut scale | scale > 0 = round . (/ scale) . fromIntegral
+zoomOut scale = error $ "zoomOut: invalid scaling factor " ++ show scale
+
+
+
 type Marker = Line Int
 
-type Circuit = (Circuit2D Path, [Marker])
+type Area = Component Layer Int
+
 
 type Svg = S.Svg
 
@@ -36,165 +75,98 @@ type Arg = S.AttributeValue
 type Args = (Arg, Arg)
 
 
-scaleFactor' :: Int
-scaleFactor' = 10
+
+plotStdout :: Scale -> NetGraph -> IO ()
+plotStdout scale = Lazy.putStr . renderSvg . plot scale
 
 
-m_, l_:: Int -> Int -> S.Path
-z_ :: S.Path
-m_ = S.m
-l_ = S.l
-z_ = S.z
+
+plot :: Scale -> NetGraph -> Svg
+plot scale = svgDoc . componentMap pixelated . liftA2 componentMap quadrantI id
+  where 
+     pixelated
+       = fmap
+       $ zoomOut scale
+       . (* pixelsPerMicron)
+     quadrantI
+       = liftA2 (.) (moveX . abs . min 0 . view l) (moveY . abs . min 0 . view b)
+       . netGraphArea
 
 
-plotStdout :: NetGraph -> IO ()
-plotStdout = Lazy.putStr . plot
 
-
-plot :: NetGraph -> Lazy.Text
-plot = renderSvg . svgDoc . scaleDown scaleFactor' . svgPaths
-
-
-svgDoc :: Circuit -> Svg
-svgDoc (Circuit2D ns edges, markers) = S.docTypeSvg
+svgDoc :: NetGraph -> Svg
+svgDoc top = S.docTypeSvg
   ! A.version "1.1"
-  ! A.width "10000000"
-  ! A.height "10000000"
+  ! A.width  (toValue $ netGraphArea top ^. r)
+  ! A.height (toValue $ netGraphArea top ^. t)
   $ do
-    place `mapM_` ns
-    route `mapM_` edges
-    drawL `mapM_` markers
+    place `mapM_` view gates top
+    route `mapM_` view nets top
+    drawA ("black", "lightyellow") `mapM_` outerRim top
 
 
-drawL :: Marker -> Svg
-drawL (Line (x1, y1) (x2, y2)) = do
-  S.path
-    ! A.d (mkPath pen)
-    ! A.stroke "black"
-    ! A.fill "black"
-    ! A.strokeWidth "1"
-  where
-    pen = do
-      m_ x1 y1
-      l_ x2 y2
-      z_
+
+place :: Gate -> Svg
+place g = do
+
+    let a = g ^. space
+
+    let x = a ^. l + height a `div` 32
+        y = a ^. b + height a `div` 24
+        k = height a `div` 9
+
+    drawA ("black", gateColor g) a
+
+    S.text_
+      ! A.x (toValue x)
+      ! A.y (toValue y)
+      ! A.fontSize (toValue k)
+      ! A.fontFamily "monospace"
+      ! A.transform (toValue $ "rotate(90 " <> decimal x <> "," <> decimal y <> ")")
+      $ toSvg $ views number decimal g <> ": " <> views identifier (forShort 8) g
 
 
-place :: (Gate, Path) -> Svg
-place (g, path@(p : _)) = do
 
-  let (x, y) = (p ^. l, p ^. b)
+route :: Net -> Svg
+route n
+  | views geometry null n
+  = do
+    drawL (views identifier identColor n) `mapM_` view netSegments n
 
-  S.text_
-    ! A.x (S.toValue $ x + 42)
-    ! A.y (S.toValue $ y + 24)
-    ! A.fontSize "24"
-    ! A.fontFamily "monospace"
-    ! A.transform (fromString $ "rotate(90 "++ show (x + 8) ++","++ show (y + 24)  ++")")
-    $ renderText $ toLazyText $ decimal (view number g) <> ": " <> fromText (view identifier g)
-
-  follow path
-
-place _ = pure ()
+route _
+  = do
+    pure ()
+    
 
 
-route :: Arboresence Path -> Svg
-route (_, pin, path) = do
-  follow path
-  follow pin
+
+drawA :: Args -> Area -> Svg
+drawA (border, background) a = S.rect
+  ! A.x (toValue $ a ^. l)
+  ! A.y (toValue $ a ^. b)
+  ! A.width (toValue $ width a)
+  ! A.height (toValue $ height a)
+  ! A.stroke border
+  ! A.fill background
 
 
-follow :: Path -> Svg
-follow (p : xs) = do
 
-  S.path
-    ! A.d (mkPath pen)
-    ! A.stroke (p ^. z . to stroke)
-    ! A.fill (p ^. z . to fill)
-    ! A.strokeWidth "1"
-
-  follow xs
-
-  where
-
-    pen = do
-      m_ (p ^. l) (p ^. b)
-      l_ (p ^. l) (p ^. t)
-      l_ (p ^. r) (p ^. t)
-      l_ (p ^. r) (p ^. b)
-      z_
-
-follow _ = pure ()
+drawL :: Arg -> Marker -> Svg
+drawL _ (Line (x1, y1) (x2, y2)) | x1 == x2 && y1 == y2 = pure ()
+drawL color (Line (x1, y1) (x2, y2)) = S.line
+  ! A.x1 (toValue x1)
+  ! A.y1 (toValue y1)
+  ! A.x2 (toValue x2)
+  ! A.y2 (toValue y2)
+  ! A.stroke color
+  ! A.strokeWidth "3"
 
 
-stroke :: [Layer] -> Arg
-stroke (Metal2 : Metal3 : _) = "black"
-stroke (Metal1 : _) = "black"
-stroke (Metal2 : _) = "red"
-stroke (Metal3 : _) = "green"
-stroke _ = "black"
 
-fill :: [Layer] -> Arg
-fill (Metal2 : Metal3 : _) = "transparent"
-fill (Metal1 : _) = "transparent"
-fill (Metal2 : _) = "red"
-fill (Metal3 : _) = "green"
-fill _ = "transparent"
-
-
-svgPaths :: NetGraph -> Circuit
-svgPaths netlist = (Circuit2D gs ns, if null $ netlist ^. nets then markRouting netlist else [])
-
-  where
-
-    ns =
-      [ (net, (outerPins net ++) . inducePins =<< net ^. contacts . to HashMap.toList, net ^. geometry)
-      | net <- set geometry (netlist ^. supercell . mappend (vdd . geometry) (gnd . geometry)) mempty
-      : toList (netlist ^. nets)
-      ]
-
-    gs =
-      [ (gate, pure $ gate ^. space . to projectNorth)
-      | gate <- toList $ netlist ^. gates
-      ]
-
-    outerPins :: Net -> Path
-    outerPins net =
-      [ port
-      | pin <- toList $ netlist ^. supercell . pins
-      , view identifier pin == view identifier net
-      , port <- pin ^. geometry
-      ]
-
-    inducePins :: (Number, [Pin]) -> Path
-    inducePins (i, ps) =
-      [ q & l +~ p^.l & b +~ p^.b & r +~ p^.l & t +~ p^.b & integrate mempty
-      | pin <- ps
-      , p <- toList $ netlist ^. gates ^? ix i . space
-      , q <- take 1 $ pin ^. geometry
-      ]
-
-
-scaleDown :: Int -> Circuit -> Circuit
-scaleDown n (Circuit2D ns edges, markers) = (Circuit2D
-
-  [ (gate, f (`div` n) path)
-  | (gate, path) <- ns
-  , let f = fmap . fmap
-  ]
-
-  [ (net, f (`div` n) ps, f (`div` n) path)
-  | (net, ps, path) <- edges
-  , let f = fmap . fmap
-  ]
-
-  , fmap (`div` n) <$> markers)
-
-
-renderText :: Lazy.Text -> Svg
-renderText string
-    | Lazy.length string > 14
-    = renderText $ ".." <> Lazy.drop (Lazy.length string - 12) string
-renderText string
-    = toSvg string
+forShort :: Int -> Text -> Builder
+forShort n string
+    | T.length string > n
+    = fromText (T.take (n - 2) string) <> ".."
+forShort _ string
+    = fromText string
 

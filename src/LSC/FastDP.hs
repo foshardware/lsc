@@ -1,55 +1,321 @@
+-- Copyright 2018 - Andreas Westerwick <westerwick@pconas.de>
+-- SPDX-License-Identifier: GPL-3.0-or-later
+
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE BlockArguments #-}
 {-# LANGUAGE TupleSections #-}
 
 module LSC.FastDP where
 
+#if MIN_VERSION_base(4,10,0)
+#else
+import Data.Semigroup
+#endif
+
 import Control.Applicative
 import Control.Lens
 import Control.Monad
-import Control.Monad.IO.Class
 import Control.Monad.Loops
 import Control.Monad.ST
+import Data.Either
 import Data.Foldable
 import Data.Function
 import qualified Data.HashMap.Lazy as HashMap
-import Data.IntMap (IntMap, lookupGE, lookupLE, lookupLT, lookupGT, insert, alter)
+import Data.IntMap
+    ( IntMap
+    , lookupLE, lookupLT, lookupGT
+    , split, splitLookup
+    , insert, alter
+    , adjust, delete
+    , singleton
+    , fromAscList, toAscList
+    , toDescList
+    )
+import qualified Data.IntMap as IntMap
 import Data.List (sort, permutations)
 import Data.Maybe
-import Data.Ratio
 import Data.STRef
 import Data.Vector (Vector, (!), unsafeFreeze, unsafeThaw, fromListN, update)
-import Data.Vector.Mutable (new, read, write, modify, copy)
 import qualified Data.Vector as Vector
+import Data.Vector.Mutable (new, read, write, copy)
+import qualified Data.Vector.Unboxed.Mutable as T
 import Data.Vector.Mutable (slice)
-import Prelude hiding (read)
+import Prelude hiding (read, lookup)
 
+import LSC.Component
 import LSC.NetGraph
 import LSC.Types
 
 
 
--- | wt1 and wt2 penalize overlaps resulting from swapping cells.
+-- | `wt1` and `wt2` penalize overlaps resulting from swapping cells.
 -- wt1: Penalty on shifting the closest two cells to resolve overlaps
 -- wt2: Penalty on shifting cells other than the closest two cells
 --
-wt1, wt2 :: Rational
-wt1 = 1 % 2
-wt2 = 1
+wt1, wt2 :: Penalty
+wt1 = 1
+wt2 = 5
+
+
+-- | Choose the first swap that yields some benefit or the best possible
+-- swap when `sufficientBenefit` or the former is Nothing
+--
+sufficientBenefit :: Maybe Double
+sufficientBenefit = Nothing
+
+
+
+globalSwap :: NetGraph -> LSC NetGraph
+globalSwap top = do
+    info ["Global swap"]
+    sc <- view scaleFactor <$> technology
+    realWorldST . swapRoutine sc False $ top
+
+
+verticalSwap :: NetGraph -> LSC NetGraph
+verticalSwap top = do 
+    info ["Vertical swap"]
+    sc <- view scaleFactor <$> technology
+    realWorldST . swapRoutine sc True $ top
+
+
+
+
+type Layout = IntMap Segment
+
+type Segment = IntMap (Either Area Gate)
+
+type Slot = (Int, Either Area Gate)
+
+type Area = Component Layer Int
+
+
+type SegmentIterator = Segment -> Int -> [Slot]
+
+
+leftNext, rightNext :: SegmentIterator
+leftNext  segment k = toDescList $ delete k $ fst $ split k segment
+rightNext segment k = toAscList  $ delete k $ snd $ split k segment
+
+
+spaces :: SegmentIterator -> Int -> Segment -> Area -> [Area]
+spaces it n segment = lefts . map snd . take n . it segment . centerX
+
+
+
+buildLayout :: Foldable f => f Gate -> Layout
+buildLayout
+    = fmap intersperseSpace
+    . foldl' (\ a g -> alter (pure . insertGate g . fold) (rowIndex g) a) mempty
+{-# INLINABLE buildLayout #-}
+
+
+rowIndex :: Gate -> Int
+rowIndex = centerY . view space
+
+
+insertGate :: Gate -> Segment -> Segment
+insertGate = liftA2 insert (centerX . view space) Right
+
+
+removeGate :: Gate -> Segment -> Segment
+removeGate = delete . centerX . view space
+
+
+intersperseSpace :: Segment -> Segment
+intersperseSpace segment = gs <> fromAscList
+    [ (centerX area, Left area)
+    | (u, v) <- xs `zip` tail xs
+    , let area = u ^. space & l .~ view (space . r) u & r .~ view (space . l) v
+    ] where xs = rights $ snd <$> toAscList gs
+            gs = IntMap.filter isRight segment
+
+
+
+cutLayout :: (Int, Int) -> IntMap a -> IntMap a
+cutLayout (lower, upper) zs
+    = foldMap (singleton lower) y <> xs <> foldMap (singleton upper) x
+    where (_, y, ys) = splitLookup lower zs
+          (xs, x, _) = splitLookup upper ys
+
+
+
+cutSegment :: (Int, Int) -> Segment -> Segment
+cutSegment (lower, upper) zs
+    | null $ cutLayout (lower, upper) zs -- TODO: not obvious what to return when the
+    = fold                               --       optimal region's width has degraded
+      [ singleton pos g                  --       or a vertical swap is performed
+      | (pos, g) <- toList (lookupLE lower zs)
+      , lower <= either (view r) (view (space . r)) g + either width gateWidth g `div` 2
+      ]
+cutSegment (lower, upper) zs
+    = cutLayout (lower, upper) zs
+
+
+
+
+swapRoutine :: Double -> Bool -> NetGraph -> ST s NetGraph
+swapRoutine _ _ top
+    | views gates length top < 3
+    = pure top
+swapRoutine sc vertical top = do
+
+    assume "swapRoutine: gate vector indices do not match gate numbers"
+        $ and $ imap (==) $ view number <$> view gates top
+
+    assume "swapRoutine: gates have different heights"
+        $ all (== gateHeight (view gates top ! 0)) $ gateHeight <$> view gates top
+
+    v <- Vector.thaw $ view gates top
+
+    layout <- newSTRef $ views gates buildLayout top
+
+    taint <- T.replicate (views gates length top) False
+
+    for_ (view gates top) $ \ g -> do
+
+      let adjacentG = adjacentByPin top g
+
+      taintG <- T.read taint $ g ^. number
+
+      swaps <- findSwaps vertical g (optimalRegion adjacentG) <$> readSTRef layout
+
+      let benefits = uncurry (benefit top g) <$> swaps
+
+      unless (taintG || g ^. fixed || all null adjacentG)
+        $ do
+
+          taints <- forM swaps $ either (pure . const False) (T.read taint . view number) . snd
+
+          case decide sufficientBenefit $ zip3 (0 : benefits) (True : taints) (Right g : map snd swaps) of
+
+              (w, taintH,  _) | w <= 0 || taintH -> pure ()
+              (_, _, Right h) | h ^. fixed || eqNumber g h -> pure ()
+
+              (_, _, Right h) -> do
+
+                  let adjacentH = adjacentByPin top h
+
+                  let i = g & space %~ relocateX (h ^. space . to centerX) . relocateB (h ^. space . b)
+                      j = h & space %~ relocateX (g ^. space . to centerX) . relocateB (g ^. space . b)
+
+                  write v (g ^. number) i
+                  write v (h ^. number) j
+
+                  for_ (fold adjacentG <> pure h <> fold adjacentH)
+                    $ T.modify taint (const True) . view number
+
+                  modifySTRef layout
+                    $ adjust (intersperseSpace . insertGate i . removeGate h) (rowIndex i)
+                    . adjust (intersperseSpace . insertGate j . removeGate g) (rowIndex g)
+
+              (_, _, Left a) -> do
+
+                  let i = g & space %~ relocateX (centerX a) . relocateB (a ^. b)
+
+                  write v (g ^. number) i
+
+                  for_ (fold adjacentG)
+                    $ T.modify taint (const True) . view number
+
+                  modifySTRef layout
+                    $ adjust (intersperseSpace . insertGate i) (rowIndex i)
+                    . adjust (intersperseSpace . removeGate g) (rowIndex g)
+
+    gs <- unsafeFreeze v
+
+    pure $ top &~ do
+        gates .= gs
+
+    where byMaximum = maximumBy . on compare $ view _1
+          bySufficient s = find $ (>= sc * s) . fromIntegral . view _1
+
+          decide = maybe byMaximum $ liftA2 fromMaybe byMaximum . bySufficient
+
+
+
+
+type Penalty = Int
+
+type Benefit = Int
+
+
+benefit :: NetGraph -> Gate -> Penalty -> Either Area Gate -> Benefit
+benefit top g penalty (Right h)
+    = negate . (+ penalty)
+    $ hpwlDelta top [g & space .~ view space h, h & space .~ view space g]
+benefit top g penalty (Left a)
+    = negate . (+ penalty)
+    $ hpwlDelta top [g & space .~ a]
+
+
+
+findSwaps :: Bool -> Gate -> Area -> Layout -> [(Penalty, Either Area Gate)]
+findSwaps vertical i a layout =
+    [ (max 0 penalty, j)
+    | (cut, segj) <- if vertical
+                     then verticalSwapSegments i layout
+                     else globalSwapSegments a layout
+    , j <- toList cut
+    , let penalty = either (penaltyForSpace i segj) (penaltyForCell segi i segj) j
+    ] where segi = fold $ layout ^? ix (rowIndex i)
+
+
+verticalSwapSegments :: Gate -> Layout -> [(Segment, Segment)]
+verticalSwapSegments g
+    = map (liftA2 (,) (cutSegment (g ^. space . l, g ^. space . r)) id)
+    . fmap snd
+    . liftA2 (++) (toList . lookupLT (rowIndex g)) (toList . lookupGT (rowIndex g))
+
+
+globalSwapSegments :: Area -> Layout -> [(Segment, Segment)]
+globalSwapSegments a
+    = map (liftA2 (,) (cutSegment (a ^. l, a ^. r)) id)
+    . toList
+    . cutLayout (a ^. b, a ^. t)
+
+
+
+penaltyForSpace :: Gate -> Segment -> Area -> Penalty
+penaltyForSpace i segj s
+    = fromIntegral (gateWidth i - width s) * wt1
+    + fromIntegral (gateWidth i - (s1 + width s + s2)) * wt2
+    where s1 = maybe 0 width $ listToMaybe $ spaces  leftNext 2 segj s
+          s2 = maybe 0 width $ listToMaybe $ spaces rightNext 2 segj s
+
+
+penaltyForCell :: Segment -> Gate -> Segment -> Gate -> Penalty
+penaltyForCell _ i segj j
+    | gateWidth i >= gateWidth j
+    = fromIntegral ((gateWidth i - gateWidth j) - (s2 + s3)) * wt1
+    + fromIntegral ((gateWidth i - gateWidth j) - (s1 + s2 + s3 + s4)) * wt2
+    where ls = spaces  leftNext 3 segj (j ^. space)
+          rs = spaces rightNext 3 segj (j ^. space)
+          s1 = maybe 0 width $ listToMaybe $ drop 1 ls
+          s2 = maybe 0 width $ listToMaybe ls
+          s3 = maybe 0 width $ listToMaybe rs
+          s4 = maybe 0 width $ listToMaybe $ drop 1 rs
+penaltyForCell segi i segj j
+    = penaltyForCell segj j segi i
+
+
 
 
 localReordering :: NetGraph -> LSC NetGraph
-localReordering top = do 
+localReordering top = do
 
-    assert "localReordering: gate vector indices do not match gate numbers"
+    info ["Local reordering"]
+
+    assume "localReorder: gate vector indices do not match gate numbers"
         $ and $ imap (==) $ view number <$> view gates top
 
-    segments <- liftIO . stToIO
+    segments <- realWorldST
         $ sequence
         $ localReorderSegment 3 top <$> views gates getSegments top
 
     pure $ top &~ do
-        gates %= flip update (liftA2 (,) (view number) id <$> Vector.concat segments)
+        gates %= flip update (liftA2 (,) (view number) id <$> fold segments)
+
 
 
 localReorderSegment :: Int -> NetGraph -> Vector Gate -> ST s (Vector Gate)
@@ -57,7 +323,7 @@ localReorderSegment m top segment = do
 
     let n = m `min` length segment
 
-    assert "localReorderSegment: segment is unsorted!"
+    assume "localReorderSegment: segment is unsorted!"
         $ all (\ (g, h) -> g ^. space . l <= h ^. space . l) $ Vector.zip segment (Vector.tail segment)
 
     v <- Vector.thaw segment
@@ -85,166 +351,22 @@ localReorderSegment m top segment = do
 
 
 
-globalSwap :: NetGraph -> LSC NetGraph
-globalSwap = liftIO . stToIO . swapRoutine True
-
-
-verticalSwap :: NetGraph -> LSC NetGraph
-verticalSwap = liftIO . stToIO . swapRoutine False
-
-
-type Netlist = IntMap Segment
-
-type Segment = IntMap Gate
-
-
-swapRoutine :: Bool -> NetGraph -> ST s NetGraph
-swapRoutine _ top
-    | views gates length top < 3
-    = pure top
-swapRoutine global top = do
-
-    assert "swapRoutine: gate vector indices do not match gate numbers"
-        $ and $ imap (==) $ view number <$> view gates top
-
-    assert "swapRoutine: gates have different heights"
-        $ all (== gateHeight (view gates top ! 0)) $ gateHeight <$> view gates top
-
-    v <- Vector.thaw $ view gates top
-    tainted <- unsafeThaw $ False <$ view gates top
-
-    let byCoords = foldl' (\ a g -> alter (pure . insert (g ^. space . to centerX) g . foldMap id)
-                                          (g ^. space . to centerY) a)
-                          mempty $ top ^. gates
-
-    for_ (view gates top) $ \ g -> do
-
-      taintG <- read tainted $ g ^. number
-
-      let ns = adjacentByPin top g
-
-      unless (taintG || g ^. fixed || null ns) $ do
-
-        area <- optimalRegion <$> sequence (mapM (read v . view number) <$> ns)
-        let x = centerX area
-            y = centerY area
-
-        let (y1, segment) = if global
-              then findGlobalSwapSegment byCoords y g
-              else findVerticalSwapSegment byCoords y g
-        let (_, swapCell) = if global
-              then findSwapCell segment x g
-              else findSwapCell segment (g ^. space . to centerX) g
-
-        taintH <- maybe (pure False) (read tainted . view number) swapCell
-
-        case swapCell of
-
-          Just h | taintH || h ^. fixed || g == h -> pure ()
-
-          Nothing
-              | delta <- hpwlDelta top [g & space %~ relocateX x . relocateY y1]
-              , (s1, s, s2) <- findSwapSpaces segment x
-              , p1 <- fromIntegral (gateWidth g - s) * wt1
-              , p2 <- fromIntegral (gateWidth g - (s1 + s + s2)) * wt2
-              , fromIntegral (negate delta) - p1 - p2 > 0 
-              ->  do
-
-                  modify v (space %~ relocateX x . relocateY y1) (g ^. number)
-
-                  sequence_ $ mapM_ (flip (write tainted) True . view number) <$> ns
-
-          Just h
-              | delta <- hpwlDelta top
-                [ g & space %~ relocateX x . relocateY y1
-                , h & space %~ relocateX (g ^. space . to centerX) . relocateB (g ^. space . b)
-                ]
-              , i <- minimumBy (compare `on` gateWidth) [g, h]
-              , j <- maximumBy (compare `on` gateWidth) [g, h]
-              , (s1, s, s2) <- findSwapSpaces segment x -- TODO: this should be in the segment of the smaller cell
-              , p1 <- fromIntegral (gateWidth j - gateWidth i - (s - gateWidth i)) * wt1
-              , p2 <- fromIntegral (gateWidth j - gateWidth i - (s1 + s - gateWidth i + s2)) * wt2
-              , fromIntegral (negate delta) - p1 - p2 > 0
-              ->  do
-
-                  modify v (space %~ relocateX x . relocateY y1) (g ^. number)
-                  modify v (space %~ relocateX (g ^. space . to centerX) . relocateB (g ^. space . b)) (h ^. number)
-
-                  sequence_ $ mapM_ (flip (write tainted) True . view number) <$> ns
-
-          _ -> pure ()
- 
-    gs <- unsafeFreeze v
-
-    pure $ top &~ do
-        gates .= gs
-
-
-
-findGlobalSwapSegment :: Netlist -> Int -> Gate -> (Int, Segment)
-findGlobalSwapSegment byCoords y _
-    = minimumBy (compare `on` \ (y', _) -> abs $ y' - y) $ catMaybes [lookupLE y byCoords, lookupGE y byCoords]
-
-
-findVerticalSwapSegment :: Netlist -> Int -> Gate -> (Int, Segment)
-findVerticalSwapSegment byCoords y g
-    = minimumBy (compare `on` \ (y', _) -> abs $ y' - y) $ catMaybes [lookupLT p byCoords, lookupGT p byCoords]
-    where p = g ^. space . to centerY
-
-
-findSwapCell :: Segment -> Int -> Gate -> (Int, Maybe Gate)
-findSwapCell s x g
-     | x' == x
-    || gateWidth g < gateWidth h && x' < x && hr >= gr
-    || gateWidth g < gateWidth h && x' > x && hl <= gl
-    || gateWidth g > gateWidth h && x' < x && hr <= gr
-    || gateWidth g > gateWidth h && x' > x && hl >= gl
-    = (x, Just h)
-    where
-
-      (x', h) = minimumBy (compare `on` f) $ catMaybes [lookupLE x s, lookupGE x s]
-      f (x1, i) | x1 > x = x1 - x + gateWidth i `div` 2
-      f (x1, i) | x1 < x = x - x1 - gateWidth i `div` 2
-      f _ = 0
-
-      gl = x  - gateWidth g `div` 2
-      hl = x' - gateWidth h `div` 2
-
-      gr = x  + gateWidth g `div` 2
-      hr = x' + gateWidth h `div` 2
-
-findSwapCell _ x _ = (x, Nothing)
-
-
-findSwapSpaces :: Segment -> Int -> (Int, Int, Int)
-findSwapSpaces s x
-    | Just (x1, i1) <- lookupLE x s
-    , Just (x2, i2) <- lookupGE x s
-    , Just (_, i0) <- lookupLE x1 s
-    , Just (_, i3) <- lookupGE x2 s
-    = ( i1 ^. space . l - i0 ^. space . r
-      , i2 ^. space . l - i1 ^. space . r
-      , i3 ^. space . l - i2 ^. space . r
-      )
-findSwapSpaces _ _ = (0, 0, 0)
-
-
-
-type Cluster = [Gate]
-
 
 singleSegmentClustering :: NetGraph -> LSC NetGraph
 singleSegmentClustering top = do
 
-    assert "singleSegmentClustering: gate vector indices do not match gate numbers"
+    info ["Single segment clustering"]
+
+    assume "singleSegmentClustering: gate vector indices do not match gate numbers"
         $ and $ imap (==) $ view number <$> view gates top
 
-    segments <- liftIO . stToIO
+    segments <- realWorldST
         $ sequence
         $ clusterSegment top <$> views gates getSegments top
 
     pure $ top &~ do
         gates %= flip update (liftA2 (,) (view number) id <$> Vector.concat segments)
+
 
 
 clusterSegment :: NetGraph -> Vector Gate -> ST s (Vector Gate)
@@ -253,33 +375,28 @@ clusterSegment _ segment
     = pure segment
 clusterSegment top segment = do
 
-    assert "clusterSegment: segment is unsorted!"
+    assume "clusterSegment: segment is unsorted!"
         $ all (\ (g, h) -> g ^. space . l <= h ^. space . l) $ Vector.zip segment (Vector.tail segment)
 
     let n = length segment
 
     let area = coarseBoundingBox $ view space <$> segment
 
-    let ordering i
-            = HashMap.lookup i
-            $ foldMap' (\ (k, g) -> HashMap.singleton (g ^. number) k) (Vector.indexed segment)
+    let order i
+            = preview (ix i)
+            $ ifoldMap (\ k g -> HashMap.singleton (g ^. number) k) segment
 
-
-    let clusterIndex :: Cluster -> Int
-        clusterIndex c = fromJust $ ordering . view number =<< listToMaybe c
-
-    mX <- new n
-    let getX c = read mX (clusterIndex c)
-    let setX c x
-          = write mX (clusterIndex c)
-          $ min (area ^. r - div (sum $ gateWidth <$> c) 2)
-          $ max (area ^. l + div (sum $ gateWidth <$> c) 2)
-          $ x
+    mX <- T.new n
+    let getX = T.read mX . clusterIndex order
+    let setX c
+          = T.write mX (clusterIndex order c)
+          . min (area ^. r - div (sum $ gateWidth <$> c) 2)
+          . max (area ^. l + div (sum $ gateWidth <$> c) 2)
 
 
     sequence_
         $ Vector.zipWith setX (pure <$> segment)
-        $ median . generateBoundsList top segment ordering . pure <$> segment
+        $ median . generateBoundsList top segment order . pure <$> segment
 
     oldCount <- newSTRef n
     oldCluster <- unsafeThaw $ pure <$> segment
@@ -308,7 +425,7 @@ clusterSegment top segment = do
             then do
                 let merged = x <> y
                 write newCluster (pred k) merged
-                setX merged $ median $ generateBoundsList top segment ordering merged
+                setX merged $ median $ generateBoundsList top segment order merged
             else do
                 write newCluster k y -- NEW
                 modifySTRef newCount succ
@@ -318,14 +435,12 @@ clusterSegment top segment = do
         writeSTRef oldCount i
 
         `untilM_` do
-             i <- readSTRef oldCount
-             cs <- Vector.freeze $ slice 0 i oldCluster
-             xs <- mapM getX cs
-             pure $ not $ or
-                  $ Vector.zipWith clusterOverlap (Vector.zip xs cs) (Vector.tail (Vector.zip xs cs))
+            cs <- Vector.freeze . flip (slice 0) oldCluster =<< readSTRef oldCount
+            xs <- mapM getX cs
+            pure $ not $ or
+                 $ Vector.zipWith clusterOverlap (Vector.zip xs cs) (Vector.tail (Vector.zip xs cs))
 
-    i <- readSTRef oldCount
-    cs <- unsafeFreeze $ slice 0 i oldCluster
+    cs <- Vector.freeze . flip (slice 0) oldCluster =<< readSTRef oldCount
     xs <- mapM getX cs
 
     pure $ fromListN n
@@ -336,13 +451,26 @@ clusterSegment top segment = do
 
 
 
+type Cluster = [Gate]
+
+type Order = Int -> Maybe Int
+
+
+clusterIndex :: Order -> Cluster -> Int
+clusterIndex order c
+    | Just n <- order . view number =<< listToMaybe c
+    = n
+clusterIndex _ _
+    = error "clusterIndex: not found in order"
+
+
 -- assumes gates in clusters in left-to-right order
 --
 centerCluster :: (Int, Cluster) -> Gate -> Gate
 centerCluster (pos, c) g = g & space %~ relocateL (pos - div w 2 + x)
     where
         w = sum $ gateWidth <$> c
-        x = sum $ gateWidth <$> takeWhile (g /=) c
+        x = sum $ gateWidth <$> takeWhile (not . eqNumber g) c
 
 
 -- assumes clusters in left-to-right order
@@ -354,7 +482,7 @@ clusterOverlap (c, x) (d, y)
 
 
 
-generateBoundsList :: Ord n => NetGraph -> Vector Gate -> (Int -> Maybe n) -> Cluster -> [Int]
+generateBoundsList :: NetGraph -> Vector Gate -> Order -> Cluster -> [Int]
 generateBoundsList _ _ _ c
     | null c
     = error "generateBoundsList: empty cluster"
@@ -364,13 +492,13 @@ generateBoundsList _ gs _ _
 generateBoundsList top _ _ c
     | null $ hyperedges top c
     = error "generateBoundsList: cluster is not connected"
-generateBoundsList top segment ordering c
+generateBoundsList top segment order c
     = sort
     $ foldMap (\ box -> [box ^. l, box ^. r])
     $ selfContained
     $ filter (/= mempty)
       [ boundingBox
-        [ case compare <$> ordering i <*> ordering (head c ^. number) of
+        [ case compare <$> order i <*> order (head c ^. number) of
             Just LT -> Vector.head segment ^. space
             Just  _ -> Vector.last segment ^. space
             Nothing -> view gates top ! i ^. space

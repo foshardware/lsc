@@ -1,3 +1,4 @@
+
 circuit picorv32:
   module picorv32_wb:
     output mem_instr: UInt<1>

@@ -1,3 +1,6 @@
+-- Copyright 2018 - Andreas Westerwick <westerwick@pconas.de>
+-- SPDX-License-Identifier: GPL-3.0-or-later
+
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TupleSections #-}
 
@@ -18,29 +21,31 @@ import Data.Maybe
 import Data.Map (fromList, lookup)
 import qualified Data.IntMap as IntMap
 import Data.Monoid
+import Data.Text (unpack)
 import Data.Text.Lazy (toStrict)
 import Data.Text.Lazy.Builder
 import Data.Text.Lazy.Builder.Int
 import qualified Data.Vector as V
 import Prelude hiding (lookup)
 
-import Language.DEF.Builder
+import Language.DEF.Builder (printDEF, builderDEF, defaultOptions)
 import Language.DEF.Parser (parseDEF)
-import Language.DEF.Syntax as DEF
+import Language.DEF.Syntax as DEF hiding (Rect)
 
+import LSC.Component as Rect
 import LSC.Types as Rect
 
 
 
 fromDEF :: DEF -> NetGraph
-fromDEF (DEF options area rs ts cs ps ns _) = def &~ do
+fromDEF (DEF options _ area rs ts _ _ cs ps ns _) = def &~ do
     identifier .= identifierFrom options
-    supercell .= supercellFrom area ts rs ps
-    gates .= (uncurry (set wires) <$> V.zip paths nodes)
+    supercell .= supercellFrom area ts rs (toList ps)
+    gates .= V.zipWith (set wires) paths nodes
     nets .= edges
     where
 
-      paths = V.accum (\ m (k, v) -> HashMap.insert k v m) (V.replicate (length nodes) mempty)
+      paths = V.accum (\ m (k, v) -> HashMap.insert k v m) (mempty <$ nodes)
           [ (i, (x ^. identifier, e ^. identifier))
           | e <- toList edges
           , (i, xs) <- views contacts HashMap.toList e
@@ -48,19 +53,21 @@ fromDEF (DEF options area rs ts cs ps ns _) = def &~ do
           , x <- xs
           ]
 
-      nodes = set number `imap` V.fromList (fromComponent <$> cs)
+      nodes = set number `imap` fmap fromComponent cs
 
-      edges = HashMap.fromList [ (n ^. identifier, n) | n <- fromNet lookupGate <$> ns ]
+      edges = HashMap.fromList [ (n ^. identifier, n) | n <- fromNet gate <$> toList ns ]
 
-      lookupGate y = maybe def id $ lookup y $ fromList [ (x, g) | (DEF.Component x _ _, g) <- cs `zip` toList nodes ]
+      gate y = maybe def id $ lookup y $ fromList [ (x, g) | (DEF.Component x _ _, g) <- toList $ V.zip cs nodes ]
 
 
 
 fromNet :: (Ident -> Gate) -> DEF.Net -> Rect.Net
-fromNet n (DEF.Net i cs _) = Rect.Net i
+fromNet gate (DEF.Net i cs _) = Rect.Net i
     mempty
-    (V.fromList $ n . fst <$> rights cs)
-    (HashMap.fromListWith (++) [ (g ^. number, [def & identifier .~ p]) | (g, p) <- either (def, ) (first n) <$> cs ])
+    mempty
+    (V.fromList $ gate . fst <$> rights cs)
+    (HashMap.fromListWith (++)
+        [ (g ^. number, [def & identifier .~ p]) | (g, p) <- either (def, ) (first gate) <$> cs ])
 
 
 fromLayer :: LayerName -> Rect.Layer
@@ -78,10 +85,10 @@ fromLayer _ = AnyLayer
 
 
 
-supercellFrom :: DieArea -> [DEF.Track] -> [DEF.Row] -> [DEF.Pin] -> AbstractCell
+supercellFrom :: DieArea -> [Tracks] -> [DEF.Row] -> [DEF.Pin] -> AbstractCell
 supercellFrom (DieArea (x1, y1) (x2, y2)) ts rs ps = def &~ do
-    geometry .= [Rect (ceiling x1) (ceiling y1) (ceiling x2) (ceiling y2)]
-    tracks .= fmap fromTrack ts
+    geometry .= [rect (round x1) (round y1) (round x2) (round y2)]
+    tracks .= fmap fromTracks ts
     rows .= IntMap.fromDistinctAscList
         ( fmap (\ (i, (y, row)) -> (y, set number i row))
         $ zip [0..] $ IntMap.assocs
@@ -100,7 +107,7 @@ fromPin (DEF.Pin p _ d layer placed) = def &~ do
         & b +~ fromIntegral y1
         & r +~ fromIntegral x2
         & t +~ fromIntegral y2
-        & z .~ [fromLayer q]
+        & layers .~ [fromLayer q]
       | (Layer q (x1, y1) (x2, y2), f) <- maybeToList $ (,) <$> layer <*> placed
       ]
 
@@ -111,13 +118,16 @@ fromDirection DEF.Output = Out
 fromDirection DEF.InputOutput = InOut
 
 
-fromTrack :: DEF.Track -> Either Rect.Track Rect.Track
-fromTrack (DEF.Track "X" a ss c d)
+fromTracks :: DEF.Tracks -> Either Track Track
+fromTracks (Tracks "X" a ss c ls)
     = Right
-    $ Rect.Track (ceiling a) (fromIntegral ss) (ceiling c) [fromLayer d] 
-fromTrack (DEF.Track   _ a ss c d)
+    $ Track (round a) (fromIntegral ss) (round c) mempty
+    & layers .~ map fromLayer ls
+fromTracks (Tracks "Y" a ss c ls)
     = Left
-    $ Rect.Track (ceiling a) (fromIntegral ss) (ceiling c) [fromLayer d]
+    $ Track (round a) (fromIntegral ss) (round c) mempty
+    & layers .~ map fromLayer ls
+fromTracks (Tracks d _ _ _ _) = error $ "fromTracks: undefined axis " ++ unpack d
 
 
 fromRow :: DEF.Row -> Rect.Row
@@ -141,9 +151,9 @@ fromComponent (DEF.Component _ j placed) = def &~ do
 
 fromPlaced :: Placed -> Rect.Component Rect.Layer Int
 fromPlaced (Placed (x, y) ori)
-    = Rect.Component (ceiling x) (ceiling y) (ceiling x) (ceiling y) [Metal2, Metal3] (fromOrientation ori)
+    = Rect.Component (round x) (round y) (round x) (round y) mempty (fromOrientation ori)
 fromPlaced (Fixed (x, y) ori)
-    = Rect.Component (ceiling x) (ceiling y) (ceiling x) (ceiling y) [Metal2, Metal3] (fromOrientation ori)
+    = Rect.Component (round x) (round y) (round x) (round y) mempty (fromOrientation ori)
 fromPlaced _ = mempty 
 
 
@@ -157,7 +167,7 @@ fromOrientation "FN" = FN
 fromOrientation "FS" = FS
 fromOrientation "FW" = FW
 fromOrientation "FE" = FE
-fromOrientation o = error $ "undefined orientation " ++ show o
+fromOrientation o = error $ "fromOrientation: undefined orientation " ++ unpack o
 
 
 
@@ -170,13 +180,16 @@ identifierFrom _ = "top"
 
 toDEF :: Double -> NetGraph -> DEF
 toDEF scale top = DEF
-  (filter units (defaultOptions $ Just $ top ^. identifier) ++ [Units $ DistanceList $ ceiling scale])
+  (filter units (defaultOptions $ Just $ top ^. identifier) ++ [Units $ DistanceList $ round scale])
+  mempty
   (dieArea $ listToMaybe $ top ^. supercell . geometry)
-  (fmap toRow $ toList $ top ^. supercell . rows)
-  (toList $ top ^. supercell . tracks <&> toTrack)
-  (toList $ set number `imap` view gates top <&> toComponent)
-  (toList $ top ^. supercell . pins <&> toPin)
-  (toList $ view nets top <&> toNet top)
+  (toList $ top ^. supercell . rows <&> toRow)
+  (toList $ top ^. supercell . tracks <&> toTracks)
+  mempty
+  mempty
+  (top ^. gates <&> toComponent)
+  (V.fromListN (top ^. supercell . pins . to length) $ toList $ top ^. supercell . pins <&> toPin)
+  (V.fromListN (top ^. nets . to length) $ toList $ view nets top <&> toNet top)
   mempty
 
   where
@@ -197,11 +210,13 @@ toRow x = DEF.Row
 
 
 
-toTrack :: Either Rect.Track Rect.Track -> DEF.Track
-toTrack (Right (Rect.Track a ss c d))
-    = DEF.Track "X" (fromIntegral a) (fromIntegral ss) (fromIntegral c) (last $ toLayer <$> AnyLayer : d)
-toTrack (Left (Rect.Track a ss c d))
-    = DEF.Track "Y" (fromIntegral a) (fromIntegral ss) (fromIntegral c) (last $ toLayer <$> AnyLayer : d)
+toTracks :: Either Track Track -> DEF.Tracks
+toTracks (Right tr@(Track a ss c _))
+    = Tracks "X" (fromIntegral a) (fromIntegral ss) (fromIntegral c)
+      (tr ^. layers <&> toLayer)
+toTracks (Left tr@(Track a ss c _))
+    = Tracks "Y" (fromIntegral a) (fromIntegral ss) (fromIntegral c)
+      (tr ^. layers <&> toLayer)
 
 
 
@@ -253,7 +268,7 @@ toPin :: Rect.Pin -> DEF.Pin
 toPin pin = DEF.Pin (pin ^. identifier)
     (Just $ pin ^. identifier)
     (pin ^. dir <&> toDirection)
-    (listToMaybe [ Layer (toLayer $ last $ AnyLayer : p^.z) (0, 0)
+    (listToMaybe [ Layer (toLayer $ last $ AnyLayer : p ^. layers) (0, 0)
                          (fromIntegral $ width p, fromIntegral $ height p) | p <- pin ^. geometry ])
     (listToMaybe [ Fixed (fromIntegral $ p^.l, fromIntegral $ p^.b)
                          (toOrientation $ p ^. orientation) | p <- pin ^. geometry ])

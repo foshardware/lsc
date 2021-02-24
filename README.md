@@ -1,15 +1,15 @@
+<!--
+Copyright 2018 - Andreas Westerwick <westerwick@pconas.de>
+SPDX-License-Identifier: GPL-3.0-or-later
+-->
+
 # Libre Silicon Compiler
 
 ## Dependencies
 
 ### Build dependencies
 
-- [stack](https://www.stackage.org/)
-
-
-### Runtime dependencies
-
-- [yices-smt2](http://yices.csl.sri.com/)
+- [stack](https://docs.haskellstack.org/en/stable/install_and_upgrade/)
 
 
 ## Installation
@@ -37,6 +37,10 @@
 
 `lsc -l sample/osu035.lef --output=svg sample/map9v3.def > result.svg`  
 
+### Set number of capabilities
+
+`lsc +RTS -N8 -RTS`  
+
 
 ## Stacktraces
 
@@ -46,6 +50,11 @@
 ## Profiling
 
 `stack build --profile && stack exec --profile -- lsc +RTS -p -hc -RTS`  
+
+
+## Debug build
+
+`stack build --flag lsc:debug && stack exec -- lsc`  
 
 
 ## Tests
@@ -58,6 +67,10 @@ Pass the argument `-j4` for enabling concurrency tests with 4 jobs to run simult
 
 `stack test --test-arguments -j4`
 
+## Licensing
+
+This program is available as open source under the terms of the GPL-3.0-or-later. However, some elements are being licensed under CC0-1.0. For accurate information, please check individual files.
+
 ## References
 
 ### LSC.FM
@@ -69,9 +82,17 @@ Pass the argument `-j4` for enabling concurrency tests with 4 jobs to run simult
 
 - Pan, Viswanathan, Chu (2005): An efficient and effective detailed placement algorithm [10.1109/iccad.2005.1560039](https://doi.org/10.1109/iccad.2005.1560039)
 
+### LSC.GlobalRouting
+
+- Cong, Preas (1992): A new algorithm for standard cell global routing [10.1016/0167-9260(92)90010-v](https://doi.org/10.1016/0167-9260%2892%2990010-v)
+
 ### LSC.Legalize
 
 - Kahng, Markov, Reda (2004): On Legalization of Row-Based Placements [10.1145/988952.989004](https://doi.org/10.1145/988952.989004)
+
+### LSC.SegmentTree
+
+- Bentley (1977): Solutions to Klee's rectangle problems. Unpublished manuscript
 
 ### LSC.SuffixTree
 
@@ -80,3 +101,10 @@ Pass the argument `-j4` for enabling concurrency tests with 4 jobs to run simult
 ### LSC.UnionFind
 
 - Tarjan (1975): Efficiency of a Good But Not Linear Set Union Algorithm [10.1145/321879.321884](https://doi.org/10.1145/321879.321884)
+
+## To do
+
+- Cell flipping
+  - [10.1016/S0166-218X(98)00114-0](https://doi.org/10.1016/S0166-218X%2898%2900114-0)
+- Pin permutations
+  - [10.1109/iccd.1992.276294](https://doi.org/10.1109/iccd.1992.276294)

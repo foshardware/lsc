@@ -1,3 +1,7 @@
+-- Copyright 2018 - Andreas Westerwick <westerwick@pconas.de>
+-- SPDX-License-Identifier: GPL-3.0-or-later
+
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE FunctionalDependencies #-}
@@ -6,6 +10,13 @@
 {-# LANGUAGE TupleSections #-}
 
 module LSC.FM where
+
+#if MIN_VERSION_base(4,10,0)
+import Data.Semigroup (Endo(..))
+#else
+import Data.Semigroup
+import Data.Monoid hiding ((<>))
+#endif
 
 import Control.Conditional (whenM)
 import Control.Lens hiding (indexed, imap)
@@ -16,7 +27,6 @@ import Control.Monad.ST
 import Data.Foldable
 import Data.Function
 import Data.Maybe
-import Data.Monoid
 import Data.HashTable.ST.Cuckoo (HashTable)
 import Data.HashTable.ST.Cuckoo (mutate, lookup, new, newSized)
 import Data.IntSet hiding (filter, null, foldr, foldl', toList)
