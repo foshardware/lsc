@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 
 name:                lsc
-version:             0.2.3.0
+version:             0.2.4.0
 github:              "foshardware/lsc"
 license:             GPL-3
 author:              "Andreas Westerwick"
