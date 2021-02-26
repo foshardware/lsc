@@ -32,10 +32,15 @@ flag debug
   manual: False
   default: False
 
+flag glpk
+  manual: False
+  default: False
+
 library
   exposed-modules:
       LSC
       LSC.BLIF
+      LSC.CellFlipping
       LSC.Component
       LSC.DEF
       LSC.Entropy
@@ -45,12 +50,14 @@ library
       LSC.FM
       LSC.GlobalRouting
       LSC.Improve
+      LSC.Integer
       LSC.KGGGP
       LSC.LEF
       LSC.Legalize
       LSC.Logger
       LSC.Mincut
       LSC.NetGraph
+      LSC.Polygon
       LSC.SegmentTree
       LSC.SuffixTree
       LSC.SVG
@@ -114,6 +121,11 @@ library
     , vector
     , vector-algorithms
     , verilog
+  if flag(glpk)
+    ghc-options: -O2
+    cpp-options: -DGLPK
+    build-depends:
+        glpk-hs
   if flag(debug)
     ghc-options: -g -dcore-lint -debug
     cpp-options: -DDEBUG
@@ -198,6 +210,7 @@ test-suite lsc-test
       Spec.LSC.KGGGP
       Spec.LSC.Legalize
       Spec.LSC.NetGraph
+      Spec.LSC.Polygon
       Spec.LSC.SegmentTree
       Spec.LSC.Types
       Spec.LSC.UnionFind

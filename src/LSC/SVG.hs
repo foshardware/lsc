@@ -6,8 +6,7 @@
 
 module LSC.SVG where
 
-#if MIN_VERSION_base(4,10,0)
-#else
+#if !MIN_VERSION_base(4,10,0)
 import Data.Semigroup ((<>))
 #endif
 
@@ -28,6 +27,7 @@ import Text.Blaze.Svg.Renderer.Text (renderSvg)
 
 import LSC.Component
 import LSC.NetGraph
+import LSC.Polygon
 import LSC.Types
 
 
@@ -67,6 +67,8 @@ type Marker = Line Int
 
 type Area = Component Layer Int
 
+type Poly = Polygon Layer Int
+
 
 type Svg = S.Svg
 
@@ -82,14 +84,13 @@ plotStdout scale = Lazy.putStr . renderSvg . plot scale
 
 
 plot :: Scale -> NetGraph -> Svg
-plot scale = svgDoc . componentMap pixelated . liftA2 componentMap quadrantI id
+plot scale = svgDoc . region pixelated . liftA2 region quadrantI id
   where 
      pixelated
-       = fmap
-       $ zoomOut scale
+       = zoomOut scale
        . (* pixelsPerMicron)
      quadrantI
-       = liftA2 (.) (moveX . abs . min 0 . view l) (moveY . abs . min 0 . view b)
+       = liftA2 (.) ((+) . abs . min 0 . view l) ((+) . abs . min 0 . view b)
        . netGraphArea
 
 
@@ -102,6 +103,7 @@ svgDoc top = S.docTypeSvg
   $ do
     place `mapM_` view gates top
     route `mapM_` view nets top
+    ports `mapM_` view nets top
     drawA ("black", "lightyellow") `mapM_` outerRim top
 
 
@@ -136,7 +138,19 @@ route n
 route _
   = do
     pure ()
-    
+
+
+
+ports :: Net -> Svg
+ports n = drawP `mapM_` (foldMap . foldMap) (view geometry) (n ^. contacts)
+
+
+
+drawP :: Poly -> Svg
+drawP p = S.polygon
+  ! A.points (toValue $ foldMap (\ (x, y) -> decimal x <> "," <> decimal y <> " ") (p ^. path))
+  ! A.fill "transparent"
+  ! A.stroke "black"
 
 
 

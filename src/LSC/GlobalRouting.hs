@@ -11,8 +11,7 @@ module LSC.GlobalRouting
   , determineRowSpacing, densityRowSpacing
   ) where
 
-#if MIN_VERSION_base(4,10,0)
-#else
+#if !MIN_VERSION_base(4,10,0)
 import Data.Semigroup ((<>))
 #endif
 
@@ -42,6 +41,7 @@ import Prelude hiding (replicate)
 import LSC.Component
 import LSC.NetGraph
 import LSC.SegmentTree
+import LSC.Polygon
 import LSC.Types
 import LSC.UnionFind
 
@@ -60,9 +60,10 @@ type EnumEdge = (Vertex Int, Vertex Int)
 data Vertex a = Vertex
   { rowIndex  :: Int
   , colIndex  :: Int
-  , net       :: Identifier
+  , net       :: Net
+  , cell      :: Gate
   , point     :: a
-  } deriving Eq
+  }
 
 
 channelIndex :: Vertex Int -> Int
@@ -70,17 +71,17 @@ channelIndex u | even $ point u = pred $ rowIndex u
 channelIndex u = succ $ rowIndex u
 
 
-enumEdge :: STRef s Int -> Identifier -> Int -> Int -> ST s EnumEdge
-enumEdge counter n i j = do
+enumEdge :: STRef s Int -> Gate -> Net -> Int -> Int -> ST s EnumEdge
+enumEdge counter g n i j = do
     x <- readSTRef counter
     modifySTRef counter (+ 2)
-    pure (Vertex i j n x, Vertex i j n $ succ x)
+    pure (Vertex i j n g x, Vertex i j n g $ succ x)
 
 
-disjointEdge :: Identifier -> Int -> Int -> ST s (DisjointEdge s)
-disjointEdge n i j = do
+disjointEdge :: Gate -> Net -> Int -> Int -> ST s (DisjointEdge s)
+disjointEdge g n i j = do
     (x, y) <- pair
-    pure (Vertex i j n x, Vertex i j n y)
+    pure (Vertex i j n g x, Vertex i j n g y)
 
 
 
@@ -112,9 +113,9 @@ globalDetermineFeedthroughs top = do
 
     builtInEdges <- forM (view nets top) $ \ n ->
         forM (verticesByRow top n) $ mapM $ \ (g, p) ->
-            disjointEdge (view identifier n)
+            disjointEdge g n
             (maybe 0 (view number) (row g))
-            (centerX $ head $ view geometry p)
+            (centerX $ maximumBy (compare `on` height) $ emphasiseHeight <$> view geometry p)
             -- ^ the built-in edges for all pins in the layout grouped by net and row
 
 
@@ -155,7 +156,7 @@ globalDetermineFeedthroughs top = do
             else do
 
                 intersections <- sequence $ generate (rowIndex v - rowIndex u - 1) $ \ i ->
-                    disjointEdge (net u)
+                    disjointEdge (feedthroughGate (net u)) (net u)
                     (rowIndex u + succ i)
                     (colIndex u + div (succ i * (colIndex v - colIndex u)) (rowIndex v - rowIndex u))
                     -- ^ the built-in edges for feedthroughs
@@ -167,7 +168,7 @@ globalDetermineFeedthroughs top = do
                     -- ^ the chain of feedthroughs is interconnected
 
                 -- connect feedthroughs to every pin in the net
-                subgraph <- view (ix (net u)) <$> readSTRef vertices
+                subgraph <- view (net u ^. identifier . to ix) <$> readSTRef vertices
                 modifySTRef edges $ mappend $ Seq.fromList
                   [ if rowIndex upperFeed > rowIndex upperComp
                     then (lowerComp, upperFeed)
@@ -180,27 +181,27 @@ globalDetermineFeedthroughs top = do
                 for_ intersections $ \ (i, _) -> modify penalties (+ ss ! rowIndex i ^. granularity) (rowIndex i)
 
                 -- add feedthroughs to its net
-                modifySTRef vertices $ HashMap.insertWith (<>) (net u) intersections
+                modifySTRef vertices $ HashMap.insertWith (<>) (net u ^. identifier) intersections
 
                 -- save feedthroughs to the netgraph
-                modifySTRef feedthroughs $ HashMap.insertWith (<>) (net u) intersections
+                modifySTRef feedthroughs $ HashMap.insertWith (<>) (net u ^. identifier) intersections
 
     intersections <- readSTRef feedthroughs
 
-    let locate :: Vertex a -> Gate -> Gate
-        locate u = space %~ relocateL (colIndex u) . relocateB (ss ! rowIndex u ^. b)
+    let gate :: Vertex a -> Gate
+        gate u = cell u & space %~ relocateL (colIndex u) . relocateB (ss ! rowIndex u ^. b)
 
     pure $ top &~ do
-        gates <>= ifoldMap (fmap . flip (locate . fst) . feedthroughGate) intersections
+        gates <>= foldMap (gate . fst <$>) intersections
         gates  %= imap (set number)
 
 
 
-feedthroughGate :: Identifier -> Gate
+feedthroughGate :: Net -> Gate
 feedthroughGate n = def &~ do
-    identifier .= ("FEEDTHROUGH." <> n)
+    identifier .= ("FEEDTHROUGH." <> n ^. identifier)
     feedthrough .= True
-    wires .= HashMap.singleton "FD" n
+    wires .= HashMap.singleton "FD" (n ^. identifier)
 
 
 
@@ -229,9 +230,9 @@ globalDetermineNetSegments top = do
     builtInEdges <- forM (view nets top) $ \ n -> do
         counter <- newSTRef 0
         forM (verticesOf top n) $ \ (g, p) ->
-            enumEdge counter (view identifier n)
+            enumEdge counter g n
             (maybe 0 (view number) (row g))
-            (centerX $ head $ view geometry p)
+            (centerX $ maximumBy (compare `on` height) $ emphasiseHeight <$> view geometry p)
 
     let simplifiedNetConnectionGraph = simplifiedNetConnection <$> builtInEdges
 
@@ -260,7 +261,7 @@ globalDetermineNetSegments top = do
         (xs, (u, v)) <- maximumBy (compare `on` uncurry (weight d)) . ifoldMap (\ i g -> (vertices ^. ix i, ) <$> g)
             <$> readSTRef cycles
 
-        let n = xs ^. ix u . to net
+        let n = xs ^. ix u . to net . identifier
 
         Just unburdened <- fmap (delete (u, v)) . preview (ix n) <$> readSTRef edges
 
@@ -277,7 +278,7 @@ globalDetermineNetSegments top = do
     let vertex i x = locate $ view (ix i) vertices ! x 
 
     let draw :: Identifier -> Net -> Net
-        draw i = netSegments .~ fmap (view line . bimap (vertex i) (vertex i)) (views (ix i) upwards components)
+        draw i = netSegments <>~ (components ^. ix i . to upwards <&> view line . bimap (vertex i) (vertex i))
 
     pure $ top &~ do
         nets %= imap draw
@@ -348,7 +349,7 @@ oneRowSpacing top = top &~ do
     where
 
     swaps zs (e : es) (x : xs) = swaps (e : x : zs) es xs
-    swaps zs es xs = left ++ zs ++ xs ++ right where (left, right) = splitAt (length es `div` 2) es
+    swaps zs es xs = left ++ reverse zs ++ xs ++ right where (left, right) = splitAt (length es `div` 2) es
 
     relocated
       = zipWith (map . over space . relocateB) (top ^. supercell . rows . to keys)

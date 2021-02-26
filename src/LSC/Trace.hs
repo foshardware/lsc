@@ -11,18 +11,21 @@ import Control.Monad.ST
 #ifdef DEBUG
 import Control.Applicative
 import Control.Monad.ST.Unsafe
-import System.Console.Concurrent
 import System.IO.Unsafe
+import System.IO
 #endif
 
 
 class Trace m a where
     trace :: a -> m a
+    -- recommended usage for `trace :: a -> a -> a` is either:
+    -- - liftA2 trace id id
+    -- - trace undefined
 
 
 #ifdef DEBUG
 instance Show a => Trace IO a where
-    trace = liftA2 (<$) id $ errorConcurrent . unlines . pure . show
+    trace = liftA2 (<$) id $ hPutStrLn stderr . show
     {-# INLINE trace #-}
 
 instance Show a => Trace (ST s) a where

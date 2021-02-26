@@ -30,10 +30,11 @@ import Prelude hiding (lookup)
 
 import Language.DEF.Builder (printDEF, builderDEF, defaultOptions)
 import Language.DEF.Parser (parseDEF)
-import Language.DEF.Syntax as DEF hiding (Rect)
+import Language.DEF.Syntax as DEF
 
-import LSC.Component as Rect
-import LSC.Types as Rect
+import LSC.Component as LSC
+import LSC.Types as LSC
+import LSC.Polygon as LSC
 
 
 
@@ -61,8 +62,8 @@ fromDEF (DEF options _ area rs ts _ _ cs ps ns _) = def &~ do
 
 
 
-fromNet :: (Ident -> Gate) -> DEF.Net -> Rect.Net
-fromNet gate (DEF.Net i cs _) = Rect.Net i
+fromNet :: (Ident -> Gate) -> DEF.Net -> LSC.Net
+fromNet gate (DEF.Net i cs _) = LSC.Net i
     mempty
     mempty
     (V.fromList $ gate . fst <$> rights cs)
@@ -70,7 +71,7 @@ fromNet gate (DEF.Net i cs _) = Rect.Net i
         [ (g ^. number, [def & identifier .~ p]) | (g, p) <- either (def, ) (first gate) <$> cs ])
 
 
-fromLayer :: LayerName -> Rect.Layer
+fromLayer :: LayerName -> LSC.Layer
 fromLayer "metal1" = Metal1
 fromLayer "metal2" = Metal2
 fromLayer "metal3" = Metal3
@@ -97,7 +98,7 @@ supercellFrom (DieArea (x1, y1) (x2, y2)) ts rs ps = def &~ do
     pins .= HashMap.fromList [ (p ^. identifier, p) | p <- fmap fromPin ps ] 
 
 
-fromPin :: DEF.Pin -> Rect.Pin
+fromPin :: DEF.Pin -> LSC.Pin
 fromPin (DEF.Pin p _ d layer placed) = def &~ do
     identifier .= p
     dir .= fmap fromDirection d
@@ -108,6 +109,7 @@ fromPin (DEF.Pin p _ d layer placed) = def &~ do
         & r +~ fromIntegral x2
         & t +~ fromIntegral y2
         & layers .~ [fromLayer q]
+        & simplePolygon
       | (Layer q (x1, y1) (x2, y2), f) <- maybeToList $ (,) <$> layer <*> placed
       ]
 
@@ -130,9 +132,9 @@ fromTracks (Tracks "Y" a ss c ls)
 fromTracks (Tracks d _ _ _ _) = error $ "fromTracks: undefined axis " ++ unpack d
 
 
-fromRow :: DEF.Row -> Rect.Row
+fromRow :: DEF.Row -> LSC.Row
 fromRow (DEF.Row _ i x y o ss _ w _)
-    = Rect.Row i (-1)
+    = LSC.Row i (-1)
       (fromIntegral x) (fromIntegral y)
       (fromOrientation o) (fromIntegral ss) (fromIntegral w)
 
@@ -149,11 +151,11 @@ fromComponent (DEF.Component _ j placed) = def &~ do
 
 
 
-fromPlaced :: Placed -> Rect.Component Rect.Layer Int
+fromPlaced :: Placed -> LSC.Component LSC.Layer Int
 fromPlaced (Placed (x, y) ori)
-    = Rect.Component (round x) (round y) (round x) (round y) mempty (fromOrientation ori)
+    = LSC.Component (round x) (round y) (round x) (round y) mempty (fromOrientation ori)
 fromPlaced (Fixed (x, y) ori)
-    = Rect.Component (round x) (round y) (round x) (round y) mempty (fromOrientation ori)
+    = LSC.Component (round x) (round y) (round x) (round y) mempty (fromOrientation ori)
 fromPlaced _ = mempty 
 
 
@@ -199,7 +201,7 @@ toDEF scale top = DEF
 
 
 
-toRow :: Rect.Row -> DEF.Row
+toRow :: LSC.Row -> DEF.Row
 toRow x = DEF.Row
     (toStrict $ toLazyText $ enumeratedRow (view number x))
     (view identifier x)
@@ -220,7 +222,7 @@ toTracks (Left tr@(Track a ss c _))
 
 
 
-dieArea :: Maybe (Rect.Component l Int) -> DieArea
+dieArea :: Maybe (LSC.Component l Int) -> DieArea
 dieArea (Just p) = DieArea
     (fromIntegral $ p^.l, fromIntegral $ p^.b)
     (fromIntegral $ p^.r, fromIntegral $ p^.t)
@@ -251,7 +253,7 @@ toComponent g = DEF.Component
 
 
 
-toNet :: NetGraph -> Rect.Net -> DEF.Net
+toNet :: NetGraph -> LSC.Net -> DEF.Net
 toNet top n = DEF.Net (n ^. identifier)
 
     [ maybe (Left (p ^. identifier)) (Right . (, p ^. identifier) . toStrict . toLazyText . enumeratedGate)
@@ -264,14 +266,18 @@ toNet top n = DEF.Net (n ^. identifier)
 
 
 
-toPin :: Rect.Pin -> DEF.Pin
+toPin :: LSC.Pin -> DEF.Pin
 toPin pin = DEF.Pin (pin ^. identifier)
     (Just $ pin ^. identifier)
     (pin ^. dir <&> toDirection)
     (listToMaybe [ Layer (toLayer $ last $ AnyLayer : p ^. layers) (0, 0)
-                         (fromIntegral $ width p, fromIntegral $ height p) | p <- pin ^. geometry ])
+                         (fromIntegral $ width p, fromIntegral $ height p)
+                 | p <- polygon =<< pin ^. geometry
+                 ])
     (listToMaybe [ Fixed (fromIntegral $ p^.l, fromIntegral $ p^.b)
-                         (toOrientation $ p ^. orientation) | p <- pin ^. geometry ])
+                         (toOrientation $ p ^. orientation)
+                 | p <- polygon =<< pin ^. geometry
+                 ])
 
 
 toOrientation :: Orientation -> Identifier
@@ -285,7 +291,7 @@ toOrientation FW = "FW"
 toOrientation FE = "FE"
 
 
-toLayer :: Rect.Layer -> LayerName
+toLayer :: LSC.Layer -> LayerName
 toLayer Metal1 = "metal1"
 toLayer Metal2 = "metal2"
 toLayer Metal3 = "metal3"

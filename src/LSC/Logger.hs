@@ -46,16 +46,15 @@ logStderr k (x : xs) = do
 
     time <- timestamp
     pretty <- hIsTerminalDevice stderr
-    thread <- myThreadId
+    threadId <- myThreadId
 
-    let indent = mappend $ unwords [" ", ' ' <$ time, ' ' <$ levelString k]
-        tag = replicate (maximum (length <$> x : xs) - length x + 4) ' ' ++ show thread
-        lvl = levelColor pretty k $ levelString k
+    let indent = replicate (length time + length (levelString k) + 3) ' '
+        thread = replicate (maximum (length <$> x : xs) - length x + 4) ' ' ++ show threadId
 
     errorConcurrent
       $ unlines
-      $ unwords ([time, lvl ++ ":", x] ++ [tag | k /= Info])
-      : map indent xs
+      $ unwords ([time, levelColor pretty k (levelString k) ++ ":", x] ++ [thread | k /= Info])
+      : map (indent ++) xs
 
 logStderr _ _ = pure ()
 

@@ -66,6 +66,7 @@ import System.IO
 import LSC.Component
 import LSC.Logger
 import LSC.Trace
+import LSC.Polygon
 
 
 
@@ -91,8 +92,7 @@ instance Semigroup AbstractGate where
 
 instance Monoid AbstractGate where
   mempty = AbstractGate mempty mempty
-#if MIN_VERSION_base(4,11,0)
-#else
+#if !MIN_VERSION_base(4,11,0)
   mappend = (<>)
 #endif
 
@@ -152,8 +152,7 @@ instance Semigroup Net where
 
 instance Monoid Net where
   mempty = Net "" mempty mempty mempty mempty
-#if MIN_VERSION_base(4,11,0)
-#else
+#if !MIN_VERSION_base(4,11,0)
   mappend = (<>)
 #endif
 
@@ -259,7 +258,9 @@ instance Default Cell where
       }
 
 
-type Port = Component Layer Int
+
+type Port = Polygon Layer Int
+
 
 data Dir = In | Out | InOut
   deriving (Eq, Generic, NFData, FromJSON, ToJSON, Hashable, Show)
@@ -368,10 +369,12 @@ runEnvironment x = copoint . runEnvironmentT x
 type LSC = Codensity (LST IO)
 
 runLSC :: CompilerOpts -> Technology -> LSC a -> IO a
-runLSC opts tech lsc = do
-    x <- runGnosticT tech . runEnvironmentT opts . unLST $ lowerCodensity lsc
-    flushConcurrentOutput
-    pure x
+runLSC opts tech
+  = withConcurrentOutput
+  . runGnosticT tech
+  . runEnvironmentT opts
+  . unLST
+  . lowerCodensity
 
 
 evalLSC :: CompilerOpts -> Technology -> LSC a -> IO a
@@ -558,9 +561,9 @@ ifoldl' :: Foldable f => (Int -> b -> a -> b) -> b -> f a -> b
 ifoldl' f y xs = foldl' (\ g x !i -> f i (g (i - 1)) x) (const y) xs (length xs - 1)
 {-# INLINE ifoldl' #-}
 
-#if MIN_VERSION_base(4,13,0)
-#else
+#if !MIN_VERSION_base(4,13,0)
 foldMap' :: (Foldable f, Monoid m) => (a -> m) -> f a -> m
 foldMap' f = foldl' (\ acc a -> acc `mappend` f a) mempty
 {-# INLINE foldMap' #-}
 #endif
+

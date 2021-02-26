@@ -44,6 +44,9 @@ main = program
 program :: IO ()
 program = do
 
+  hSetBuffering stdout $ BlockBuffering Nothing
+  hSetBuffering stderr $ BlockBuffering Nothing
+
   (flags, inputs) <- compilerFlags =<< getArgs
   opts <- compilerOpts flags
 
@@ -68,30 +71,25 @@ program = do
 
       netlist <- readNetGraph inputs
 
-      when (arg DetailedPlacement)
-        $ do
-          circuit2d <- evalLSC opts tech $ compiler stage2 netlist
-          last $ printStdout scale circuit2d <$> lst Output
-          exitSuccess
-
-      when (arg GlobalRouting)
+      when (arg Stage2 && arg Stage3)
         $ do
           circuit2d <- evalLSC opts tech $ compiler stage3 =<< compiler stage2 netlist
           last $ printStdout scale circuit2d <$> lst Output
           exitSuccess
 
-      when (arg Legalize)
+      when (arg Stage2)
         $ do
-          circuit2d <- evalLSC opts tech $ compiler stage0 netlist
+          circuit2d <- evalLSC opts tech $ compiler stage2 netlist
           last $ printStdout scale circuit2d <$> lst Output
           exitSuccess
 
-      when (arg LayoutEstimation)
+      when (arg Stage3)
         $ do
-          evalLSC opts tech $ estimations . rebuildEdges =<< gateGeometry netlist
+          circuit2d <- evalLSC opts tech $ compiler stage3 netlist
+          last $ printStdout scale circuit2d <$> lst Output
           exitSuccess
 
-      circuit2d <- evalLSC opts tech $ gateGeometry netlist
+      circuit2d <- evalLSC opts tech $ compiler estimate . rebuildEdges =<< gateGeometry netlist
       last $ printStdout scale circuit2d <$> lst Output
       exitSuccess
 
@@ -124,13 +122,11 @@ data FlagKey
   = Help
   | Verbose
   | LogLevel
+  | Stage2
+  | Stage3
   | Lef
   | Seed
-  | Legalize
   | RowCapacity
-  | GlobalRouting
-  | DetailedPlacement
-  | LayoutEstimation
   | Output
   | Visuals
   | Iterations
@@ -159,17 +155,13 @@ args =
   , Option ['l']      ["lef"]                   (ReqArg (Lef, ) "FILE")
     "LEF file"
 
-  , Option ['y']      ["legalize"]              (NoArg (Legalize, ""))
-    "legalize"
   , Option []         ["row-capacity"]          (ReqArg (RowCapacity, ) "ratio")
     "set row capacity (e.g. 0.7)"
 
-  , Option ['p']      ["detailed-placement"]    (NoArg (DetailedPlacement, ""))
+  , Option ['p']      ["stage2"]                (NoArg (Stage2, ""))
     "detailed placement"
-  , Option ['g']      ["global-routing"]        (NoArg (GlobalRouting, ""))
-    "global routing"
-  , Option ['x']      ["estimate-layout"]       (NoArg (LayoutEstimation, ""))
-    "estimate area"
+  , Option ['g']      ["stage3"]                (NoArg (Stage3, ""))
+    "routing"
 
 --    , Option ['g']      ["visuals"]    (NoArg  (Visuals, mempty))   "show visuals"
   , Option ['i']      ["iterations"]            (ReqArg (Iterations, ) "n")

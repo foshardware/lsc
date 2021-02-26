@@ -10,8 +10,7 @@ module LSC.FIFO
     , fromList
     ) where
 
-#if MIN_VERSION_base(4,10,0)
-#else
+#if !MIN_VERSION_base(4,10,0)
 import Data.Semigroup
 #endif
 
@@ -105,8 +104,7 @@ instance Semigroup (FIFO a) where
 
 instance Monoid (FIFO a) where
     mempty = empty
-#if MIN_VERSION_base(4,11,0)
-#else
+#if !MIN_VERSION_base(4,11,0)
     mappend = (<>)
 #endif
 

@@ -16,6 +16,13 @@ SPDX-License-Identifier: GPL-3.0-or-later
 
 `stack install`
 
+### GLPK optimizations
+
+`stack install --flag=lsc:glpk`  
+
+Use GLPK for solving integer programs.
+
+
 ## Usage
 
 ### Print usage
@@ -23,12 +30,7 @@ SPDX-License-Identifier: GPL-3.0-or-later
 `lsc -h`  
 
 
-### Create a legalized placement with replace
-
-`replace < gcd_nontd_test.tcl`  
-`lsc -dy -llibrary/nangate45/NangateOpenCellLibrary.lef gcd_nan45_nontd.def -odef > legalized.def`
-
-### Detailed placement
+### Create a detailed placement from replace
 
 `replace < gcd_nontd_test.tcl`  
 `lsc -dp -llibrary/nangate45/NangateOpenCellLibrary.lef gcd_nan45_nontd.def -odef > placed.def`
@@ -89,6 +91,10 @@ This program is available as open source under the terms of the GPL-3.0-or-later
 ### LSC.Legalize
 
 - Kahng, Markov, Reda (2004): On Legalization of Row-Based Placements [doi:10.1145/988952.989004](https://doi.org/10.1145/988952.989004)
+
+### LSC.Polygon
+
+- Gourley, Green (1983): A Polygon-to-Rectangle Conversion Algorithm [doi:10.1109/MCG.1983.262975](https://doi.org/10.1109/MCG.1983.262975)
 
 ### LSC.SegmentTree
 

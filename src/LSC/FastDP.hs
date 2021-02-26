@@ -7,8 +7,7 @@
 
 module LSC.FastDP where
 
-#if MIN_VERSION_base(4,10,0)
-#else
+#if !MIN_VERSION_base(4,10,0)
 import Data.Semigroup
 #endif
 

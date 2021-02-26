@@ -35,6 +35,7 @@ import Prelude hiding (lookup, filter)
 import LSC.Component
 import LSC.Entropy
 import LSC.Types
+import LSC.Polygon
 
 
 
@@ -108,7 +109,7 @@ verticesByRow top net
 
 verticesOf :: NetGraph -> Net -> [(Gate, Pin)]
 verticesOf top net
-    = sortOn (view (_2 . geometry . to head . to centerX))
+    = sortOn (centerX . maximumBy (compare `on` height) . fmap emphasiseHeight . view (_2 . geometry))
       [ (view gates top ! i, p)
       | (i, ps) <- HashMap.toList $ net ^. contacts
       , i >= 0
@@ -261,44 +262,50 @@ inlineGeometry top = pure $ rebuildEdges $ top &~ do
       project p = space %~ \ x -> x & l +~ p^.l & b +~ p^.b & t +~ p^.b & r +~ p^.l
 
 
-
 gateGeometry :: NetGraph -> LSC NetGraph
 gateGeometry top = do
+    tech <- technology
+    assume ("invalid scale factor: " ++ views scaleFactor show tech)
+      $ tech ^. scaleFactor > 0
+    pure $ rebuildGates (tech ^. stdCells) top
 
-  tech <- technology
 
-  assume ("invalid scale factor: " ++ views scaleFactor show tech)
-    $ tech ^. scaleFactor > 0
+rebuildGates :: HashMap Identifier Cell -> NetGraph -> NetGraph
+rebuildGates cells top = top &~ do
 
-  let fh = maximum $ tech ^. stdCells <&> snd . view dims
-      fw = maximum $ top ^. supercell . rows <&> view granularity
+    gates %= fmap expand
 
-  let expand g | g ^. feedthrough = g & space %~ \ x -> x & r .~ x^.l + fw & t .~ x^.b + fh
-      expand g = g & space %~ maybe id drag (tech ^. stdCells ^? views identifier ix g . dims)
+    where
 
-      drag (w, h) p = p & r .~ view l p + w & t .~ view b p + h
+    fh = maximum $ cells <&> snd . view dims
+    fw = maximum $ top ^. supercell . rows <&> view granularity
 
-  pure $ top &~ do
-      gates %= fmap expand
+    expand g | g ^. feedthrough = g & space %~ \ x -> x & r .~ x^.l + fw & t .~ x^.b + fh
+    expand g = g & space %~ maybe id drag (cells ^? views identifier ix g . dims)
+
+    drag (w, h) p = p & r .~ view l p + w & t .~ view b p + h
 
 
 
 pinGeometry :: NetGraph -> LSC NetGraph
 pinGeometry top = do
+    tech <- technology
+    assume ("invalid scale factor: " ++ views scaleFactor show tech)
+      $ tech ^. scaleFactor > 0
+    pure $ rebuildPins (tech ^. stdCells) top
 
-  tech <- technology
 
-  assume ("invalid scale factor: " ++ views scaleFactor show tech)
-    $ tech ^. scaleFactor > 0
+rebuildPins :: HashMap Identifier Cell -> NetGraph -> NetGraph
+rebuildPins cells top = top &~ do
 
-  let align g p | g ^. feedthrough = p & geometry .~ pure (g ^. space)
-      align g p = maybe p (absolute g) $ tech ^. stdCells ^? views identifier ix g . pins . views identifier ix p
+    nets %= fmap (over contacts . imap $ fmap . maybe id align . views gates (^?) top . ix)
 
-      absolute g = over geometry $ fmap $ moveX (g ^. space . l) . moveY (g ^. space . b)
+    where
 
-  pure $ top &~ do
-      nets %= fmap (over contacts . imap $ fmap . maybe id align . views gates (^?) top . ix)
+    align g p | g ^. feedthrough = p & geometry .~ pure (g ^. space . to simplePolygon)
+    align g p = maybe p (absolute g) $ cells ^? views identifier ix g . pins . views identifier ix p
 
+    absolute g = over geometry $ fmap $ shiftX (g ^. space . l) . shiftY (g ^. space . b)
 
 
 
@@ -362,12 +369,12 @@ generateEdges gs = HashMap.fromListWith (<>)
 {-# INLINABLE generateEdges #-}
 
 
-componentMap :: (Component Layer Int -> Component Layer Int) -> NetGraph -> NetGraph
-componentMap f top = top &~ do
-    supercell %= (over pins . fmap . over geometry . fmap) f
-    gates %= (fmap . over space) f
-    nets %= (fmap . over contacts . fmap . fmap . over geometry . fmap) f
-    nets %= (fmap . over netSegments . fmap) (hypothenuse . f . component)
+region :: (Int -> Int) -> NetGraph -> NetGraph
+region f top = top &~ do
+    supercell %= (over pins . fmap . over geometry . fmap . fmap) f
+    gates %= (fmap . over space . fmap) f
+    nets %= (fmap . over contacts . fmap . fmap . over geometry . fmap . fmap) f
+    nets %= (fmap . over netSegments . fmap) (hypothenuse . fmap f . component)
 
 
 
@@ -379,7 +386,9 @@ netGraphArea top
 
 
 outerRim :: NetGraph -> HashMap Identifier (Component Layer Int)
-outerRim = fmap (coarseBoundingBox . view geometry) . view (supercell . pins)
+outerRim
+    = fmap (foldMap (coarseBoundingBox . polygon) . view geometry)
+    . view (supercell . pins)
 
 
 

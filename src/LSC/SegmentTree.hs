@@ -87,11 +87,11 @@ densityOver (x, y) node
 densityOver (x, y) node
   = unsafeDensityOver (x, y) node
 
-unsafeDensityOver (x, y) (Leaf a (density, delete))
+unsafeDensityOver (x, y) (Leaf a (density, _))
   | x <= a
   , y >= a
   = density
-unsafeDensityOver (x, y) (Interval (a, b) (density, delete) _ _)
+unsafeDensityOver (x, y) (Interval (a, b) (density, _) _ _)
   | x <= a
   , y >= b
   = density

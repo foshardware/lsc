@@ -11,8 +11,7 @@
 
 module LSC.Component where
 
-#if MIN_VERSION_base(4,10,0)
-#else
+#if !MIN_VERSION_base(4,10,0)
 import Data.Semigroup
 #endif
 
@@ -43,65 +42,76 @@ data Layer
   deriving (Eq, Ord, Enum, Generic, FromJSON, ToJSON, Hashable, Show)
 
 
-data Orientation = N | S | W | E | FN | FS | FW | FE
-  deriving (Eq, Ord, Generic, NFData, FromJSON, ToJSON, Hashable, Show)
+data Orientation = N | FN | S | FS | W | FW | E | FE
+  deriving (Eq, Ord, Enum, Generic, NFData, FromJSON, ToJSON, Hashable, Show)
 
 
 instance Semigroup Orientation where
 
-  N <> a = a
-  a <> N = a
+  N <> o = o
+  o <> N = o
 
-  S <> S = N
-  S <> E = W
-  S <> W = E
-
-  W <> E = N
-  W <> W = S
-
-  E <> E = S
-
+  S  <>  S = N
+  W  <>  E = N
+  E  <>  W = N
   FN <> FN = N
-  FN <> FS = S
-  FN <> FW = W
-  FN <> FE = E
-
-  FN <> S = FS
-  FN <> W = FW
-  FN <> E = FE
-
-
   FS <> FS = N
-  FS <> FW = E
-  FS <> FE = W
-
-  FS <> S = FN
-  FS <> W = FE
-  FS <> E = FW
-
-
   FW <> FE = N
+  FE <> FW = N
+
+  W  <>  W = S
+  E  <>  E = S
+  FN <> FS = S
+  FS <> FN = S
   FW <> FW = S
-
-  FW <> S = FE
-  FW <> W = FS
-  FW <> E = FN
-
-
   FE <> FE = S
 
-  FE <> S = FW
-  FE <> W = FS
-  FE <> E = FN
+  S  <>  E = W
+  E  <>  S = W
+  FN <> FW = W
+  FS <> FE = W
+  FW <> FN = W
+  FE <> FS = W
 
+  S  <>  W = E
+  W  <>  S = E
+  FN <> FE = E
+  FS <> FW = E
+  FW <> FS = E
+  FE <> FN = E
 
-  a <> b = b <> a
+  S  <> FS = FN
+  W  <> FE = FN
+  E  <> FW = FN
+  FS <>  S = FN
+  FW <>  E = FN
+  FE <>  W = FN
+
+  S  <> FN = FS
+  W  <> FW = FS
+  E  <> FE = FS
+  FN <>  S = FS
+  FW <>  W = FS
+  FE <>  E = FS
+
+  S  <> FE = FW
+  W  <> FN = FW
+  E  <> FS = FW
+  FN <>  W = FW
+  FS <>  E = FW
+  FE <>  S = FW
+
+  S  <> FW = FE
+  W  <> FS = FE
+  E  <> FN = FE
+  FN <>  E = FE
+  FS <>  W = FE
+  FW <>  S = FE
 
 
 instance Monoid Orientation where
   mempty = N
-#if MIN_VERSION_base(4,11,0)
-#else
+#if !MIN_VERSION_base(4,11,0)
   mappend = (<>)
 #endif
 
@@ -133,8 +143,7 @@ instance Ord a => Semigroup (Component l a) where
 
 instance (Ord a, Bounded a) => Monoid (Component l a) where
     mempty = getBoundingBox mempty
-#if MIN_VERSION_base(4,11,0)
-#else
+#if !MIN_VERSION_base(4,11,0)
     mappend = (<>)
 #endif
 
@@ -147,8 +156,7 @@ instance Ord a => Semigroup (BoundingBox l a) where
 
 instance (Ord a, Bounded a) => Monoid (BoundingBox l a) where
     mempty = BoundingBox (rect maxBound maxBound minBound minBound)
-#if MIN_VERSION_base(4,11,0)
-#else
+#if !MIN_VERSION_base(4,11,0)
     mappend = (<>)
 #endif
 
@@ -161,8 +169,7 @@ instance Ord a => Semigroup (Overlap l a) where
 
 instance (Ord a, Bounded a) => Monoid (Overlap l a) where
     mempty = Overlap (rect minBound minBound maxBound maxBound)
-#if MIN_VERSION_base(4,11,0)
-#else
+#if !MIN_VERSION_base(4,11,0)
     mappend = (<>)
 #endif
 
@@ -181,6 +188,7 @@ line = iso
 makeFieldsNoPrefix ''Component
 
 makeFieldsNoPrefix ''Line
+
 
 
 

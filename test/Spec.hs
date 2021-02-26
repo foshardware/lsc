@@ -23,6 +23,7 @@ import Spec.LSC.FM
 import Spec.LSC.GlobalRouting
 import Spec.LSC.KGGGP
 import Spec.LSC.Legalize
+import Spec.LSC.Polygon
 import Spec.LSC.SegmentTree
 import Spec.LSC.Types
 import Spec.LSC.UnionFind
@@ -53,6 +54,7 @@ lsc :: TestArgs -> TestTree
 lsc opts = testGroup versionString $
   [ types
   , fifo
+  , polygons
   , segmentTree
   , unionFind
   , entropy

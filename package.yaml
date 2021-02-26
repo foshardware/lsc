@@ -11,6 +11,9 @@ copyright:           "2019 Andreas Westerwick"
 build-type:          Custom
 
 flags:
+  glpk:
+    default: false
+    manual: false
   debug:
     default: false
     manual: false
@@ -82,6 +85,13 @@ library:
   ghc-options:
   - -Wall
   when:
+  - condition: flag(glpk)
+    dependencies:
+    - glpk-hs
+    cpp-options:
+    - -DGLPK
+    ghc-options:
+    - -O2
   - condition: flag(debug)
     then:
       cpp-options:
