@@ -14,11 +14,14 @@ import Control.Monad
 import Control.Monad.IO.Class
 import Control.Monad.ST
 import Data.Default
+import Data.Either
 import Data.Foldable
 import Data.Function
 import Data.HashMap.Lazy (HashMap)
 import qualified Data.HashMap.Lazy as HashMap
 import qualified Data.IntMap as M
+import Data.IntSet (elems)
+import qualified Data.IntSet as IntSet
 import Data.List (sort, sortOn, sortBy, groupBy)
 import Data.List.Split (wordsBy)
 import Data.Maybe
@@ -39,13 +42,17 @@ import LSC.Polygon
 
 
 
-boundingBox :: (Foldable f, Integral n, Bounded n) => f (Component l n) -> Component l n
+boundingBox
+  :: (Foldable f, Integral x, Integral y, Bounded x, Bounded y)
+  => f (Component l x y) -> Component l x y
 boundingBox = foldMap' implode 
 {-# INLINABLE boundingBox #-}
 
 
 
-coarseBoundingBox :: (Foldable f, Ord n, Bounded n) => f (Component l n) -> Component l n
+coarseBoundingBox
+  :: (Foldable f, Ord x, Ord y, Bounded x, Bounded y)
+  => f (Component l x y) -> Component l x y
 coarseBoundingBox = foldMap' id
 {-# INLINABLE coarseBoundingBox #-}
 
@@ -58,84 +65,72 @@ hpwl = liftA2 (+) width height . foldMap' (implode . view space) . view members
 
 hpwlDelta :: Foldable f => NetGraph -> f Gate -> Int
 hpwlDelta top gs = sum
-    [ width after - width before + height after - height before
-    | net <- hyperedges top gs
-    , let before = foldMap' (implode . view space)
-                            (view members net)
-    , let after  = foldMap' (\ g -> maybe (g ^. space . to implode) (implode . view space) $ find (eqNumber g) gs)
-                            (view members net)
-    ]
+  [ width after - width before + height after - height before
+  | net <- hyperedges top gs
+  , let before = foldMap' (implode . view space)
+                          (view members net)
+  , let after  = foldMap' (\ g -> maybe (g ^. space . to implode) (implode . view space) $ find (eqNumber g) gs)
+                          (view members net)
+  ]
 {-# INLINABLE hpwlDelta #-}
 
 
 
-optimalRegion :: (Foldable f, Foldable g) => f (g Gate) -> Component l Int
+optimalRegion :: (Foldable f, Foldable g) => f (g Gate) -> Component' l Int
 optimalRegion f
-    | all null f
-    = error "optimalRegion: empty nodes"
+  | all null f
+  = error "optimalRegion: empty nodes"
 optimalRegion f
-    = rect x1 y1 x2 y2
-    where
-        boxes = foldr ((:) . foldMap' (implode . view space)) [] f
-        [x1, x2] = medianElements $ sort $ foldMap (\ box -> [box ^. l, box ^. r]) boxes
-        [y1, y2] = medianElements $ sort $ foldMap (\ box -> [box ^. b, box ^. t]) boxes
+  = rect x1 y1 x2 y2
+  where
+    boxes = foldr ((:) . foldMap' (implode . view space)) [] f
+    [x1, x2] = medianElements $ sort $ foldMap (\ box -> [box ^. l, box ^. r]) boxes
+    [y1, y2] = medianElements $ sort $ foldMap (\ box -> [box ^. b, box ^. t]) boxes
 {-# INLINABLE optimalRegion #-}
 
 
 
 hyperedges :: Foldable f => NetGraph -> f Gate -> [Net]
 hyperedges top gs = map head . groupBy eqIdentifier . sortBy ordIdentifier $
-    [ n
-    | g <- toList gs
-    , k <- toList $ view wires g
-    , n <- toList $ top ^. nets ^? ix k
-    ]
+  [ n
+  | g <- toList gs
+  , k <- toList $ view wires g
+  , n <- toList $ top ^. nets ^? ix k
+  ]
 {-# INLINABLE hyperedges #-}
 
 
 
 adjacentByPin :: NetGraph -> Gate -> HashMap Identifier (Vector Gate)
 adjacentByPin top g
-    = foldMap (filter (not . eqNumber g) . view members) . (view nets top ^?) . ix <$> view wires g
+  = foldMap (filter (not . eqNumber g) . view members) . (view nets top ^?) . ix <$> view wires g
 
 
 
 verticesByRow :: NetGraph -> Net -> [[(Gate, Pin)]]
-verticesByRow top net
-    = groupBy ((==) `on` view (_1 . space . b))
-    $ sortOn (view (_1 . space . b))
-    $ verticesOf top net
+verticesByRow top
+  = groupBy ((==) `on` view (_1 . space . b))
+  . sortOn (view (_1 . space . b))
+  . verticesOf top
+
+
+verticesByColumn :: NetGraph -> Net -> [[(Gate, Pin)]]
+verticesByColumn top net =
+  [ [ (g, p & geometry .~ [simplePolygon c])
+    | c <- foldMap (columns x1 (x2 - x1)) (p ^. geometry)
+    ]
+  | (g, p) <- verticesOf top net
+  ] where x1 : x2 : _ = fold $ top ^. supercell . tracks . to rights <&> elems . view stabs
 
 
 verticesOf :: NetGraph -> Net -> [(Gate, Pin)]
-verticesOf top net
-    = sortOn (centerX . maximumBy (compare `on` height) . fmap emphasiseHeight . view (_2 . geometry))
-      [ (view gates top ! i, p)
-      | (i, ps) <- HashMap.toList $ net ^. contacts
-      , i >= 0
-      , p <- ps
-      ]
+verticesOf top net =
+  [ (view gates top ! i, p)
+  | (i, ps) <- HashMap.toList $ net ^. contacts
+  , i >= 0
+  , p <- ps
+  ]
 
-
-
-markTracks :: NetGraph -> [Line Int]
-markTracks top = join [ either horizontal vertical track | track <- top ^. supercell . tracks ]
-
-  where
-
-    horizontal p =
-      [ Line (0, y) (x, y) :: Line Int
-      | i <- [ 0 .. p ^. steps - 1 ]
-      , x <- top ^. supercell . geometry <&> view r 
-      , let y = i * p ^. trackSpace + p ^. offset
-      ]
-
-    vertical p =
-      [ Line (x, 0) (x, y) :: Line Int
-      | i <- [1 .. p ^. steps]
-      , let x = i * p ^. trackSpace + p ^. offset
-      , y <- top ^. supercell . geometry <&> view t 
-      ]
 
 
 
@@ -226,8 +221,7 @@ significantHpwl m n = div p x `compare` div q x
 getSegments :: Vector Gate -> [Vector Gate]
 getSegments
     = map V.fromList
-    . join
-    . map (wordsBy (view fixed))
+    . foldMap (wordsBy (view fixed))
     . map (sortOn (view space))
     . groupBy ((==) `on` view (space . b))
     . sortOn (view (space . b))
@@ -258,7 +252,7 @@ inlineGeometry top = pure $ rebuildEdges $ top &~ do
         , s <- toList $ top ^. subcells ^? views identifier ix g
         ]
 
-      project :: Component Layer Int -> Gate -> Gate
+      project :: Component' Layer Int -> Gate -> Gate
       project p = space %~ \ x -> x & l +~ p^.l & b +~ p^.b & t +~ p^.b & r +~ p^.l
 
 
@@ -305,7 +299,7 @@ rebuildPins cells top = top &~ do
     align g p | g ^. feedthrough = p & geometry .~ pure (g ^. space . to simplePolygon)
     align g p = maybe p (absolute g) $ cells ^? views identifier ix g . pins . views identifier ix p
 
-    absolute g = over geometry $ fmap $ shiftX (g ^. space . l) . shiftY (g ^. space . b)
+    absolute g = over geometry . fmap $ bimap (+ g ^. space . l) (+ g ^. space . b)
 
 
 
@@ -369,23 +363,24 @@ generateEdges gs = HashMap.fromListWith (<>)
 {-# INLINABLE generateEdges #-}
 
 
-region :: (Int -> Int) -> NetGraph -> NetGraph
-region f top = top &~ do
-    supercell %= (over pins . fmap . over geometry . fmap . fmap) f
-    gates %= (fmap . over space . fmap) f
-    nets %= (fmap . over contacts . fmap . fmap . over geometry . fmap . fmap) f
-    nets %= (fmap . over netSegments . fmap) (hypothenuse . fmap f . component)
+region :: (Int -> Int) -> (Int -> Int) -> NetGraph -> NetGraph
+region f g top = top &~ do
+    supercell %= (over pins . fmap . over geometry . fmap) (bimap f g)
+    supercell %= (over tracks . fmap) (bimap (over stabs (IntSet.map f)) (over stabs (IntSet.map g)))
+    gates %= (fmap . over space) (bimap f g)
+    nets %= (fmap . over contacts . fmap . fmap . over geometry . fmap) (bimap f g)
+    nets %= (fmap . over netSegments . fmap) (bimap f g)
 
 
 
-netGraphArea :: NetGraph -> Component l Int
+netGraphArea :: NetGraph -> Component' l Int
 netGraphArea top
     = castLayer
     $ coarseBoundingBox (view space <$> view gates top) <> coarseBoundingBox (outerRim top)
 
 
 
-outerRim :: NetGraph -> HashMap Identifier (Component Layer Int)
+outerRim :: NetGraph -> HashMap Identifier (Component' Layer Int)
 outerRim
     = fmap (foldMap (coarseBoundingBox . polygon) . view geometry)
     . view (supercell . pins)

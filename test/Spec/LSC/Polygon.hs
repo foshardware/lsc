@@ -23,7 +23,7 @@ polygons = testGroup "Polygon"
         let g c = (c ^. l, c ^. b, width c, height c)
 
         let q = [(1,1), (1,2), (2,2), (2,3), (4,3), (4,4), (5,4), (5,1), (4,1), (4,2), (3,2), (3,1)]
-            p = constructPolygon q :: Polygon l Int
+            p = constructPolygon q :: Polygon' l Int
 
         let result = map g $ polygon p
 

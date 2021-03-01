@@ -17,8 +17,8 @@ import LSC.Version
 
 import Spec.LSC
 import Spec.LSC.Entropy
+import Spec.LSC.Deque
 import Spec.LSC.FastDP
-import Spec.LSC.FIFO
 import Spec.LSC.FM
 import Spec.LSC.GlobalRouting
 import Spec.LSC.KGGGP
@@ -53,7 +53,7 @@ main = do
 lsc :: TestArgs -> TestTree
 lsc opts = testGroup versionString $
   [ types
-  , fifo
+  , deque
   , polygons
   , segmentTree
   , unionFind

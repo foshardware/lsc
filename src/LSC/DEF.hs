@@ -10,9 +10,9 @@ module LSC.DEF
   , fromDEF, toDEF
   ) where
 
-import Control.Arrow
 import Control.Lens
 import Control.Monad
+import Data.Bifunctor
 import Data.Default
 import Data.Either
 import Data.Foldable
@@ -20,6 +20,7 @@ import qualified Data.HashMap.Lazy as HashMap
 import Data.Maybe
 import Data.Map (fromList, lookup)
 import qualified Data.IntMap as IntMap
+import qualified Data.IntSet as IntSet
 import Data.Monoid
 import Data.Text (unpack)
 import Data.Text.Lazy (toStrict)
@@ -123,12 +124,12 @@ fromDirection DEF.InputOutput = InOut
 fromTracks :: DEF.Tracks -> Either Track Track
 fromTracks (Tracks "X" a ss c ls)
     = Right
-    $ Track (round a) (fromIntegral ss) (round c) mempty
-    & layers .~ map fromLayer ls
+    $ Track (IntSet.fromList $ (round a +) . (round c *) <$> [ 0 .. fromIntegral ss - 1])
+            (IntSet.fromList $ fromEnum . fromLayer <$> ls)
 fromTracks (Tracks "Y" a ss c ls)
     = Left
-    $ Track (round a) (fromIntegral ss) (round c) mempty
-    & layers .~ map fromLayer ls
+    $ Track (IntSet.fromList $ (round a +) . (round c *) <$> [ 0 .. fromIntegral ss - 1])
+            (IntSet.fromList $ fromEnum . fromLayer <$> ls)
 fromTracks (Tracks d _ _ _ _) = error $ "fromTracks: undefined axis " ++ unpack d
 
 
@@ -151,7 +152,7 @@ fromComponent (DEF.Component _ j placed) = def &~ do
 
 
 
-fromPlaced :: Placed -> LSC.Component LSC.Layer Int
+fromPlaced :: Placed -> Component' LSC.Layer Int
 fromPlaced (Placed (x, y) ori)
     = LSC.Component (round x) (round y) (round x) (round y) mempty (fromOrientation ori)
 fromPlaced (Fixed (x, y) ori)
@@ -213,16 +214,24 @@ toRow x = DEF.Row
 
 
 toTracks :: Either Track Track -> DEF.Tracks
-toTracks (Right tr@(Track a ss c _))
-    = Tracks "X" (fromIntegral a) (fromIntegral ss) (fromIntegral c)
-      (tr ^. layers <&> toLayer)
-toTracks (Left tr@(Track a ss c _))
-    = Tracks "Y" (fromIntegral a) (fromIntegral ss) (fromIntegral c)
-      (tr ^. layers <&> toLayer)
+toTracks (Right tr)
+  = Tracks "X"
+    (fromIntegral g)
+    (fromIntegral $ IntSet.size $ tr ^. stabs)
+    (fromIntegral $ h - g)
+    (tr ^. layers <&> toLayer)
+    where g : h : _ = IntSet.elems $ tr ^. stabs
+toTracks (Left tr)
+  = Tracks "Y"
+    (fromIntegral g)
+    (fromIntegral $ IntSet.size $ tr ^. stabs)
+    (fromIntegral $ h - g)
+    (tr ^. layers <&> toLayer)
+    where g : h : _ = IntSet.elems $ tr ^. stabs
 
 
 
-dieArea :: Maybe (LSC.Component l Int) -> DieArea
+dieArea :: Maybe (Component' l Int) -> DieArea
 dieArea (Just p) = DieArea
     (fromIntegral $ p^.l, fromIntegral $ p^.b)
     (fromIntegral $ p^.r, fromIntegral $ p^.t)

@@ -59,7 +59,7 @@ stage2' = id
     >>> remote gateGeometry
     >>> legalization >>> estimate
 
-    >>> fastdp >>> estimate
+    >>> fastDP >>> estimate
 
     >>> arr removeFeedthroughs
     >>> arr assignCellsToColumns
@@ -134,8 +134,8 @@ globalPlacement = local placeQuad
 
 
 
-fastdp :: Compiler' NetGraph
-fastdp = id
+fastDP :: Compiler' NetGraph
+fastDP = id
     -- >>> local singleSegmentClustering >>> arr rebuildEdges >>> estimate
     >>> strategy2 significantHpwl
         (id

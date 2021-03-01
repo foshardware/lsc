@@ -86,7 +86,7 @@ type Segment = IntMap (Either Area Gate)
 
 type Slot = (Int, Either Area Gate)
 
-type Area = Component Layer Int
+type Area = Component' Layer Int
 
 
 type SegmentIterator = Segment -> Int -> [Slot]

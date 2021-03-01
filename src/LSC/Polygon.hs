@@ -12,29 +12,28 @@
 
 module LSC.Polygon
   ( Polygon, constructPolygon
-  , path, z
+  , Polygon', path, z
   , polygon, emphasiseHeight
-  , shiftX, shiftY
-  , simplePolygon
+  , containingBox, simplePolygon
+  , columns
   ) where
 
 import Control.Applicative
-import Control.Arrow
 import Control.Conditional
 import Control.DeepSeq
 import Control.Lens
 import Control.Monad
 
 import Data.Aeson
+import Data.Bifunctor
 import Data.Foldable (maximumBy)
 import Data.Function
-import Data.Hashable
 import Data.IntMap (IntMap)
-import qualified Data.IntMap as Map
+import qualified Data.IntMap.Strict as Y
 import Data.IntSet (IntSet)
-import qualified Data.IntSet as Set
+import qualified Data.IntSet as X
 import Data.Maybe
-import Data.Vector hiding (null, maximumBy)
+import Data.Vector hiding (null, minimum, maximum, maximumBy)
 
 import GHC.Generics
 
@@ -42,20 +41,23 @@ import LSC.Component
 
 
 
-data Polygon l a = Polygon
+data Polygon l x y = Polygon
   { _z    :: !IntSet
-  , _path :: Vector (a, a)
+  , _path :: Vector (x, y)
   } deriving (Generic, Functor, NFData, FromJSON, ToJSON, Show)
 
 
-instance ToJSON a => Hashable (Polygon l a) where
-    hashWithSalt s = hashWithSalt s . encode
+type Polygon' l a = Polygon l a a
+
+
+instance Bifunctor (Polygon l) where
+    bimap f g (Polygon zs h) = Polygon zs (bimap f g <$> h)
 
 
 
-constructPolygon :: Eq a => [(a, a)] -> Polygon l a
+constructPolygon :: (Eq x, Eq y) => [(x, y)] -> Polygon l x y
 constructPolygon = Polygon mempty . fromList . sanitise
-    where
+  where
     sanitise ((x1, y1) : (x2, y2) : (x3, y3) : xs)
       | x1 == x2 && x2 == x3 || y1 == y2 && y2 == y3 
       = (x1, y1) : sanitise ((x3, y3) : xs)
@@ -68,23 +70,43 @@ makeFieldsNoPrefix ''Polygon
 
 
 
-polygon :: Integral a => Polygon l a -> [Component l a]
+
+polygon :: (Integral x, Integral y) => Polygon l x y -> [Component l x y]
 polygon p =
-  [ rect x1 y1 x2 y2 & z .~ p ^. z <&> fromIntegral
+  [ rect x1 y1 x2 y2 & z .~ p ^. z & bimap fromIntegral fromIntegral
   | ((y1, x1), (y2, x2)) <- rectangleConversion
-  $ constructPTR . toList
-  $ fmap swap -- convert the polygon mirrored around `f(x) = x`
-  $ fmap fromIntegral p ^. path
+  $ constructPTR . toList -- run the algorithm mirrored around `y = x`
+  $ bimap fromIntegral fromIntegral p ^. path
   ]
 
 
 
-emphasiseHeight :: Integral a => Polygon l a -> Component l a
+emphasiseHeight :: (Integral x, Integral y) => Polygon l x y -> Component l x y
 emphasiseHeight = maximumBy (compare `on` liftA2 (,) height width) . polygon
 
 
 
-simplePolygon :: Component l a -> Polygon l a
+columns :: (Integral x, Ord y) => x -> x -> Polygon l x y -> [Component l x y]
+columns offset step = cut . containingBox
+  where
+    off = offset + step `div` 2
+    cut c | width c <= 0 = []
+    cut c = over r (min k) c : cut (over l (max k) c)
+      where k = succ (((c ^. l) + off) `div` step) * step - off
+
+
+
+containingBox :: (Ord x, Ord y) => Polygon l x y -> Component l x y
+containingBox p = rect
+  (minimum $ p ^. path <&> fst)
+  (minimum $ p ^. path <&> snd)
+  (maximum $ p ^. path <&> fst)
+  (maximum $ p ^. path <&> snd)
+  & z .~ p ^. z
+
+
+
+simplePolygon :: Component l x y -> Polygon l x y
 simplePolygon p
   = Polygon (p ^. z)
   $ fromListN 4
@@ -96,43 +118,29 @@ simplePolygon p
 
 
 
-shiftX :: Num a => a -> Polygon l a -> Polygon l a
-shiftX = over path . fmap . first . (+)
-
-shiftY :: Num a => a -> Polygon l a -> Polygon l a
-shiftY = over path . fmap . second . (+)
-
-
-
-swap :: (a, b) -> (b, a)
-swap ~(x, y) = (y, x)
-
-
-
 type PTR = IntMap IntSet
 
 
 constructPTR :: [(Int, Int)] -> PTR
 constructPTR
-  = Map.fromListWith (<>)
-  . fmap (second Set.singleton)
-  . fmap swap
+  = Y.fromListWith (<>)
+  . fmap (second X.singleton)
 
 
 maintain :: (Int, Int) -> PTR -> PTR
 maintain (x, y) ptr
-  | Just True <- Set.member x <$> Map.lookup y ptr
+  | Just True <- X.member x <$> Y.lookup y ptr
   = remove (x, y) ptr
 maintain (x, y) ptr
   = insert (x, y) ptr
 
 
 insert :: (Int, Int) -> PTR -> PTR
-insert (x, y) = Map.alter (pure . maybe (Set.singleton x) (Set.insert x)) y
+insert (x, y) = Y.alter (pure . maybe (X.singleton x) (X.insert x)) y
 
 
 remove :: (Int, Int) -> PTR -> PTR
-remove (x, y) = Map.alter (select Set.null (const Nothing) pure . Set.delete x =<<) y
+remove (x, y) = Y.alter (select X.null (const Nothing) pure . X.delete x =<<) y
 
 
 
@@ -154,19 +162,19 @@ rectangleConversion ptr
 
 getPk :: PTR -> Maybe (Int, Int)
 getPk
-  = fmap (swap . second Set.findMin)
-  . Map.lookupMin
+  = fmap (\ (y, xs) -> (X.findMin xs, y))
+  . Y.lookupMin
 
 
 getPl :: (Int, Int) -> PTR -> Maybe (Int, Int)
 getPl (x, y)
   = fmap (, y)
-  . Set.lookupGT x <=< Map.lookup y
+  . X.lookupGT x <=< Y.lookup y
 
 
 getPm :: (Int, Int) -> Int -> PTR -> Maybe (Int, Int)
 getPm (xk, yk) xl
   = listToMaybe
-  . ifoldMap (\ y -> fmap (, y) . Set.elems . snd . Set.split (pred xk) . fst . Set.split xl)
-  . snd . Map.split yk
+  . ifoldMap (\ y -> fmap (, y) . X.elems . snd . X.split (pred xk) . fst . X.split xl)
+  . snd . Y.split yk -- ^ this is suboptimal
 

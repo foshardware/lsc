@@ -58,7 +58,7 @@ maxRowCount :: Int
 maxRowCount = ceiling @Double $ sqrt $ fromIntegral sizeOfNetGraph
 
 
-layoutArea :: Component l Int
+layoutArea :: Component' l Int
 layoutArea = rect 0 0 (maxCellsPerRow * maxCellWidth) (maxRowCount * maxCellHeight)
 
 

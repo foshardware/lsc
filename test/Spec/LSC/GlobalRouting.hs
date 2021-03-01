@@ -46,6 +46,7 @@ newtype GlobalRouting a = GlobalRouting a
 
 
 instance Arbitrary (GlobalRouting NetGraph) where
+
     arbitrary = do
 
         k <- choose (80, 140)
@@ -66,7 +67,7 @@ instance Arbitrary (GlobalRouting NetGraph) where
             where
 
             locatePin :: Gate -> Pin -> [Port]
-            locatePin g = map (shiftX (g ^. space . l) . shiftY (g ^. space . b)) . view geometry
+            locatePin g = map (bimap (+ g ^. space . l) (+ g ^. space . b)) . view geometry
 
 
 

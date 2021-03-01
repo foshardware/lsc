@@ -80,7 +80,7 @@ portLayer _ = AnyLayer
 
 portLayerRectangle tech ident xs
     = constructPolygon (f $ round . (g *) <$> xs)
-    & layers .~ [portLayer ident] :: Polygon LSC.Layer Int
+    & layers .~ [portLayer ident] :: Polygon' LSC.Layer Int
     where g = view scaleFactor (tech :: Technology)
           f (x : y : ys) = (x, y) : f ys
           f _ = []

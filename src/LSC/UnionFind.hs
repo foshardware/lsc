@@ -16,8 +16,7 @@ import Data.STRef
 
 
 newtype DisjointSet s = DisjointSet (STRef s (Either Rank (DisjointSet s)))
-    deriving Eq
-
+  deriving Eq
 
 type Rank = Word
 
@@ -35,21 +34,23 @@ pair = do
 
 
 findRoot :: DisjointSet s -> ST s (Rank, DisjointSet s)
-findRoot i@(DisjointSet s) = do
+findRoot i@(DisjointSet s)
+  = do
     v <- readSTRef s
     case v of
+      Left w -> pure (w, i)
+      -- ^ arrived at root
       Right j -> do
         (w, k) <- findRoot j
         when (j /= k) $ writeSTRef s (Right k)
         -- ^ path compression
         pure (w, k)
-      Left w -> pure (w, i)
-      -- ^ arrived at root
 
 
 
 union :: DisjointSet s -> DisjointSet s -> ST s ()
-union x y = do
+union x y
+  = do
     (w1, i1@(DisjointSet s1)) <- findRoot x
     (w2, i2@(DisjointSet s2)) <- findRoot y
     let !w = succ w1

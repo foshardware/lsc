@@ -2,8 +2,8 @@
 -- SPDX-License-Identifier: GPL-3.0-or-later
 
 {-# LANGUAGE CPP #-}
-{-# LANGUAGE TupleSections #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE BangPatterns #-}
 
 module LSC.GlobalRouting
   ( determineFeedthroughs, globalDetermineFeedthroughs
@@ -24,15 +24,18 @@ import Data.Array ((//))
 import Data.Default
 import Data.Foldable
 import Data.Function (on)
-import Data.Graph hiding (Vertex, vertices, edges, components)
+import Data.Graph hiding (Vertex, Edge, vertices, edges, components)
 import qualified Data.Graph as Graph
+import Data.HashMap.Lazy (unionWith)
 import qualified Data.HashMap.Lazy as HashMap
-import Data.IntMap (insertWith, keys)
+import Data.IntMap (insertWith, keys, adjust, member, deleteMin, deleteMax)
+import qualified Data.IntMap as IntMap
 import Data.List (sortOn, groupBy, partition)
 import Data.Maybe
 import qualified Data.Sequence as Seq
 import Data.STRef
-import Data.Vector ((!), fromListN, unsafeThaw, unsafeIndex, accum, accumulate, generate, replicate, unsafeUpd)
+import Data.Tuple
+import Data.Vector (Vector, (!), fromListN, unsafeThaw, unsafeIndex, accum, accumulate, generate, replicate, unsafeUpd)
 import qualified Data.Vector as Vector
 import Data.Vector.Mutable (modify)
 
@@ -52,9 +55,13 @@ wt1 = 1
 wt2 = 1
 
 
-type DisjointEdge s = (Vertex (DisjointSet s), Vertex (DisjointSet s))
+type EdgeDisjoint s = (Vertex (DisjointSet s), Vertex (DisjointSet s))
 
-type EnumEdge = (Vertex Int, Vertex Int)
+type Edge = (Vertex Int, Vertex Int)
+
+
+isBuiltIn :: (Vertex a, Vertex a) -> Bool
+isBuiltIn (u, v) = cell u `eqNumber` cell v
 
 
 data Vertex a = Vertex
@@ -71,15 +78,13 @@ channelIndex u | even $ point u = pred $ rowIndex u
 channelIndex u = succ $ rowIndex u
 
 
-enumEdge :: STRef s Int -> Gate -> Net -> Int -> Int -> ST s EnumEdge
-enumEdge counter g n i j = do
-    x <- readSTRef counter
-    modifySTRef counter (+ 2)
-    pure (Vertex i j n g x, Vertex i j n g $ succ x)
+edgeCounter :: Int -> Gate -> Net -> Int -> Int -> Edge
+edgeCounter k g n i j = (Vertex i j n g x, Vertex i j n g $ succ x)
+  where x = k * 2
 
 
-disjointEdge :: Gate -> Net -> Int -> Int -> ST s (DisjointEdge s)
-disjointEdge g n i j = do
+edgeDisjoint :: Gate -> Net -> Int -> Int -> ST s (EdgeDisjoint s)
+edgeDisjoint g n i j = do
     (x, y) <- pair
     pure (Vertex i j n g x, Vertex i j n g y)
 
@@ -113,9 +118,9 @@ globalDetermineFeedthroughs top = do
 
     builtInEdges <- forM (view nets top) $ \ n ->
         forM (verticesByRow top n) $ mapM $ \ (g, p) ->
-            disjointEdge g n
+            edgeDisjoint g n
             (maybe 0 (view number) (row g))
-            (centerX $ maximumBy (compare `on` height) $ emphasiseHeight <$> view geometry p)
+            (centerX $ coarseBoundingBox $ p ^. geometry <&> containingBox)
             -- ^ the built-in edges for all pins in the layout grouped by net and row
 
 
@@ -156,7 +161,7 @@ globalDetermineFeedthroughs top = do
             else do
 
                 intersections <- sequence $ generate (rowIndex v - rowIndex u - 1) $ \ i ->
-                    disjointEdge (feedthroughGate (net u)) (net u)
+                    edgeDisjoint (feedthroughGate (net u)) (net u)
                     (rowIndex u + succ i)
                     (colIndex u + div (succ i * (colIndex v - colIndex u)) (rowIndex v - rowIndex u))
                     -- ^ the built-in edges for feedthroughs
@@ -169,7 +174,7 @@ globalDetermineFeedthroughs top = do
 
                 -- connect feedthroughs to every pin in the net
                 subgraph <- view (net u ^. identifier . to ix) <$> readSTRef vertices
-                modifySTRef edges $ mappend $ Seq.fromList
+                modifySTRef edges $ (<>) $ Seq.fromList
                   [ if rowIndex upperFeed > rowIndex upperComp
                     then (lowerComp, upperFeed)
                     else (lowerFeed, upperComp)
@@ -210,7 +215,9 @@ feedthroughGate n = def &~ do
 determineNetSegments :: NetGraph -> LSC NetGraph
 determineNetSegments top = do
     info ["Determine net segments"]
-    realWorldST . globalDetermineNetSegments $ top
+    result <- realWorldST . globalDetermineNetSegments $ top
+    debugChannelDensities result
+    pure result
 
 
 
@@ -227,30 +234,33 @@ globalDetermineNetSegments top = do
       $ all (isJust . row) $ top ^. gates
 
 
-    builtInEdges <- forM (view nets top) $ \ n -> do
-        counter <- newSTRef 0
-        forM (verticesOf top n) $ \ (g, p) ->
-            enumEdge counter g n
-            (maybe 0 (view number) (row g))
-            (centerX $ maximumBy (compare `on` height) $ emphasiseHeight <$> view geometry p)
+    let builtInEdges = flip fmap (view nets top) $ \ n ->
+            flip fmap (zip [0..] $ fold $ verticesByColumn top n) $ \ (k, (g, p)) ->
+                edgeCounter k g n
+                (maybe 0 (view number) (row g))
+                (centerX $ coarseBoundingBox $ containingBox <$> p ^. geometry)
+                -- ^ the built-in edges for all pins in the layout grouped by net
+                --
 
     let simplifiedNetConnectionGraph = simplifiedNetConnection <$> builtInEdges
 
-    let vertices = foldMap (\ (u, v) -> Vector.fromList [u, v]) <$> builtInEdges
 
-    edges <- newSTRef $ buildGraph <$> HashMap.unionWith (++) builtInEdges simplifiedNetConnectionGraph
+    let vertices = foldMap (fromListN 2 . toListOf both) <$> builtInEdges
 
-    cycles <- newSTRef . fmap edgesInSomeCycle =<< readSTRef edges
+    edges <- newSTRef $ buildGraph <$> unionWith (++) builtInEdges simplifiedNetConnectionGraph
+
+    let weight d (u, v) = densityRatio (colIndex u, colIndex v) (d ! channelIndex u)
+
+
+    cycles <- newSTRef . imap (edgesInSomeCycle . (vertices ^.) . ix) =<< readSTRef edges
 
     densities <- unsafeThaw
-      $ fmap constructSegmentTree
-      $ accum (flip (:)) (replicate (length rs + 1) [])
-      $ map (liftA2 (,) (channelIndex . fst) (bimap colIndex colIndex))
-      $ fold 
+      . fmap constructSegmentTree
+      . accum (flip (:)) (replicate (length rs + 1) [])
+      . map (liftA2 (,) (channelIndex . fst) (bimap colIndex colIndex))
+      . filter (not . isBuiltIn)
+      . fold 
       $ simplifiedNetConnectionGraph
-
-    let weight _ xs (u, v) | even $ point (xs ! u), 1 <- point (xs ! v) - point (xs ! u) = 0
-        weight d xs (u, v) = densityRatio (colIndex $ xs ! u, colIndex $ xs ! v) (d ! (channelIndex $ xs ! u))
 
 
     whileM_ (not . all null <$> readSTRef cycles)
@@ -258,27 +268,32 @@ globalDetermineNetSegments top = do
 
         d <- Vector.freeze densities
 
-        (xs, (u, v)) <- maximumBy (compare `on` uncurry (weight d)) . ifoldMap (\ i g -> (vertices ^. ix i, ) <$> g)
-            <$> readSTRef cycles
+        (_, (u, v)) <- (foldl' . foldl')
+            (\ (w, e) f -> let x = weight d f in if x > w then (x, f) else (w, e))
+            (-1, undefined) <$> readSTRef cycles
+            -- ^ find the maximum weighted edge
 
-        let n = xs ^. ix u . to net . identifier
+        let n = u ^. to net . identifier
 
         Just unburdened <- fmap (delete (u, v)) . preview (ix n) <$> readSTRef edges
 
         modifySTRef edges  $ HashMap.insert n $ unburdened
-        modifySTRef cycles $ HashMap.insert n $ edgesInSomeCycle unburdened
+        modifySTRef cycles $ HashMap.insert n $ edgesInSomeCycle (vertices ^. ix n) unburdened
 
-        modify densities (pull (colIndex $ xs ! u, colIndex $ xs ! v)) (channelIndex $ xs ! u) 
+        modify densities (pull (colIndex u, colIndex v)) (channelIndex u) 
 
     components <- readSTRef edges
 
     let locate u | even $ point u = (colIndex u, ss ! rowIndex u ^. b)
         locate u = (colIndex u, ss ! succ (rowIndex u) ^. b)
 
-    let vertex i x = locate $ view (ix i) vertices ! x 
-
     let draw :: Identifier -> Net -> Net
-        draw i = netSegments <>~ (components ^. ix i . to upwards <&> view line . bimap (vertex i) (vertex i))
+        draw i
+          = (<>~) netSegments
+          . map (view line . bimap locate locate)
+          . filter (not . isBuiltIn)
+          . foldMap (upward $ vertices ^. ix i)
+          $ components ^? ix i
 
     pure $ top &~ do
         nets %= imap draw
@@ -286,43 +301,46 @@ globalDetermineNetSegments top = do
 
 
 
-simplifiedNetConnection :: [EnumEdge] -> [EnumEdge]
+simplifiedNetConnection :: [Edge] -> [Edge]
 simplifiedNetConnection
   = foldMap (liftA2 zip id tail . sortOn colIndex)
   . groupBy ((==) `on` channelIndex)
   . sortOn channelIndex
-  . foldMap (\ (u, v) -> [u, v])
+  . foldMap (toListOf both)
 
 
 
-buildGraph :: [EnumEdge] -> Graph
-buildGraph xs
-  = buildG (0, maximum $ point . snd <$> xs)
-  $ liftA2 (++) id (map swap)
-  $ bimap point point <$> xs
-    where swap ~(x, y) = (y, x)
+buildGraph :: [Edge] -> Graph
+buildGraph
+  = liftA2 buildG ((,) <$> minimum . map fst <*> maximum . map snd) ((++) <$> id <*> map swap)
+  . fmap (bimap point point)
 
 
 
-edgesInSomeCycle :: Graph -> [Edge]
-edgesInSomeCycle g =
-  [ (u, v)
+edgesInSomeCycle :: Vector (Vertex Int) -> Graph -> [Edge]
+edgesInSomeCycle xs g =
+  [ (xs ! u, xs ! v)
   | s <- cyclic =<< bcc g
   , u <- s
   , v <- g ^. ix u
   , u < v
+  , not $ isBuiltIn (xs ! u, xs ! v)
   , elem v s
   ] where cyclic (Node s@(_ : _ : _ : _) ss) = s : (cyclic =<< ss)
           cyclic (Node _                 ss) =      cyclic =<< ss
 
 
 
+upward :: Vector (Vertex Int) -> Graph -> [Edge]
+upward xs g = [ (xs ! u, xs ! v) | (u, v) <- Graph.edges g, u < v ]
+
+
+
 delete :: Edge -> Graph -> Graph
-delete (u, v) g = g // [ (u, filter (/= v) (g ^. ix u)), (v, filter (/= u) (g ^. ix v)) ]
-
-
-upwards :: Graph -> [Edge]
-upwards g = [ (u, v) | (u, v) <- Graph.edges g, u < v ]
+delete (u, v) g = g //
+  [ (point u, filter (/= point v) $ g ^. ix (point u))
+  , (point v, filter (/= point u) $ g ^. ix (point v))
+  ]
 
 
 
@@ -336,7 +354,6 @@ determineRowSpacing top
 determineRowSpacing top
   = do
     info ["Determine row spacing"]
-    debugChannelDensities top
     realWorldST . densityRowSpacing $ top
 
 
@@ -349,13 +366,14 @@ oneRowSpacing top = top &~ do
     where
 
     swaps zs (e : es) (x : xs) = swaps (e : x : zs) es xs
-    swaps zs es xs = left ++ reverse zs ++ xs ++ right where (left, right) = splitAt (length es `div` 2) es
+    swaps zs es xs = fst fs ++ reverse zs ++ xs ++ snd fs where fs = splitAt (length es `div` 2) es
 
     relocated
       = zipWith (map . over space . relocateB) (top ^. supercell . rows . to keys)
       . uncurry (swaps [])
-      . partition (all $ \ g -> g ^. fixed || g ^. feedthrough)
+      . partition null
       . toList
+      . fmap (filter (not . view fixed))
       $ foldl' (\ a g -> insertWith (++) (g ^. space . b) [g] a)
         (top ^. supercell . rows <&> const [])
         (top ^. gates)
@@ -369,5 +387,44 @@ densityRowSpacing top = do
 
 
 debugChannelDensities :: NetGraph -> LSC ()
-debugChannelDensities _ = pure ()
+debugChannelDensities top = do
+
+    let j = length . show $ length densities
+        k = length . show $ maximum densities
+
+    let padLeft n s = take (n - length s) (repeat ' ') ++ s
+
+    debug
+      $ "Channel densities:" :
+      [ "Channel " ++ padLeft j (show i) ++ ": " ++ padLeft k (show d)
+      | (i, d) <- zip [ 1 :: Int .. ] densities
+      ]
+
+  where
+
+    densities
+      = map (maxDensity . constructSegmentTree)
+      . uncurry (zipWith (++))
+      . bimap toList toList
+      . foldl' buckets (deleteMin (channels b), deleteMax (channels t))
+      . foldMap (view netSegments)
+      $ top ^. nets
+
+    buckets (tops, bottoms) (Line (x1, y1) (x2, y2))
+      | x1 == x2 -- built-in edge
+      , min y1 y2 `member` tops
+      = (tops, bottoms)
+    buckets (tops, bottoms) (Line (x1, y1) (x2, y2))
+      | y1 == y2 -- same row
+      = (adjust ((x1, x2) :) y1 tops, adjust ((x1, x2) :) y2 bottoms)
+    buckets (tops, bottoms) (Line (x1, y1) (x2, y2))
+      = (tops, adjust ((x1, x2) :) (min y1 y2) bottoms)
+
+    channels f
+      = fmap (const [])
+      $ IntMap.filter id
+      $ foldl'
+        (\ a g -> adjust (\ !h -> h || not (g ^. feedthrough) && not (g ^. fixed)) (g ^. space . f) a)
+        (False <$ top ^. supercell . rows)
+        (top ^. gates)
 

@@ -50,7 +50,7 @@ cellFlipping top = do
 
             pure
               $ top &~ do
-                gates %= zipWith (over space . over orientation . mappend) solution
+                gates %= zipWith (over space . (<>~) orientation) solution
 
 
 

@@ -43,9 +43,9 @@ library
       LSC.CellFlipping
       LSC.Component
       LSC.DEF
+      LSC.Deque
       LSC.Entropy
       LSC.FastDP
-      LSC.FIFO
       LSC.FIR
       LSC.FM
       LSC.GlobalRouting
@@ -66,7 +66,6 @@ library
       LSC.UnionFind
       LSC.Verilog
       LSC.Version
-      LSC.Web
   other-modules:
       Paths_lsc
   hs-source-dirs:
@@ -202,9 +201,9 @@ test-suite lsc-test
   main-is: Spec.hs
   other-modules:
       Spec.LSC
+      Spec.LSC.Deque
       Spec.LSC.Entropy
       Spec.LSC.FastDP
-      Spec.LSC.FIFO
       Spec.LSC.FM
       Spec.LSC.GlobalRouting
       Spec.LSC.KGGGP

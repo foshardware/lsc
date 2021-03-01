@@ -18,23 +18,24 @@ import System.IO
 
 class Trace m a where
     trace :: a -> m a
-    -- recommended usage for `trace :: a -> a -> a` is either:
-    -- - liftA2 trace id id
-    -- - trace undefined
+    -- pointfree usage for `trace :: a -> b -> a`
+    -- - `liftA2 trace id id`
+    -- - `flip trace ()`
+    --
 
 
 #ifdef DEBUG
 instance Show a => Trace IO a where
-    trace = liftA2 (<$) id $ hPutStrLn stderr . show
-    {-# INLINE trace #-}
+    trace = liftA2 (<$) id (hPutStrLn stderr . show)
+    {-# NOINLINE trace #-}
 
 instance Show a => Trace (ST s) a where
     trace = unsafeIOToST . trace
-    {-# INLINE trace #-}
+    {-# NOINLINE trace #-}
 
-instance Show a => Trace ((->) a) a where
-    trace = const $ unsafePerformIO . trace
-    {-# INLINE trace #-}
+instance Show a => Trace ((->) b) a where
+    trace = const . unsafePerformIO . trace
+    {-# NOINLINE trace #-}
 #else
 instance Show a => Trace IO a where
     trace = pure
@@ -44,8 +45,8 @@ instance Show a => Trace (ST s) a where
     trace = pure
     {-# INLINE trace #-}
 
-instance Show a => Trace ((->) a) a where
-    trace = const id
+instance Show a => Trace ((->) b) a where
+    trace = const
     {-# INLINE trace #-}
 #endif
 

@@ -13,7 +13,10 @@ import Data.Semigroup ((<>))
 import Control.Applicative
 import Control.Lens
 
+import Data.Foldable
 import Data.Hashable
+import Data.IntSet (elems)
+import Data.List (intersperse)
 import Data.Text (Text)
 import qualified Data.Text as T
 import qualified Data.Text.Lazy.IO as Lazy
@@ -43,6 +46,11 @@ gateColor g | g ^. fixed = "lightblue"
 gateColor _ = "lightgrey"
 
 
+layerColor :: [Layer] -> Arg
+layerColor [Metal1] = "#EFEFFF"
+layerColor _ = "transparent"
+
+
 identColor :: Identifier -> Arg
 identColor
   = toValue
@@ -54,20 +62,11 @@ identColor
 
 
 
+type Marker = Line' Int
 
-type Scale = Double
+type Area = Component' Layer Int
 
-zoomOut :: Scale -> Int -> Int
-zoomOut scale | scale > 0 = round . (/ scale) . fromIntegral
-zoomOut scale = error $ "zoomOut: invalid scaling factor " ++ show scale
-
-
-
-type Marker = Line Int
-
-type Area = Component Layer Int
-
-type Poly = Polygon Layer Int
+type Poly = Polygon' Layer Int
 
 
 type Svg = S.Svg
@@ -78,33 +77,40 @@ type Args = (Arg, Arg)
 
 
 
-plotStdout :: Scale -> NetGraph -> IO ()
+plotStdout :: Double -> NetGraph -> IO ()
 plotStdout scale = Lazy.putStr . renderSvg . plot scale
 
 
 
-plot :: Scale -> NetGraph -> Svg
-plot scale = svgDoc . region pixelated . liftA2 region quadrantI id
-  where 
-     pixelated
-       = zoomOut scale
-       . (* pixelsPerMicron)
-     quadrantI
-       = liftA2 (.) ((+) . abs . min 0 . view l) ((+) . abs . min 0 . view b)
-       . netGraphArea
+plot :: Double -> NetGraph -> Svg
+plot scale
+  | scale <= 0
+  = error $ "plot: invalid scaling factor " ++ show scale
+plot scale
+  = svgDoc . region pixelated pixelated . liftA2 id quadrantI id
+  where
+    pixelated
+      = round . (/ scale)
+      . fromIntegral . (* pixelsPerMicron)
+    quadrantI
+      = liftA2 region ((+) . abs . min 0 . view l) ((+) . abs . min 0 . view b)
+      . netGraphArea
 
 
 
 svgDoc :: NetGraph -> Svg
 svgDoc top = S.docTypeSvg
   ! A.version "1.1"
-  ! A.width  (toValue $ netGraphArea top ^. r)
-  ! A.height (toValue $ netGraphArea top ^. t)
+  ! A.width  (toValue $ area ^. r)
+  ! A.height (toValue $ area ^. t)
   $ do
+    track area `mapM_` view (supercell . tracks) top
     place `mapM_` view gates top
     route `mapM_` view nets top
     ports `mapM_` view nets top
     drawA ("black", "lightyellow") `mapM_` outerRim top
+  where
+    area = netGraphArea top
 
 
 
@@ -141,16 +147,37 @@ route _
 
 
 
+track :: Area -> Either Track Track -> Svg
+track a (Right x)
+  = for_ (x ^. stabs . to elems)
+  $ drawL (x ^. layers . to layerColor) . vertical (a ^. t)
+track a (Left y)
+  = for_ (y ^. stabs . to elems)
+  $ drawL (y ^. layers . to layerColor) . horizontal (a ^. r)
+
+
+horizontal, vertical :: Int -> Int -> Marker
+horizontal x y = Line (0, y) (x, y)
+vertical   y x = Line (x, 0) (x, y)
+
+
+
 ports :: Net -> Svg
-ports n = drawP `mapM_` (foldMap . foldMap) (view geometry) (n ^. contacts)
+ports
+  = mapM_ drawP
+  . foldMap (view geometry)
+  . fold
+  . view contacts
 
 
 
 drawP :: Poly -> Svg
 drawP p = S.polygon
-  ! A.points (toValue $ foldMap (\ (x, y) -> decimal x <> "," <> decimal y <> " ") (p ^. path))
+  ! A.points (toValue $ fold $ intersperse " " points)
   ! A.fill "transparent"
   ! A.stroke "black"
+  where
+    points = toList $ p ^. path <&> \ (x, y) -> decimal x <> "," <> decimal y
 
 
 
@@ -166,7 +193,6 @@ drawA (border, background) a = S.rect
 
 
 drawL :: Arg -> Marker -> Svg
-drawL _ (Line (x1, y1) (x2, y2)) | x1 == x2 && y1 == y2 = pure ()
 drawL color (Line (x1, y1) (x2, y2)) = S.line
   ! A.x1 (toValue x1)
   ! A.y1 (toValue y1)
@@ -179,8 +205,8 @@ drawL color (Line (x1, y1) (x2, y2)) = S.line
 
 forShort :: Int -> Text -> Builder
 forShort n string
-    | T.length string > n
-    = fromText (T.take (n - 2) string) <> ".."
+  | T.length string > n
+  = fromText (T.take (n - 2) string) <> ".."
 forShort _ string
-    = fromText string
+  = fromText string
 

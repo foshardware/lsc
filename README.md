@@ -16,12 +16,6 @@ SPDX-License-Identifier: GPL-3.0-or-later
 
 `stack install`
 
-### GLPK optimizations
-
-`stack install --flag=lsc:glpk`  
-
-Use GLPK for solving integer programs.
-
 
 ## Usage
 
@@ -75,6 +69,10 @@ This program is available as open source under the terms of the GPL-3.0-or-later
 
 ## References
 
+### LSC.Deque
+
+- Okasaki (1998): Purely Functional Data Structures [doi:10.1017/cbo9780511530104](https://doi.org/10.1017/cbo9780511530104)
+
 ### LSC.FM
 
 - Fiduccia, et. al. (1982): A Linear-Time Heuristic for Improving Network Partitions [doi:10.1109/dac.1982.1585498](https://doi.org/10.1109/dac.1982.1585498)
@@ -115,6 +113,9 @@ This program is available as open source under the terms of the GPL-3.0-or-later
 
 - LSC
   - revisit stage logic
+
+- Interval stabbing
+  - [doi:10.1007/978-3-642-10631-6_18](https://doi.org/10.1007/978-3-642-10631-6_18)
 
 - Cell flipping
   - [doi:10.1016/S0166-218X(98)00114-0](https://doi.org/10.1016/S0166-218X%2898%2900114-0)
