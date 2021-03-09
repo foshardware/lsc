@@ -16,7 +16,6 @@ import Data.Function
 import Data.Graph
 import Data.HashMap.Lazy (insert, delete)
 import qualified Data.HashMap.Lazy as HashMap
-import Data.List (groupBy)
 import Data.Maybe
 import Data.STRef
 import Data.Vector (Vector, (!), unsafeFreeze, unsafeThaw, update, unsafeUpd)
@@ -28,6 +27,7 @@ import qualified Data.Vector.Unboxed.Mutable as ST
 import Prelude hiding (read, lookup)
 import Text.Printf
 
+import LSC.Cartesian
 import LSC.Component
 import LSC.NetGraph
 import LSC.Types
@@ -52,7 +52,7 @@ legalizeRows top = do
 
 rowLegalization :: NetGraph -> Vector Gate -> ST s (Vector Gate)
 rowLegalization _ gs
-    | length gs < 2
+    | length gs <= 1
     = pure gs
 rowLegalization _ gs
     | all (view fixed) gs
@@ -135,7 +135,7 @@ rowLegalization top gs = do
 
     let shortestPath = takeWhile (> 0) (iterate (Unbox.unsafeIndex predecessor) target)
 
-    let diagonal = tail . map head . groupBy (on (==) fst) . map site $ shortestPath
+    let diagonal = tail . map head . groupOn fst . map site $ shortestPath
 
     assume "rowLegalization: cannot legalize row!" $ not $ null diagonal
 

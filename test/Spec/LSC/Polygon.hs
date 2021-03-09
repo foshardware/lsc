@@ -10,6 +10,7 @@ import Control.Lens
 import Test.Tasty
 import Test.Tasty.HUnit
 
+import LSC.Cartesian
 import LSC.Component
 import LSC.Polygon
 

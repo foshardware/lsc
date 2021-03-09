@@ -22,7 +22,7 @@ segmentTree = testGroup "SegmentTree"
         n <- generate $ choose (8, 240)
         xs <- generate $ vector n
 
-        let tree = constructSegmentTree xs :: SegmentTree Int
+        let tree = fromList xs :: SegmentTree Int
             cleared = foldr pull tree xs
 
         assertBool "construction"
@@ -32,7 +32,7 @@ segmentTree = testGroup "SegmentTree"
           $ all (== 0) $ flip densityOver cleared <$> xs
 
         assertEqual "compact"
-          (flip densityOver (foldr compact cleared xs) <$> xs)
+          (flip densityOver (foldr push cleared xs) <$> xs)
           (flip densityOver tree <$> xs)
 
   , testCase "Example 1a"
@@ -40,7 +40,7 @@ segmentTree = testGroup "SegmentTree"
 
         let xs = [(1, 2), (4, 6), (7, 8), (2, 4), (5, 7), (1, 3), (5, 6), (3, 8)]
 
-        let tree = constructSegmentTree xs :: SegmentTree Int
+        let tree = fromList xs :: SegmentTree Int
 
         assertEqual "x1" 2 $ densityOver (1, 1) tree
         assertEqual "x2" 3 $ densityOver (2, 2) tree
@@ -75,7 +75,7 @@ segmentTree = testGroup "SegmentTree"
 
         let xs = [(1, 2), (4, 6), (7, 8), (2, 4), (5, 7), (1, 3), (5, 6), (3, 8)]
 
-        let tree = pull (3, 8) $ pull (5, 7) $ constructSegmentTree xs :: SegmentTree Int
+        let tree = pull (3, 8) $ pull (5, 7) $ fromList xs :: SegmentTree Int
 
         assertEqual "x1" 2 $ densityOver (1, 1) tree
         assertEqual "x2" 3 $ densityOver (2, 2) tree

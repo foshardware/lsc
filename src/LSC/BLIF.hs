@@ -64,7 +64,7 @@ fromModel (Model name inputs outputs clocks commands)
 
     nodes = set number `imap` mapMaybe fromNetlist commands
 
-    edges = generateEdges nodes
+    edges = generateHyperedges nodes
 
     superCell = def
       & pins <>~ HashMap.fromList [(i, Pin i (Just  In) def) | i <- inputs ++ clocks] 

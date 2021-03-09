@@ -14,15 +14,13 @@ import Control.Monad
 import Control.Monad.IO.Class
 import Control.Monad.ST
 import Data.Default
-import Data.Either
 import Data.Foldable
 import Data.Function
 import Data.HashMap.Lazy (HashMap)
 import qualified Data.HashMap.Lazy as HashMap
 import qualified Data.IntMap as M
-import Data.IntSet (elems)
 import qualified Data.IntSet as IntSet
-import Data.List (sort, sortOn, sortBy, groupBy)
+import Data.List (sort, sortOn)
 import Data.List.Split (wordsBy)
 import Data.Maybe
 import Data.Monoid
@@ -35,6 +33,7 @@ import qualified Data.Vector.Unboxed as U
 import qualified Data.Vector as V
 import Prelude hiding (lookup, filter)
 
+import LSC.Cartesian
 import LSC.Component
 import LSC.Entropy
 import LSC.Types
@@ -69,7 +68,8 @@ hpwlDelta top gs = sum
   | net <- hyperedges top gs
   , let before = foldMap' (implode . view space)
                           (view members net)
-  , let after  = foldMap' (\ g -> maybe (g ^. space . to implode) (implode . view space) $ find (eqNumber g) gs)
+  , let after  = foldMap' (\ g -> maybe (g ^. space . to implode) (implode . view space)
+                                $ find (\ h -> g ^. number == h ^. number) gs)
                           (view members net)
   ]
 {-# INLINABLE hpwlDelta #-}
@@ -84,32 +84,36 @@ optimalRegion f
   = rect x1 y1 x2 y2
   where
     boxes = foldr ((:) . foldMap' (implode . view space)) [] f
-    [x1, x2] = medianElements $ sort $ foldMap (\ box -> [box ^. l, box ^. r]) boxes
-    [y1, y2] = medianElements $ sort $ foldMap (\ box -> [box ^. b, box ^. t]) boxes
+    [x1, x2] = medianElements $ sort $ foldMap abscissae boxes
+    [y1, y2] = medianElements $ sort $ foldMap ordinates boxes
 {-# INLINABLE optimalRegion #-}
 
 
 
 hyperedges :: Foldable f => NetGraph -> f Gate -> [Net]
-hyperedges top gs = map head . groupBy eqIdentifier . sortBy ordIdentifier $
-  [ n
-  | g <- toList gs
-  , k <- toList $ view wires g
-  , n <- toList $ top ^. nets ^? ix k
-  ]
+hyperedges top gs
+  = map getDistinctIdentifier
+  . unstableUnique
+  $ [ DistinctIdentifier n
+    | g <- toList gs
+    , k <- toList $ g ^. wires
+    , n <- toList $ top ^. nets ^? ix k
+    ]
 {-# INLINABLE hyperedges #-}
 
 
 
 adjacentByPin :: NetGraph -> Gate -> HashMap Identifier (Vector Gate)
 adjacentByPin top g
-  = foldMap (filter (not . eqNumber g) . view members) . (view nets top ^?) . ix <$> view wires g
+  = foldMap (filter (\ h -> g ^. number /= h ^. number) . view members)
+  . flip preview (view nets top) . ix
+    <$> view wires g
 
 
 
 verticesByRow :: NetGraph -> Net -> [[(Gate, Pin)]]
 verticesByRow top
-  = groupBy ((==) `on` view (_1 . space . b))
+  = groupOn (view (_1 . space . b))
   . sortOn (view (_1 . space . b))
   . verticesOf top
 
@@ -117,10 +121,11 @@ verticesByRow top
 verticesByColumn :: NetGraph -> Net -> [[(Gate, Pin)]]
 verticesByColumn top net =
   [ [ (g, p & geometry .~ [simplePolygon c])
-    | c <- foldMap (columns x1 (x2 - x1)) (p ^. geometry)
+    | c <- foldMap (columns (row ^. l) (row ^. granularity)) (p ^. geometry)
     ]
   | (g, p) <- verticesOf top net
-  ] where x1 : x2 : _ = fold $ top ^. supercell . tracks . to rights <&> elems . view stabs
+  , row <- toList $ top ^. supercell . rows ^? ix (g ^. space . b)
+  ]
 
 
 verticesOf :: NetGraph -> Net -> [(Gate, Pin)]
@@ -166,7 +171,7 @@ flattenGateMatrix = filter (\ g -> g ^. number >= 0) . getMatrixAsVector
 
 
 sumOfHpwlMatrix :: Matrix Gate -> Int
-sumOfHpwlMatrix m = sum $ hpwlMatrix (coordsVector m) <$> generateEdges m
+sumOfHpwlMatrix m = sum $ hpwlMatrix (coordsVector m) <$> generateHyperedges m
 
 
 
@@ -177,7 +182,7 @@ estimationsMatrix m = do
     [ show $ view number <$> m
     , unwords [show $ nrows m, "x", show $ ncols m]
     , unwords ["gate count:", show $ foldl' (\ a g -> if g ^. number < 0 then a else succ a :: Int) 0 m]
-    , unwords [" net count:", show $ length $ generateEdges m]
+    , unwords [" net count:", show $ length $ generateHyperedges m]
     , unwords ["sum of hpwl:", show $ sumOfHpwlMatrix m]
     ]
 
@@ -220,40 +225,41 @@ significantHpwl m n = div p x `compare` div q x
 
 getSegments :: Vector Gate -> [Vector Gate]
 getSegments
-    = map V.fromList
-    . foldMap (wordsBy (view fixed))
-    . map (sortOn (view space))
-    . groupBy ((==) `on` view (space . b))
-    . sortOn (view (space . b))
-    . toList
+  = map V.fromList
+  . foldMap (wordsBy (view fixed))
+  . map (sortOn (view space))
+  . groupOn (view (space . b))
+  . sortOn (view (space . b))
+  . toList
 
 
 
 getRows :: Vector Gate -> [Vector Gate]
 getRows
-    = map V.fromList
-    . map (sortOn (view space))
-    . groupBy ((==) `on` view (space . b))
-    . sortOn (view (space . b))
-    . toList
+  = map V.fromList
+  . map (sortOn (view space))
+  . groupOn (view (space . b))
+  . sortOn (view (space . b))
+  . toList
 
 
 
-inlineGeometry :: NetGraph -> LSC NetGraph
-inlineGeometry top = pure $ rebuildEdges $ top &~ do
- 
-    gates .= gs
+getRow :: NetGraph -> Gate -> Maybe Row
+getRow top g = top ^. supercell . rows ^? ix (g ^. space . b)
 
-    where
 
-      gs = set number `imap` V.concat
-        [ s ^. gates <&> project (view space g)
-        | g <- toList $ top ^. gates
-        , s <- toList $ top ^. subcells ^? views identifier ix g
-        ]
 
-      project :: Component' Layer Int -> Gate -> Gate
-      project p = space %~ \ x -> x & l +~ p^.l & b +~ p^.b & t +~ p^.b & r +~ p^.l
+
+inlineGeometry :: NetGraph -> NetGraph
+inlineGeometry top
+  = rebuildHyperedges
+  $ top &~ do
+    gates .= set number `imap` V.concat
+      [ s ^. gates <&> over space (inline (g ^. space))
+      | g <- toList $ top ^. gates
+      , s <- toList $ top ^. subcells ^? views identifier ix g
+      ]
+
 
 
 gateGeometry :: NetGraph -> LSC NetGraph
@@ -294,12 +300,17 @@ rebuildPins cells top = top &~ do
 
     nets %= fmap (over contacts . imap $ fmap . maybe id align . views gates (^?) top . ix)
 
-    where
+  where
 
-    align g p | g ^. feedthrough = p & geometry .~ pure (g ^. space . to simplePolygon)
-    align g p = maybe p (absolute g) $ cells ^? views identifier ix g . pins . views identifier ix p
+    align g p
+      | g ^. feedthrough
+      = p & geometry .~ pure (g ^. space . to simplePolygon)
+    align g p
+      = maybe p (absolute g) $ cells ^? views identifier ix g . pins . views identifier ix p
 
-    absolute g = over geometry . fmap $ bimap (+ g ^. space . l) (+ g ^. space . b)
+    absolute g
+      = over geometry . fmap
+      $ inline (g ^. space)
 
 
 
@@ -348,19 +359,20 @@ removeFeedthroughs = gates %~ imap (set number) . filter (views feedthrough not)
 
 
 
-rebuildEdges :: NetGraph -> NetGraph
-rebuildEdges = liftA2 (set nets) (generateEdges . view gates) id
+rebuildHyperedges :: NetGraph -> NetGraph
+rebuildHyperedges = set nets <$> generateHyperedges . view gates <*> id
 
 
 
-generateEdges :: Foldable f => f Gate -> HashMap Identifier Net
-generateEdges gs = HashMap.fromListWith (<>)
-    [ (i, Net i mempty mempty (pure gate) (HashMap.singleton (gate ^. number) [pin]))
-    | gate <- toList gs
-    , (contact, i) <- HashMap.toList $ gate ^. wires
-    , let pin = def & identifier .~ contact
-    ]
-{-# INLINABLE generateEdges #-}
+generateHyperedges :: Foldable f => f Gate -> HashMap Identifier Net
+generateHyperedges gs = HashMap.fromListWith (<>)
+  [ (i, Net i mempty mempty (pure gate) (HashMap.singleton (gate ^. number) [pin]))
+  | gate <- toList gs
+  , (contact, i) <- HashMap.toList $ gate ^. wires
+  , let pin = def & identifier .~ contact
+  ]
+{-# INLINABLE generateHyperedges #-}
+
 
 
 region :: (Int -> Int) -> (Int -> Int) -> NetGraph -> NetGraph
@@ -375,15 +387,15 @@ region f g top = top &~ do
 
 netGraphArea :: NetGraph -> Component' l Int
 netGraphArea top
-    = castLayer
-    $ coarseBoundingBox (view space <$> view gates top) <> coarseBoundingBox (outerRim top)
+  = castLayer
+  $ coarseBoundingBox (view space <$> view gates top) <> coarseBoundingBox (outerRim top)
 
 
 
 outerRim :: NetGraph -> HashMap Identifier (Component' Layer Int)
 outerRim
-    = fmap (foldMap (coarseBoundingBox . polygon) . view geometry)
-    . view (supercell . pins)
+  = fmap (foldMap (coarseBoundingBox . polygon) . view geometry)
+  . view (supercell . pins)
 
 
 

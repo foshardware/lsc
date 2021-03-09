@@ -4,12 +4,14 @@
 {-# LANGUAGE CPP #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE BangPatterns #-}
 
 module LSC.Trace where
 
 import Control.Monad.ST
+import Control.Monad.State as Lazy
+import Control.Monad.State.Strict as Strict
 #ifdef DEBUG
-import Control.Applicative
 import Control.Monad.ST.Unsafe
 import System.IO.Unsafe
 import System.IO
@@ -26,11 +28,19 @@ class Trace m a where
 
 #ifdef DEBUG
 instance Show a => Trace IO a where
-    trace = liftA2 (<$) id (hPutStrLn stderr . show)
+    trace m = m <$ hPutStrLn stderr (show m)
     {-# NOINLINE trace #-}
 
 instance Show a => Trace (ST s) a where
     trace = unsafeIOToST . trace
+    {-# NOINLINE trace #-}
+
+instance (Monad m, Show a) => Trace (Lazy.StateT s m) a where
+    trace m = trace m m `seq` pure m
+    {-# NOINLINE trace #-}
+
+instance (Monad m, Show a) => Trace (Strict.StateT s m) a where
+    trace m = trace m () `seq` pure m
     {-# NOINLINE trace #-}
 
 instance Show a => Trace ((->) b) a where
@@ -42,6 +52,14 @@ instance Show a => Trace IO a where
     {-# INLINE trace #-}
 
 instance Show a => Trace (ST s) a where
+    trace = pure
+    {-# INLINE trace #-}
+
+instance (Monad m, Show a) => Trace (Lazy.StateT s m) a where
+    trace = pure
+    {-# INLINE trace #-}
+
+instance (Monad m, Show a) => Trace (Strict.StateT s m) a where
     trace = pure
     {-# INLINE trace #-}
 

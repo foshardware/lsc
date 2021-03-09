@@ -41,6 +41,7 @@ import qualified Data.Vector.Unboxed.Mutable as T
 import Data.Vector.Mutable (slice)
 import Prelude hiding (read, lookup)
 
+import LSC.Cartesian
 import LSC.Component
 import LSC.NetGraph
 import LSC.Types
@@ -189,7 +190,7 @@ swapRoutine sc vertical top = do
           case decide sufficientBenefit $ zip3 (0 : benefits) (True : taints) (Right g : map snd swaps) of
 
               (w, taintH,  _) | w <= 0 || taintH -> pure ()
-              (_, _, Right h) | h ^. fixed || eqNumber g h -> pure ()
+              (_, _, Right h) | h ^. fixed || g ^. number == h ^. number -> pure ()
 
               (_, _, Right h) -> do
 
@@ -469,7 +470,7 @@ centerCluster :: (Int, Cluster) -> Gate -> Gate
 centerCluster (pos, c) g = g & space %~ relocateL (pos - div w 2 + x)
     where
         w = sum $ gateWidth <$> c
-        x = sum $ gateWidth <$> takeWhile (not . eqNumber g) c
+        x = sum $ gateWidth <$> takeWhile (\ h -> g ^. number /= h ^. number) c
 
 
 -- assumes clusters in left-to-right order
@@ -493,7 +494,7 @@ generateBoundsList top _ _ c
     = error "generateBoundsList: cluster is not connected"
 generateBoundsList top segment order c
     = sort
-    $ foldMap (\ box -> [box ^. l, box ^. r])
+    $ foldMap abscissae
     $ selfContained
     $ filter (/= mempty)
       [ boundingBox

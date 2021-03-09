@@ -53,7 +53,7 @@ instance Arbitrary (FastDP NetGraph) where
         grp <- pure $ runST $ liftA2 mapM rowLegalization (getRows . view gates) =<< rowJuggling 1 top
         pure
           $ FastDP
-          $ rebuildEdges
+          $ rebuildHyperedges
           $ top &~ do
             gates %= flip update (liftA2 (,) (view number) id <$> fold grp)
 
@@ -71,12 +71,12 @@ instance Arbitrary (FastDP Layout) where
 layout :: Iso' (FastDP NetGraph) (FastDP Layout)
 layout = iso
     (FastDP . buildLayout . view gates . unFastDP)
-    (FastDP . rebuildEdges . flip (set gates) def . gateVector . unFastDP)
+    (FastDP . rebuildHyperedges . flip (set gates) def . gateVector . unFastDP)
     where
       gateVector
-        = liftA2 (accum (flip const))
-          (flip replicate def . sum . fmap (sum . fmap length))
-          (map (liftA2 (,) (view number) id) . foldMap (rights . toList))
+        = accum (flip const)
+          <$> flip replicate def . sum . fmap (sum . fmap length)
+          <*> map (liftA2 (,) (view number) id) . foldMap (rights . toList)
 
 
 

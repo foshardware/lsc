@@ -24,6 +24,7 @@ import Test.Tasty
 import Test.Tasty.HUnit
 import Test.Tasty.QuickCheck
 
+import LSC.Cartesian
 import LSC.Component
 import LSC.Entropy hiding (Gen)
 import LSC.NetGraph
@@ -72,7 +73,7 @@ instance Arbitrary (Given NetGraph) where
         rs <- replicateM maxRowCount $ resize maxRowWidth arbitrary
         pure
           $ Given
-          $ rebuildEdges
+          $ rebuildHyperedges
           $ assignCellsToRows
           $ def &~ do
             gates .= set number `imap` fmap say gs

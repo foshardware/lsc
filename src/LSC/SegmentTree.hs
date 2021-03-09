@@ -1,27 +1,127 @@
 -- Copyright 2018 - Andreas Westerwick <westerwick@pconas.de>
 -- SPDX-License-Identifier: GPL-3.0-or-later
 
+{-# LANGUAGE DeriveFunctor #-}
+
 module LSC.SegmentTree
-  ( SegmentTree, constructSegmentTree
-  , maxDensity, densityRatio, densityOver
+  ( SegmentTree, fromList
+  , constructSegmentTree, endpoints
+  , maxDensity, densityRatio, densityOn, densityOver
   , unsafeDensityRatio, unsafeDensityOver
-  , compact, pull
-  , unsafeCompact, unsafePull
+  , push, pull
+  , unsafePush, unsafePull
   , showTree
+
+  , Stabs, skeleton
+  , append, unsafeAppend, adjust, unsafeAdjust
+  , stab, stabOver, unsafeStabOver
+
   ) where
 
+import Data.Bifoldable
+import Data.Foldable
 import Data.List (group, sort)
 import Data.Ratio
 
 
--- | Undefined behaviour for:
---   - Inserting an interval `[x1,x2]` where `x1` or `x2` are unknown to the segment tree
---   - Removing an interval `[x1,x2]` more often than inserting `[x1,x2]`
+-- | Custom tree data type for creating stabbing queries over monoids, e. g. always
+--   appending `Sum 1` counts the number of intervals intersecting the stabbing abscissa.
+--
+--   Note that the underlying monoid type can be changed at your convenience by using `fmap`.
+--
+data Stabs a m
+  = Tip
+  | Stab  m a
+  | Range m a a (Stabs a m) (Stabs a m)
+  deriving (Functor, Show)
+
+
+
+skeleton :: (Ord a, Monoid m) => [a] -> Stabs a m
+skeleton []
+  = Tip
+skeleton xs
+  = head
+  . until (null . tail) ranges
+  . map (Stab mempty)
+  $ xs
+  where
+    ranges (x : y : ys) = Range mempty (fst (bounds x)) (snd (bounds y)) x y : ranges ys
+    ranges ys = ys
+{-# INLINABLE skeleton #-}
+
+
+bounds :: Stabs a m -> (a, a)
+bounds    Tip            = undefined
+bounds  (Stab _ x)       = (x, x)
+bounds (Range _ x y _ _) = (x, y)
+
+
+
+append, unsafeAppend :: (Ord a, Semigroup m) => (a, a) -> m -> Stabs a m -> Stabs a m
+append = unsafeAppend . asc
+
+unsafeAppend range m = unsafeAdjust range (<> m)
+{-# INLINABLE append #-}
+{-# INLINABLE unsafeAppend #-}
+
+
+adjust, unsafeAdjust :: Ord a => (a, a) -> (m -> m) -> Stabs a m -> Stabs a m
+adjust = unsafeAdjust . asc
+
+unsafeAdjust = go
+  where
+    go (x, y) f (Stab m a)
+        | x <= a, a <= y
+        = Stab (f m) a
+    go (x, y) _ (Range m a b left right)
+        | y < a || b < x
+        = Range m a b left right
+    go (x, y) f (Range m a b left right)
+        = Range
+          (if x <= a && b <= y then f m else m) a b
+          (go (x, y) f left)
+          (go (x, y) f right)
+    go _ _ node = node
+{-# INLINABLE adjust #-}
+{-# INLINABLE unsafeAdjust #-}
+
+
+
+stab :: (Ord a, Monoid m) => a -> Stabs a m -> m
+stab x = unsafeStabOver (x, x)
+{-# INLINABLE stab #-}
+
+
+stabOver, unsafeStabOver :: (Ord a, Monoid m) => (a, a) -> Stabs a m -> m
+stabOver = unsafeStabOver . asc
+
+unsafeStabOver = go
+  where
+    go (x, y) (Stab m a)
+        | x <= a, a <= y
+        = m
+    go (x, y) (Range m a b _ _)
+        | x <= a, b <= y
+        = m
+    go (x, y) (Range _ _ _ left right)
+        = l <> r
+        where
+          l = if x <= snd (bounds left)  then go (x, y) left  else mempty
+          r = if y >= fst (bounds right) then go (x, y) right else mempty
+    go _ _ = mempty
+{-# INLINABLE stabOver #-}
+{-# INLINABLE unsafeStabOver #-}
+
+
+
+
+-- | An implementation closer to the literature
 --
 data SegmentTree a
   = Nil
-  | Leaf Int a
-  | Interval Int Int (a, a) (SegmentTree a) (SegmentTree a)
+  | Leaf     {-# UNPACK #-} !Int a
+  | Interval {-# UNPACK #-} !Int {-# UNPACK #-} !Int (a, a) (SegmentTree a) (SegmentTree a)
   deriving Show
 
 
@@ -29,24 +129,39 @@ data SegmentTree a
 --
 instance Foldable SegmentTree where
     foldMap = foldMapStabs
+    foldr = foldrStabs
     null = nullSegment
 
 
 
-constructSegmentTree :: Ord a => [(a, a)] -> SegmentTree a
-constructSegmentTree []
+fromList :: Ord a => [(a, a)] -> SegmentTree a
+fromList = constructSegmentTree <$> endpoints <*> id
+{-# INLINABLE fromList #-}
+
+
+-- | This is unsafe: `constructSegmentTree` assumes its first argument to be distinct
+--   and in ascending order
+--
+constructSegmentTree :: Ord a => [a] -> [(a, a)] -> SegmentTree a
+constructSegmentTree [] _
   = Nil
-constructSegmentTree xs
-  = flip (foldl (flip compact)) xs
+constructSegmentTree xs is
+  = flip (foldl' (flip push)) is
   . head
   . until (null . tail) intervals
   . map (Leaf 0)
-  . map head . group . sort
-  . foldMap (\ (x, y) -> [x, y])
   $ xs
   where
     intervals (x : y : ys) = Interval 0 0 (lower x, upper y) x y : intervals ys
     intervals ys = ys
+{-# INLINABLE constructSegmentTree #-}
+
+
+endpoints :: Ord a => [(a, a)] -> [a]
+endpoints
+  = map head . group . sort
+  . foldMap biList
+{-# INLINABLE endpoints #-}
 
 
 lower, upper :: SegmentTree a -> a
@@ -72,97 +187,112 @@ maxDensity (Interval x _ _ _ _) = x
 
 
 asc :: Ord a => (a, a) -> (a, a)
-asc (x, y) = (min x y, max x y)
-{-# INLINE asc #-}
+asc (x, y) | x > y = (y, x)
+asc (x, y) = (x, y)
+{-# INLINABLE asc #-}
 
 
 densityRatio, unsafeDensityRatio :: Ord a => (a, a) -> SegmentTree a -> Rational
 densityRatio _ node
   | nullSegment node
   = error "densityRatio: empty segment"
-densityRatio int node
-  = unsafeDensityRatio (asc int) node
+densityRatio interval node
+  = unsafeDensityRatio (asc interval) node
 
-unsafeDensityRatio (x, y) node
-  = fromIntegral (unsafeDensityOver (x, y) node)
+unsafeDensityRatio interval node
+  = fromIntegral (unsafeDensityOver interval node)
   % fromIntegral (maxDensity node)
 {-# INLINABLE densityRatio #-}
 {-# INLINABLE unsafeDensityRatio #-}
 
 
+densityOn :: Ord a => a -> SegmentTree a -> Int
+densityOn x = unsafeDensityOver (x, x)
+{-# INLINABLE densityOn #-}
+
+
 densityOver, unsafeDensityOver :: Ord a => (a, a) -> SegmentTree a -> Int
-densityOver int node
-  = unsafeDensityOver (asc int) node
+densityOver = unsafeDensityOver . asc
 
-unsafeDensityOver (x, y) (Leaf density a)
-  | x <= a
-  , y >= a
-  = density
-unsafeDensityOver (x, y) (Interval density _ (a, b) _ _)
-  | x <= a
-  , y >= b
-  = density
-unsafeDensityOver (x, y) (Interval _ delete _ left right)
-  = subtract delete
-  $ max l r
+unsafeDensityOver = go
   where
-    l = if x <= upper left  then unsafeDensityOver (x, y) left  else delete
-    r = if y >= lower right then unsafeDensityOver (x, y) right else delete
-unsafeDensityOver _ _ = 0
+    go (x, y) (Leaf density a)
+        | x <= a, a <= y
+        = density
+    go (x, y) (Interval density _ (a, b) _ _)
+        | x <= a, b <= y
+        = density
+    go (x, y) (Interval _ delete _ left right)
+        = subtract delete $ max l r
+        where
+          l = if x <= upper left  then go (x, y) left  else delete
+          r = if y >= lower right then go (x, y) right else delete
+    go _ _ = 0
 {-# INLINABLE densityOver #-}
+{-# INLINABLE unsafeDensityOver #-}
 
 
-compact, unsafeCompact :: Ord a => (a, a) -> SegmentTree a -> SegmentTree a
-compact int node
-  = unsafeCompact (asc int) node
+-- | Insert an edge, mnemonic: to push a needle into the haystack
+--
+push, unsafePush :: Ord a => (a, a) -> SegmentTree a -> SegmentTree a
+push = unsafePush . asc
 
-unsafeCompact (x, y) (Leaf density a)
-  | x <= a
-  , y >= a
-  = Leaf (succ density) a
-unsafeCompact (x, y) (Interval _ delete (a, b) left right)
-  = Interval (subtract delete $ maxDensity l `max` maxDensity r) delete (a, b) l r
+unsafePush = go
   where
-    l = if x <= upper left  then unsafeCompact (x, y) left  else left
-    r = if y >= lower right then unsafeCompact (x, y) right else right
-unsafeCompact _ node = node
-{-# INLINABLE compact #-}
+    go (x, y) (Leaf density a)
+        | x <= a, a <= y
+        = Leaf (succ density) a
+    go (x, y) (Interval _ delete (a, b) left right)
+        = Interval (subtract delete $ maxDensity l `max` maxDensity r) delete (a, b) l r
+        where
+          l = if x <= upper left  then go (x, y) left  else left
+          r = if y >= lower right then go (x, y) right else right
+    go _ node = node
+{-# INLINABLE push #-}
+{-# INLINABLE unsafePush #-}
 
 
+-- | Delete an edge, mnemonic: to pull a needle from the haystack
+--
 pull, unsafePull :: Ord a => (a, a) -> SegmentTree a -> SegmentTree a
-pull int node
-  = unsafePull (asc int) node
+pull = unsafePull . asc
 
-unsafePull (x, y) (Leaf density a)
-  | x <= a
-  , y >= a
-  = Leaf (pred density) a
-unsafePull (x, y) (Interval density delete (a, b) left right)
-  | x <= a
-  , y >= b
-  = Interval (pred density) (succ delete) (a, b) left right
-unsafePull (x, y) (Interval _ delete (a, b) left right)
-  = Interval (subtract delete $ maxDensity l `max` maxDensity r) delete (a, b) l r
+unsafePull = go
   where
-    l = if x <= upper left  then unsafePull (x, y) left  else left
-    r = if y >= lower right then unsafePull (x, y) right else right
-unsafePull _ node = node
+    go (x, y) (Leaf density a)
+        | x <= a, a <= y
+        = Leaf (pred density) a
+    go (x, y) (Interval density delete (a, b) left right)
+        | x <= a, b <= y
+        = Interval (pred density) (succ delete) (a, b) left right
+    go (x, y) (Interval _ delete (a, b) left right)
+        = Interval (subtract delete $ maxDensity l `max` maxDensity r) delete (a, b) l r
+        where
+          l = if x <= upper left  then go (x, y) left  else left
+          r = if y >= lower right then go (x, y) right else right
+    go _ node = node
 {-# INLINABLE pull #-}
+{-# INLINABLE unsafePull #-}
 
 
 
 foldMapStabs :: Monoid m => (a -> m) -> SegmentTree a -> m
-foldMapStabs f = go 0
-
+foldMapStabs = go 0
   where
+    go k _ node | maxDensity node <= k = mempty
+    go k f (Interval _ d _ l r) = go (k + d) f l <> go (k + d) f r
+    go _ f     (Leaf _ a)       = f a
+    go _ _       Nil            = mempty
+{-# INLINABLE foldMapStabs #-}
 
-    go k node | maxDensity node <= k = mempty
 
-    go k (Interval _ d _ l r) = go (k + d) l <> go (k + d) r
-
-    go _ (Leaf _ a) = f a
-
-    go _ Nil = mempty
+foldrStabs :: (a -> b -> b) -> b -> SegmentTree a -> b
+foldrStabs = go 0
+  where
+    go k _ z node | maxDensity node <= k = z
+    go k f z (Interval _ d _ l r) = go (k + d) f (go (k + d) f z r) l
+    go _ f z     (Leaf _ a)       = f a z
+    go _ _ z       Nil            = z
 
 
 

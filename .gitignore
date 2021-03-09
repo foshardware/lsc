@@ -12,6 +12,7 @@ dist/
 *.lef
 *.json
 
+*.lp
 *.aux
 *.hp
 *.ps

@@ -5,6 +5,7 @@
 
 module Main where
 
+import Control.Arrow
 import Control.Concurrent
 import Control.Lens
 import Control.Monad
@@ -21,6 +22,7 @@ import System.Environment
 import System.FilePath
 import System.Exit
 import System.IO
+import System.IO.Silently
 import Text.Parsec (parse)
 import Text.ParserCombinators.Parsec.Number (decimal, fractional)
 
@@ -38,14 +40,16 @@ import LSC.Version
 
 
 main :: IO ()
-main = program
+main = do
+
+  hSetBuffering stdout $ BlockBuffering Nothing
+  hSetBuffering stderr $ BlockBuffering Nothing
+
+  withStderrLog program
 
 
 program :: IO ()
 program = do
-
-  hSetBuffering stdout $ BlockBuffering Nothing
-  hSetBuffering stderr $ BlockBuffering Nothing
 
   (flags, inputs) <- compilerFlags =<< getArgs
   opts <- compilerOpts flags
@@ -65,7 +69,8 @@ program = do
   when (arg Lef)
     $ do
 
-      tech <- either (die . show) (pure . freeze . fromLEF) . parseLEF =<< Text.readFile (head $ lst Lef)
+      tech <- either (die . show) (pure . freeze . fromLEF) . parseLEF
+          <=< Text.readFile . head $ lst Lef
 
       let scale = tech ^. scaleFactor
 
@@ -73,39 +78,43 @@ program = do
 
       when (arg Stage2 && arg Stage3)
         $ do
-          circuit2d <- evalLSC opts tech $ compiler stage3 =<< compiler stage2 netlist
-          last $ printStdout scale circuit2d <$> lst Output
+          ckt <- silence $ evalLSC opts tech $ compiler (stage2 >>> stage3) netlist
+          last $ printStdout scale ckt <$> lst Output
           exitSuccess
 
       when (arg Stage2)
         $ do
-          circuit2d <- evalLSC opts tech $ compiler stage2 netlist
-          last $ printStdout scale circuit2d <$> lst Output
+          ckt <- silence $ evalLSC opts tech $ compiler stage2 netlist
+          last $ printStdout scale ckt <$> lst Output
           exitSuccess
 
       when (arg Stage3)
         $ do
-          circuit2d <- evalLSC opts tech $ compiler stage3 netlist
-          last $ printStdout scale circuit2d <$> lst Output
+          ckt <- silence $ evalLSC opts tech $ compiler stage3 netlist
+          last $ printStdout scale ckt <$> lst Output
           exitSuccess
 
-      circuit2d <- evalLSC opts tech $ compiler estimate . rebuildEdges =<< gateGeometry netlist
-      last $ printStdout scale circuit2d <$> lst Output
+      ckt <- silence $ evalLSC opts tech $ compiler estimate . rebuildHyperedges =<< gateGeometry netlist
+      last $ printStdout scale ckt <$> lst Output
       exitSuccess
 
 
 
 readNetGraph :: [FilePath] -> IO NetGraph
 readNetGraph inputs = case splitExtension <$> inputs of
+
     [] -> die "no input given"
+
     (path, extension) : _ -> do
+
         file <- Text.readFile $ path ++ extension
         case extension of
-            ".blif" -> either (die . show) pure $ fromBLIF <$> parseBLIF file
-            ".def"  -> either (die . show) pure $ fromDEF <$> parseDEF file
-            ".json" -> either (die . show) pure $ eitherDecode $ toLazyByteString $ encodeUtf8Builder file
-            ""      -> die $ unwords ["missing file extension:", path]
-            _       -> die $ unwords ["unknown file extension:", extension]
+
+          ".blif" -> either (die . show) pure $ fromBLIF <$> parseBLIF file
+          ".def"  -> either (die . show) pure $ fromDEF <$> parseDEF file
+          ".json" -> either (die . show) pure $ eitherDecode $ toLazyByteString $ encodeUtf8Builder file
+          ""      -> die $ "missing file extension: " ++ path
+          _       -> die $ "unknown file extension: " ++ extension
 
 
 
@@ -190,7 +199,7 @@ compilerOpts flags = do
     let lst x = [ v | (k, v) <- flags, k == x ]
 
     let known = last $ True : map (`elem` outputFormats) (lst Output)
-    unless known $ die $ unwords ["unknown format:", head $ lst Output]
+    unless known $ die $ "unknown format: " ++ head (lst Output)
 
     c <- last $ pure 1 : (either (die . show) pure . (parse fractional "--row-capacity") <$> lst RowCapacity)
     i <- last $ pure 3 : (either (die . show) pure . (parse decimal "-i") <$> lst Iterations)

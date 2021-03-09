@@ -14,7 +14,23 @@ SPDX-License-Identifier: GPL-3.0-or-later
 
 ## Installation
 
-`stack install`
+`stack install`  
+
+
+### Custom setup
+
+For any custom build, e. g. by using cabal-install, you will need at least ghc `8.0.1`.  
+
+
+### GLPK optimizations
+
+`stack install --flag=lsc:glpk`  
+
+Use the GLPK (GNU Linear Programming Kit) for solving integer programs.
+
+GLPK optimizations are necessary for:
+
+- Cell flipping
 
 
 ## Usage
@@ -50,7 +66,7 @@ SPDX-License-Identifier: GPL-3.0-or-later
 
 ## Debug build
 
-`stack build --flag lsc:debug && stack exec -- lsc`  
+`stack build --flag=lsc:debug && stack exec -- lsc`  
 
 
 ## Tests
@@ -68,6 +84,10 @@ Pass the argument `-j4` for enabling concurrency tests with 4 jobs to run simult
 This program is available as open source under the terms of the GPL-3.0-or-later. However, some elements are being licensed under CC0-1.0. For accurate information, please check individual files.
 
 ## References
+
+### LSC.CellFlipping
+
+- Boros, Hammer, Minoux, Rader (1999): Optimal cell flipping to minimize channel density in VLSI design and pseudo-Boolean optimzation [doi:10.1016/S0166-218X(98)00114-0](https://doi.org/10.1016/S0166-218X%2898%2900114-0)
 
 ### LSC.Deque
 
@@ -106,19 +126,14 @@ This program is available as open source under the terms of the GPL-3.0-or-later
 
 - Tarjan (1975): Efficiency of a Good But Not Linear Set Union Algorithm [doi:10.1145/321879.321884](https://doi.org/10.1145/321879.321884)
 
-## To do
 
-- Row spacing
-  - a posteriori equal to row density
+## To do
 
 - LSC
   - revisit stage logic
 
 - Interval stabbing
   - [doi:10.1007/978-3-642-10631-6_18](https://doi.org/10.1007/978-3-642-10631-6_18)
-
-- Cell flipping
-  - [doi:10.1016/S0166-218X(98)00114-0](https://doi.org/10.1016/S0166-218X%2898%2900114-0)
 
 - Pin permutations
   - [doi:10.1109/iccd.1992.276294](https://doi.org/10.1109/iccd.1992.276294)

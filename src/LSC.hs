@@ -26,6 +26,7 @@ import Control.Monad.Trans
 import Data.Foldable
 import Prelude hiding ((.), id)
 
+import LSC.CellFlipping
 import LSC.FastDP
 import LSC.GlobalRouting
 import LSC.Legalize
@@ -47,7 +48,7 @@ stage1 = zeroArrow
 stage2 :: Compiler' NetGraph
 stage2 = id
     >>> remote gateGeometry
-    >>> arr rebuildEdges >>> estimate
+    >>> arr rebuildHyperedges >>> estimate
     >>> stage2'
     >>> strategy1 significantHpwl stage2'
     >>> finalEstimate
@@ -63,10 +64,10 @@ stage2' = id
 
     >>> arr removeFeedthroughs
     >>> arr assignCellsToColumns
-    >>> arr rebuildEdges >>> estimate
+    >>> arr rebuildHyperedges >>> estimate
 
     >>> local legalizeRows
-    >>> arr rebuildEdges >>> estimate
+    >>> arr rebuildHyperedges >>> estimate
 
     >>> remote pinGeometry
 
@@ -74,19 +75,19 @@ stage2' = id
     >>> remote gateGeometry >>> estimate
 
     >>> local legalizeRows
-    >>> arr rebuildEdges >>> estimate
+    >>> arr rebuildHyperedges >>> estimate
 
-    >>> strategy2 significantHpwl (local singleSegmentClustering >>> arr rebuildEdges)
+    >>> strategy2 significantHpwl (local singleSegmentClustering >>> arr rebuildHyperedges)
     >>> estimate
 
     >>> local legalizeRows
 
     >>> arr assignCellsToColumns
-    >>> arr rebuildEdges >>> estimate
+    >>> arr rebuildHyperedges >>> estimate
 
     >>> arr removeFeedthroughs
     >>> arr assignCellsToColumns
-    >>> arr rebuildEdges >>> estimate
+    >>> arr rebuildHyperedges >>> estimate
 
     >>> remote pinGeometry
 
@@ -95,7 +96,7 @@ stage2' = id
 
     >>> local legalizeRows
     >>> arr assignCellsToColumns
-    >>> arr rebuildEdges >>> estimate
+    >>> arr rebuildHyperedges >>> estimate
 
 
 
@@ -104,23 +105,20 @@ stage3 :: Compiler' NetGraph
 stage3 = id
 
     >>> local determineRowSpacing
-    >>> arr rebuildEdges >>> estimate
+    >>> arr rebuildHyperedges >>> estimate
+
+    >>> remote pinGeometry
+
+    >>> local cellFlipping
+    >>> estimate
 
     >>> remote pinGeometry
 
     >>> local determineNetSegments
-    >>> estimate
-
-    -- >>> local cellFlipping
-    -- >>> estimate
-
-    -- >>> remote pinGeometry
-
-    -- >>> local determineNetSegments
-    -- >>> estimate
+    >>> finalEstimate
 
     -- >>> local determineRowSpacing
-    -- >>> arr rebuildEdges >>> finalEstimate
+    -- >>> arr rebuildHyperedges >>> finalEstimate
 
 
 
@@ -136,19 +134,19 @@ globalPlacement = local placeQuad
 
 fastDP :: Compiler' NetGraph
 fastDP = id
-    -- >>> local singleSegmentClustering >>> arr rebuildEdges >>> estimate
+    -- >>> local singleSegmentClustering >>> arr rebuildHyperedges >>> estimate
     >>> strategy2 significantHpwl
         (id
         >>> estimate
         >>> local globalSwap
-        >>> local legalizeRows >>> arr rebuildEdges
+        >>> local legalizeRows >>> arr rebuildHyperedges
         >>> local verticalSwap
-        >>> local legalizeRows >>> arr rebuildEdges
+        >>> local legalizeRows >>> arr rebuildHyperedges
         >>> local localReordering
-        >>> local legalizeRows >>> arr rebuildEdges
+        >>> local legalizeRows >>> arr rebuildHyperedges
         >>> id)
     -- >>> strategy1 significantHpwl
-    --     (local singleSegmentClustering >>> arr rebuildEdges >>> estimate)
+    --     (local singleSegmentClustering >>> arr rebuildHyperedges >>> estimate)
 
 
 
@@ -157,7 +155,7 @@ legalization = id
     >>> arr assignCellsToRows
     >>> local juggleCells
     >>> local legalizeRows
-    >>> arr rebuildEdges
+    >>> arr rebuildHyperedges
 
 
 
@@ -258,7 +256,7 @@ env_ :: Setter' CompilerOpts o -> o -> Compiler a b -> Compiler a b
 env_ setter = env setter . const
 
 env :: Setter' CompilerOpts o -> (o -> o) -> Compiler a b -> Compiler a b
-env setter f k = remote $ modifyEnv (over setter f) . compiler k
+env setter f k = remote $ modifyEnv (setter %~ f) . unLS (reduce k)
 
 
 
@@ -267,12 +265,12 @@ newtype LS a b = LS { unLS :: a -> LSC b }
 instance Category LS where
 
   id = LS pure
-  LS k . LS m = LS $ (=<<) k . m
+  LS k . LS m = LS (k <=< m)
 
 
 instance Arrow LS where
 
-  arr f = LS $ pure . f
+  arr f = LS (pure . f)
 
   first  (LS k) = LS $ \ (x, y) -> (, y) <$> k x
   second (LS k) = LS $ \ (x, y) -> (x, ) <$> k y
@@ -322,7 +320,7 @@ instance Show LSZero where
   show = const $ "no result, " ++ versionString
 
 instance ArrowZero LS where
-  zeroArrow = throw LSZero
+  zeroArrow = LS $ \ _ -> liftIO $ throwIO LSZero
 
 instance ArrowPlus LS where
   LS k <+> LS m = LS $ \ x -> do
@@ -342,6 +340,7 @@ instance ArrowChoice LS where
 
 instance ArrowApply LS where
   app = LS $ \ (LS k, x) -> k x
+
 
 
 newtype LSR ls a b = LSR { unLSR :: Algebraic ls a b }

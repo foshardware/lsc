@@ -23,18 +23,19 @@ extra-source-files:
 
 custom-setup:
   dependencies:
-  - base >= 4.9.1 && < 5
+  - base >= 4.9
   - file-embed
   - filepath
   - Cabal
   - process
 
 dependencies:
-- base >= 4.9.1 && < 5
+- base >= 4.9
 - aeson
 - array
 - arrowgant
 - async
+- bifunctors
 - blaze-svg
 - blif
 - bytestring
@@ -67,6 +68,7 @@ dependencies:
 - pretty-terminal
 - primitive
 - SafeSemaphore
+- silently
 - split
 - tasty
 - tasty-hunit
@@ -78,7 +80,6 @@ dependencies:
 - vector
 - vector-algorithms
 - verilog
-
 
 library:
   source-dirs: src
@@ -113,6 +114,7 @@ executables:
     ghc-options:
     - -Wall
     - -rtsopts
+    - -threaded
     when:
     - condition: flag(debug)
       then:
@@ -125,7 +127,6 @@ executables:
       else:
         ghc-options:
         - -O2
-        - -threaded
 
 tests:
   lsc-test:
@@ -147,6 +148,6 @@ tests:
         - -debug
       else:
         ghc-options:
-        - -O
+        - -O2
         - -threaded
 
