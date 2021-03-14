@@ -194,6 +194,7 @@ test-suite lsc-test
       Spec.LSC.FastDP
       Spec.LSC.FIFO
       Spec.LSC.FM
+      Spec.LSC.GlobalRouting
       Spec.LSC.KGGGP
       Spec.LSC.Legalize
       Spec.LSC.NetGraph

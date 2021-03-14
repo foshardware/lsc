@@ -77,8 +77,15 @@ stage2' = id
 
 stage3 :: Compiler' NetGraph
 stage3 = id
+    >>> local determineRowSpacing
+    >>> arr rebuildEdges >>> estimate
+
     >>> remote pinGeometry
+
     >>> local determineNetSegments
+    >>> estimate
+
+    >>> local determineRowSpacing
     >>> finalEstimate
 
 

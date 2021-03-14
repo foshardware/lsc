@@ -20,6 +20,7 @@ import Spec.LSC.Entropy
 import Spec.LSC.FastDP
 import Spec.LSC.FIFO
 import Spec.LSC.FM
+import Spec.LSC.GlobalRouting
 import Spec.LSC.KGGGP
 import Spec.LSC.Legalize
 import Spec.LSC.SegmentTree
@@ -59,5 +60,6 @@ lsc opts = testGroup versionString $
   , fm
   , legalize
   , fastdp
+  , globalRouting
   ] ++ [ concurrency | isJust $ _j opts ]
 
