@@ -16,6 +16,7 @@ SPDX-License-Identifier: GPL-3.0-or-later
 
 `stack install`
 
+
 ## Usage
 
 ### Print usage
@@ -23,12 +24,7 @@ SPDX-License-Identifier: GPL-3.0-or-later
 `lsc -h`  
 
 
-### Create a legalized placement with replace
-
-`replace < gcd_nontd_test.tcl`  
-`lsc -dy -llibrary/nangate45/NangateOpenCellLibrary.lef gcd_nan45_nontd.def -odef > legalized.def`
-
-### Detailed placement
+### Create a detailed placement from replace
 
 `replace < gcd_nontd_test.tcl`  
 `lsc -dp -llibrary/nangate45/NangateOpenCellLibrary.lef gcd_nan45_nontd.def -odef > placed.def`
@@ -73,6 +69,10 @@ This program is available as open source under the terms of the GPL-3.0-or-later
 
 ## References
 
+### LSC.Deque
+
+- Okasaki (1998): Purely Functional Data Structures [doi:10.1017/cbo9780511530104](https://doi.org/10.1017/cbo9780511530104)
+
 ### LSC.FM
 
 - Fiduccia, et. al. (1982): A Linear-Time Heuristic for Improving Network Partitions [doi:10.1109/dac.1982.1585498](https://doi.org/10.1109/dac.1982.1585498)
@@ -89,6 +89,10 @@ This program is available as open source under the terms of the GPL-3.0-or-later
 ### LSC.Legalize
 
 - Kahng, Markov, Reda (2004): On Legalization of Row-Based Placements [doi:10.1145/988952.989004](https://doi.org/10.1145/988952.989004)
+
+### LSC.Polygon
+
+- Gourley, Green (1983): A Polygon-to-Rectangle Conversion Algorithm [doi:10.1109/MCG.1983.262975](https://doi.org/10.1109/MCG.1983.262975)
 
 ### LSC.SegmentTree
 
@@ -109,6 +113,9 @@ This program is available as open source under the terms of the GPL-3.0-or-later
 
 - LSC
   - revisit stage logic
+
+- Interval stabbing
+  - [doi:10.1007/978-3-642-10631-6_18](https://doi.org/10.1007/978-3-642-10631-6_18)
 
 - Cell flipping
   - [doi:10.1016/S0166-218X(98)00114-0](https://doi.org/10.1016/S0166-218X%2898%2900114-0)

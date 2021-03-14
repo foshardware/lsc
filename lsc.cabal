@@ -32,25 +32,32 @@ flag debug
   manual: False
   default: False
 
+flag glpk
+  manual: False
+  default: False
+
 library
   exposed-modules:
       LSC
       LSC.BLIF
+      LSC.CellFlipping
       LSC.Component
       LSC.DEF
+      LSC.Deque
       LSC.Entropy
       LSC.FastDP
-      LSC.FIFO
       LSC.FIR
       LSC.FM
       LSC.GlobalRouting
       LSC.Improve
+      LSC.Integer
       LSC.KGGGP
       LSC.LEF
       LSC.Legalize
       LSC.Logger
       LSC.Mincut
       LSC.NetGraph
+      LSC.Polygon
       LSC.SegmentTree
       LSC.SuffixTree
       LSC.SVG
@@ -59,7 +66,6 @@ library
       LSC.UnionFind
       LSC.Verilog
       LSC.Version
-      LSC.Web
   other-modules:
       Paths_lsc
   hs-source-dirs:
@@ -114,6 +120,11 @@ library
     , vector
     , vector-algorithms
     , verilog
+  if flag(glpk)
+    ghc-options: -O2
+    cpp-options: -DGLPK
+    build-depends:
+        glpk-hs
   if flag(debug)
     ghc-options: -g -dcore-lint -debug
     cpp-options: -DDEBUG
@@ -190,14 +201,15 @@ test-suite lsc-test
   main-is: Spec.hs
   other-modules:
       Spec.LSC
+      Spec.LSC.Deque
       Spec.LSC.Entropy
       Spec.LSC.FastDP
-      Spec.LSC.FIFO
       Spec.LSC.FM
       Spec.LSC.GlobalRouting
       Spec.LSC.KGGGP
       Spec.LSC.Legalize
       Spec.LSC.NetGraph
+      Spec.LSC.Polygon
       Spec.LSC.SegmentTree
       Spec.LSC.Types
       Spec.LSC.UnionFind

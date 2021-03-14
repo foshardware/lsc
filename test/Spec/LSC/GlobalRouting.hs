@@ -24,6 +24,7 @@ import LSC.Component
 import LSC.GlobalRouting
 import LSC.Legalize
 import LSC.NetGraph
+import LSC.Polygon
 import LSC.Types
 
 import Spec.LSC.Types
@@ -45,6 +46,7 @@ newtype GlobalRouting a = GlobalRouting a
 
 
 instance Arbitrary (GlobalRouting NetGraph) where
+
     arbitrary = do
 
         k <- choose (80, 140)
@@ -65,7 +67,7 @@ instance Arbitrary (GlobalRouting NetGraph) where
             where
 
             locatePin :: Gate -> Pin -> [Port]
-            locatePin g = map (moveX (g ^. space . l) . moveY (g ^. space . b)) . view geometry
+            locatePin g = map (bimap (+ g ^. space . l) (+ g ^. space . b)) . view geometry
 
 
 
@@ -75,6 +77,7 @@ feedthroughs = testGroup "Determine feedthroughs"
 
   [ testCase "Multiple application"
       $ do
+
         GlobalRouting top <- generate arbitrary
 
         top1 <- fmap wireFeedthroughs $ stToIO $ globalDetermineFeedthroughs top
@@ -99,7 +102,7 @@ feedthroughs = testGroup "Determine feedthroughs"
     wireFeedthroughs top = top & nets %~ flip
 
         (foldl' (\ a (p, n, g, s) ->
-            adjust (over contacts $ insert g [def & identifier .~ p & geometry .~ [s]]) n a))
+            adjust (over contacts $ insert g [def & identifier .~ p & geometry .~ [simplePolygon s]]) n a))
 
         (((,,,) <$> head . keys . view wires <*> head . elems . view wires <*> view number <*> view space)
                 <$> Vector.filter (view feedthrough) (top ^. gates))

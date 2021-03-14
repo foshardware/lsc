@@ -11,27 +11,31 @@ import Control.Monad.ST
 #ifdef DEBUG
 import Control.Applicative
 import Control.Monad.ST.Unsafe
-import System.Console.Concurrent
 import System.IO.Unsafe
+import System.IO
 #endif
 
 
 class Trace m a where
     trace :: a -> m a
+    -- pointfree usage for `trace :: a -> b -> a`
+    -- - `liftA2 trace id id`
+    -- - `flip trace ()`
+    --
 
 
 #ifdef DEBUG
 instance Show a => Trace IO a where
-    trace = liftA2 (<$) id $ errorConcurrent . unlines . pure . show
-    {-# INLINE trace #-}
+    trace = liftA2 (<$) id (hPutStrLn stderr . show)
+    {-# NOINLINE trace #-}
 
 instance Show a => Trace (ST s) a where
     trace = unsafeIOToST . trace
-    {-# INLINE trace #-}
+    {-# NOINLINE trace #-}
 
-instance Show a => Trace ((->) a) a where
-    trace = const $ unsafePerformIO . trace
-    {-# INLINE trace #-}
+instance Show a => Trace ((->) b) a where
+    trace = const . unsafePerformIO . trace
+    {-# NOINLINE trace #-}
 #else
 instance Show a => Trace IO a where
     trace = pure
@@ -41,8 +45,8 @@ instance Show a => Trace (ST s) a where
     trace = pure
     {-# INLINE trace #-}
 
-instance Show a => Trace ((->) a) a where
-    trace = const id
+instance Show a => Trace ((->) b) a where
+    trace = const
     {-# INLINE trace #-}
 #endif
 

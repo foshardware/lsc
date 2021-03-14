@@ -38,16 +38,10 @@ import LSC.Version
 
 
 
-stage0 :: Compiler' NetGraph
-stage0 = id
-    >>> remote gateGeometry
-    >>> legalization >>> estimate
-    >>> arr assignCellsToColumns >>> estimate
-    >>> arr rebuildEdges >>> estimate
-
 
 stage1 :: Compiler' NetGraph
 stage1 = zeroArrow
+
 
 
 stage2 :: Compiler' NetGraph
@@ -61,22 +55,54 @@ stage2 = id
 
 stage2' :: Compiler' NetGraph
 stage2' = id
+
     >>> remote gateGeometry
     >>> legalization >>> estimate
 
-    >>> detailedPlacement >>> estimate
+    >>> fastDP >>> estimate
 
     >>> arr removeFeedthroughs
     >>> arr assignCellsToColumns
     >>> arr rebuildEdges >>> estimate
-    >>> legalization >>> estimate
+
+    >>> local legalizeRows
+    >>> arr rebuildEdges >>> estimate
+
     >>> remote pinGeometry
 
-    >>> globalRouting >>> estimate
+    >>> local determineFeedthroughs
+    >>> remote gateGeometry >>> estimate
+
+    >>> local legalizeRows
+    >>> arr rebuildEdges >>> estimate
+
+    >>> strategy2 significantHpwl (local singleSegmentClustering >>> arr rebuildEdges)
+    >>> estimate
+
+    >>> local legalizeRows
+
+    >>> arr assignCellsToColumns
+    >>> arr rebuildEdges >>> estimate
+
+    >>> arr removeFeedthroughs
+    >>> arr assignCellsToColumns
+    >>> arr rebuildEdges >>> estimate
+
+    >>> remote pinGeometry
+
+    >>> local determineFeedthroughs
+    >>> remote gateGeometry >>> estimate
+
+    >>> local legalizeRows
+    >>> arr assignCellsToColumns
+    >>> arr rebuildEdges >>> estimate
+
+
 
 
 stage3 :: Compiler' NetGraph
 stage3 = id
+
     >>> local determineRowSpacing
     >>> arr rebuildEdges >>> estimate
 
@@ -85,8 +111,17 @@ stage3 = id
     >>> local determineNetSegments
     >>> estimate
 
-    >>> local determineRowSpacing
-    >>> finalEstimate
+    -- >>> local cellFlipping
+    -- >>> estimate
+
+    -- >>> remote pinGeometry
+
+    -- >>> local determineNetSegments
+    -- >>> estimate
+
+    -- >>> local determineRowSpacing
+    -- >>> arr rebuildEdges >>> finalEstimate
+
 
 
 stage4 :: Compiler' NetGraph
@@ -98,22 +133,9 @@ globalPlacement :: Compiler' NetGraph
 globalPlacement = local placeQuad
 
 
-globalRouting :: Compiler' NetGraph
-globalRouting = id
-    >>> local determineFeedthroughs
-    >>> remote gateGeometry >>> estimate
-    >>> local legalizeRows
-    >>> arr rebuildEdges >>> estimate
-    >>> strategy2 significantHpwl (local singleSegmentClustering >>> arr rebuildEdges)
-    >>> estimate
-    >>> local legalizeRows
-    >>> arr assignCellsToColumns
-    >>> arr rebuildEdges
 
-
-
-detailedPlacement :: Compiler' NetGraph
-detailedPlacement = id
+fastDP :: Compiler' NetGraph
+fastDP = id
     -- >>> local singleSegmentClustering >>> arr rebuildEdges >>> estimate
     >>> strategy2 significantHpwl
         (id
@@ -136,6 +158,7 @@ legalization = id
     >>> local juggleCells
     >>> local legalizeRows
     >>> arr rebuildEdges
+
 
 
 estimate :: Compiler' NetGraph

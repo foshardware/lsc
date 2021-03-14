@@ -27,6 +27,7 @@ import Test.Tasty.QuickCheck
 import LSC.Component
 import LSC.Entropy hiding (Gen)
 import LSC.NetGraph
+import LSC.Polygon
 import LSC.Types
 
 
@@ -57,7 +58,7 @@ maxRowCount :: Int
 maxRowCount = ceiling @Double $ sqrt $ fromIntegral sizeOfNetGraph
 
 
-layoutArea :: Component l Int
+layoutArea :: Component' l Int
 layoutArea = rect 0 0 (maxCellsPerRow * maxCellWidth) (maxRowCount * maxCellHeight)
 
 
@@ -125,7 +126,7 @@ instance Arbitrary (Given Pin) where
           $ Given
           $ def &~ do
             identifier .= v
-            geometry .= [rect x 0 (x + w) maxCellHeight]
+            geometry .= [simplePolygon $ rect x 0 (x + w) maxCellHeight]
 
 
 

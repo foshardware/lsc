@@ -14,13 +14,14 @@ import Control.Lens
 import Data.Default
 import Data.Foldable
 import Data.HashMap.Lazy as HashMap
-import qualified Data.Vector as V
 
 import Language.LEF.Parser (parseLEF)
 import Language.LEF.Syntax
 
-import LSC.Component
+import LSC.Component as LSC
 import LSC.Types
+import LSC.Polygon
+
 
 
 fromLEF :: LEF -> Bootstrap ()
@@ -78,12 +79,11 @@ portLayer _ = AnyLayer
 
 
 portLayerRectangle tech ident xs
-    = Component (minimum x) (minimum y) (maximum x) (maximum y) mempty mempty
-    & layers .~ [portLayer ident]
+    = constructPolygon (f $ round . (g *) <$> xs)
+    & layers .~ [portLayer ident] :: Polygon' LSC.Layer Int
     where g = view scaleFactor (tech :: Technology)
-          u = V.fromList $ round . (g *) <$> xs
-          x = V.generate (length u `div` 2) (\ i -> V.unsafeIndex u (i * 2))
-          y = V.generate (length u `div` 2) (\ i -> V.unsafeIndex u (i * 2 + 1))
+          f (x : y : ys) = (x, y) : f ys
+          f _ = []
 
 
 dimensions tech (MacroSize x y : _) = (round $ x * g, round $ y * g)

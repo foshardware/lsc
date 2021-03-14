@@ -27,7 +27,6 @@ import Data.Bits
 import Data.Copointed
 import Data.Default
 import Data.Foldable
-import Data.Hashable
 import Data.HashMap.Lazy (HashMap, unionWith)
 import Data.IntMap (IntMap)
 import Data.IntSet (IntSet)
@@ -41,7 +40,7 @@ import Data.Text.Lazy.Builder
 import Data.Text.Lazy.Builder.Int
 import Data.Vector (Vector)
 
-import Data.Aeson (encode, FromJSON, ToJSON)
+import Data.Aeson (FromJSON, ToJSON)
 
 import Control.Monad.IO.Class
 import Control.Monad.Codensity
@@ -66,6 +65,7 @@ import System.IO
 import LSC.Component
 import LSC.Logger
 import LSC.Trace
+import LSC.Polygon
 
 
 
@@ -91,8 +91,7 @@ instance Semigroup AbstractGate where
 
 instance Monoid AbstractGate where
   mempty = AbstractGate mempty mempty
-#if MIN_VERSION_base(4,11,0)
-#else
+#if !MIN_VERSION_base(4,11,0)
   mappend = (<>)
 #endif
 
@@ -119,9 +118,6 @@ data NetGraph = NetGraph
   , _nets        :: HashMap Identifier Net
   } deriving (Generic, NFData, FromJSON, ToJSON, Show)
 
-instance Hashable NetGraph where
-  hashWithSalt s = hashWithSalt s . encode
-
 instance Default NetGraph where
   def = NetGraph
       { _identifier = mempty
@@ -134,26 +130,22 @@ instance Default NetGraph where
 
 data Net = Net
   { _identifier  :: Identifier
-  , _geometry    :: [Component Layer Int]
-  , _netSegments :: [Line Int]
+  , _geometry    :: [Polygon' Layer Int]
+  , _netSegments :: [Line' Int]
   , _members     :: Vector Gate
   , _contacts    :: HashMap Number [Pin]
   } deriving (Generic, NFData, FromJSON, ToJSON, Show)
 
-instance Hashable Net where
-  hashWithSalt s = hashWithSalt s . encode
-
 
 instance Semigroup Net where
   Net "" xs ss ns as <> Net is ys ts os bs
-      = Net is (xs <> ys) (ss <> ts) (ns <> os) (unionWith (<>) as bs)
+    = Net is (xs <> ys) (ss <> ts) (ns <> os) (unionWith (<>) as bs)
   Net is xs ss ns as <> Net  _ ys ts os bs
-      = Net is (xs <> ys) (ss <> ts) (ns <> os) (unionWith (<>) as bs)
+    = Net is (xs <> ys) (ss <> ts) (ns <> os) (unionWith (<>) as bs)
 
 instance Monoid Net where
   mempty = Net "" mempty mempty mempty mempty
-#if MIN_VERSION_base(4,11,0)
-#else
+#if !MIN_VERSION_base(4,11,0)
   mappend = (<>)
 #endif
 
@@ -164,38 +156,39 @@ type Number = Int
 type Identifier = Text
 
 base16Identifier :: Int -> Identifier
-base16Identifier n = head . Lazy.toChunks . toLazyTextWith (finiteBitSize n `shiftR` 2) . hexadecimal $ n
+base16Identifier
+  = head
+  . Lazy.toChunks
+  . toLazyTextWith (finiteBitSize (0 :: Int) `shiftR` 2)
+  . hexadecimal
+
 
 
 data Gate = Gate
   { _identifier  :: Identifier
-  , _space       :: Component Layer Int
+  , _space       :: Component' Layer Int
   , _wires       :: HashMap Identifier Identifier
   , _number      :: Number  -- ^ pin     ^ net
   , _fixed       :: Bool
   , _feedthrough :: Bool
-  } deriving (Eq, Generic, NFData, FromJSON, ToJSON, Hashable, Show)
+  } deriving (Eq, Generic, NFData, FromJSON, ToJSON, Show)
 
 instance Default Gate where
   def = Gate
       { _identifier  = mempty
       , _space       = mempty
       , _wires       = mempty
-      , _number      = (-1)
+      , _number      = -1
       , _fixed       = False
       , _feedthrough = False
       }
 
 
 data Track = Track
-  { _offset :: Int
-  , _steps  :: Int
-  , _trackSpace :: Int
-  , _z      :: IntSet
+  { _stabs :: IntSet
+  , _z     :: IntSet
   } deriving (Generic, NFData, FromJSON, ToJSON, Show)
 
-instance Hashable Track where
-    hashWithSalt s = hashWithSalt s . encode
 
 
 data Row = Row
@@ -206,12 +199,12 @@ data Row = Row
   , _orientation :: Orientation
   , _cardinality :: Int
   , _granularity :: Int
-  } deriving (Generic, NFData, FromJSON, ToJSON, Hashable, Show)
+  } deriving (Generic, NFData, FromJSON, ToJSON, Show)
 
 instance Default Row where
     def = Row
         { _identifier  = mempty
-        , _number      = (-1)
+        , _number      = -1
         , _l           = 0
         , _b           = 0
         , _orientation = mempty
@@ -221,16 +214,13 @@ instance Default Row where
 
 
 data AbstractCell = AbstractCell
-  { _geometry  :: [Component Layer Int]
+  { _geometry  :: [Component' Layer Int]
   , _tracks    :: [Either Track Track]
   , _rows      :: IntMap Row
   , _vdd       :: Pin
   , _gnd       :: Pin
   , _pins      :: HashMap Identifier Pin
   } deriving (Generic, NFData, FromJSON, ToJSON, Show)
-
-instance Hashable AbstractCell where
-  hashWithSalt s = hashWithSalt s . encode
 
 instance Default AbstractCell where
   def = AbstractCell
@@ -248,7 +238,7 @@ data Cell = Cell
   , _vdd        :: Pin
   , _gnd        :: Pin
   , _dims       :: (Int, Int)
-  } deriving (Generic, FromJSON, ToJSON, Hashable, Show)
+  } deriving (Generic, FromJSON, ToJSON, Show)
 
 instance Default Cell where
   def = Cell
@@ -259,17 +249,19 @@ instance Default Cell where
       }
 
 
-type Port = Component Layer Int
+
+type Port = Polygon' Layer Int
+
 
 data Dir = In | Out | InOut
-  deriving (Eq, Generic, NFData, FromJSON, ToJSON, Hashable, Show)
+  deriving (Eq, Generic, NFData, FromJSON, ToJSON, Show)
 
 
 data Pin = Pin
   { _identifier :: Identifier
   , _dir        :: Maybe Dir
   , _geometry   :: [Port]
-  } deriving (Generic, NFData, FromJSON, ToJSON, Hashable, Show)
+  } deriving (Generic, NFData, FromJSON, ToJSON, Show)
 
 instance Default Pin where
   def = Pin
@@ -283,7 +275,7 @@ instance Default Pin where
 data Technology = Technology
   { _scaleFactor    :: Double
   , _stdCells       :: HashMap Identifier Cell
-  } deriving (Generic, FromJSON, ToJSON, Hashable, Show)
+  } deriving (Generic, FromJSON, ToJSON, Show)
 
 
 instance Default Technology where
@@ -368,10 +360,12 @@ runEnvironment x = copoint . runEnvironmentT x
 type LSC = Codensity (LST IO)
 
 runLSC :: CompilerOpts -> Technology -> LSC a -> IO a
-runLSC opts tech lsc = do
-    x <- runGnosticT tech . runEnvironmentT opts . unLST $ lowerCodensity lsc
-    flushConcurrentOutput
-    pure x
+runLSC opts tech
+  = withConcurrentOutput
+  . runGnosticT tech
+  . runEnvironmentT opts
+  . unLST
+  . lowerCodensity
 
 
 evalLSC :: CompilerOpts -> Technology -> LSC a -> IO a
@@ -504,10 +498,10 @@ rescale m = do
     k <- view scaleFactor <$> snapshot
     scaleFactor .= m
     let f = round . (/ k) . (* m) . fromIntegral
-    stdCells %= (fmap . over vdd . over geometry . fmap . fmap) f
-    stdCells %= (fmap . over gnd . over geometry . fmap . fmap) f
+    stdCells %= (fmap . over vdd . over geometry . fmap) (bimap f f)
+    stdCells %= (fmap . over gnd . over geometry . fmap) (bimap f f)
     stdCells %= (fmap . over dims) (bimap f f)
-    stdCells %= (fmap . over pins . fmap . over geometry . fmap . fmap) f
+    stdCells %= (fmap . over pins . fmap . over geometry . fmap) (bimap f f)
 
 
 
@@ -558,9 +552,9 @@ ifoldl' :: Foldable f => (Int -> b -> a -> b) -> b -> f a -> b
 ifoldl' f y xs = foldl' (\ g x !i -> f i (g (i - 1)) x) (const y) xs (length xs - 1)
 {-# INLINE ifoldl' #-}
 
-#if MIN_VERSION_base(4,13,0)
-#else
+#if !MIN_VERSION_base(4,13,0)
 foldMap' :: (Foldable f, Monoid m) => (a -> m) -> f a -> m
 foldMap' f = foldl' (\ acc a -> acc `mappend` f a) mempty
 {-# INLINE foldMap' #-}
 #endif
+

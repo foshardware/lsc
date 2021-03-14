@@ -78,13 +78,13 @@ placeQuad top = do
 
     let geo g = g & space .~ fold (maybe (padCell g) (gate g) $ cells ^? ix (g ^. identifier) . dims)
 
-        gate g (w, h) = region ^? ix (g ^. number)
+        gate g (w, h) = table ^? ix (g ^. number)
             <&> \ (x, y) -> rect x y (x + w) (y + h)
 
-        padCell g = region ^? ix (g ^. number)
+        padCell g = table ^? ix (g ^. number)
             <&> \ (x, y) -> rect x y (x + fst std) (y + snd std)
 
-        region = runST $ do
+        table = runST $ do
             u <- new $ succ $ maximum $ view number <$> m
             sequence_
               [ write u g (fromIntegral j * (w + div w 2), fromIntegral i * (h + div h 2))

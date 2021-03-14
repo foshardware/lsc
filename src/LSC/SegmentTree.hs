@@ -7,7 +7,6 @@ module LSC.SegmentTree
   , unsafeDensityRatio, unsafeDensityOver
   , compact, pull
   , unsafeCompact, unsafePull
-  , emptySegment
   , showTree
   ) where
 
@@ -20,58 +19,69 @@ import Data.Ratio
 --   - Removing an interval `[x1,x2]` more often than inserting `[x1,x2]`
 --
 data SegmentTree a
-  = Interval (a, a) Tag (SegmentTree a) (SegmentTree a)
-  | Leaf a Tag
+  = Nil
+  | Leaf Int a
+  | Interval Int Int (a, a) (SegmentTree a) (SegmentTree a)
   deriving Show
 
 
-type Tag = (Int, Int)
+-- | Fold over non-empty endpoints
+--
+instance Foldable SegmentTree where
+    foldMap = foldMapStabs
+    null = nullSegment
+
 
 
 constructSegmentTree :: Ord a => [(a, a)] -> SegmentTree a
 constructSegmentTree []
-  = error "constructSegmentTree: empty list"
+  = Nil
 constructSegmentTree xs
   = flip (foldl (flip compact)) xs
   . head
   . until (null . tail) intervals
-  . map (flip Leaf (0, 0))
+  . map (Leaf 0)
   . map head . group . sort
-  . foldMap (\ ~(x, y) -> [x, y])
+  . foldMap (\ (x, y) -> [x, y])
   $ xs
-    where
-    intervals (x : y : ys) = Interval (lower x, upper y) (0, 0) x y : intervals ys
+  where
+    intervals (x : y : ys) = Interval 0 0 (lower x, upper y) x y : intervals ys
     intervals ys = ys
 
 
 lower, upper :: SegmentTree a -> a
-lower     (Leaf x _)     = x
-lower (Interval x _ _ _) = fst x
-upper     (Leaf x _)     = x
-upper (Interval x _ _ _) = snd x
+lower       Nil            = undefined
+lower     (Leaf _   x)     = x
+lower (Interval _ _ x _ _) = fst x
+upper       Nil            = undefined
+upper     (Leaf _   x)     = x
+upper (Interval _ _ x _ _) = snd x
 
 
-emptySegment :: SegmentTree a -> Bool
-emptySegment     (Leaf _ (0, _))     = True
-emptySegment (Interval _ (0, _) _ _) = True
-emptySegment _ = False
+nullSegment :: SegmentTree a -> Bool
+nullSegment       Nil            = True
+nullSegment     (Leaf 0 _)       = True
+nullSegment (Interval 0 _ _ _ _) = True
+nullSegment _ = False
 
 
 maxDensity :: SegmentTree a -> Int
-maxDensity     (Leaf _ (x, _))     = x
-maxDensity (Interval _ (x, _) _ _) = x
+maxDensity       Nil            = 0
+maxDensity     (Leaf x _)       = x
+maxDensity (Interval x _ _ _ _) = x
 
+
+asc :: Ord a => (a, a) -> (a, a)
+asc (x, y) = (min x y, max x y)
+{-# INLINE asc #-}
 
 
 densityRatio, unsafeDensityRatio :: Ord a => (a, a) -> SegmentTree a -> Rational
 densityRatio _ node
-  | emptySegment node
+  | nullSegment node
   = error "densityRatio: empty segment"
-densityRatio (x, y) node
-  | x > y
-  = unsafeDensityRatio (y, x) node
-densityRatio (x, y) node
-  = unsafeDensityRatio (x, y) node
+densityRatio int node
+  = unsafeDensityRatio (asc int) node
 
 unsafeDensityRatio (x, y) node
   = fromIntegral (unsafeDensityOver (x, y) node)
@@ -81,24 +91,21 @@ unsafeDensityRatio (x, y) node
 
 
 densityOver, unsafeDensityOver :: Ord a => (a, a) -> SegmentTree a -> Int
-densityOver (x, y) node
-  | x > y
-  = densityOver (y, x) node
-densityOver (x, y) node
-  = unsafeDensityOver (x, y) node
+densityOver int node
+  = unsafeDensityOver (asc int) node
 
-unsafeDensityOver (x, y) (Leaf a (density, delete))
+unsafeDensityOver (x, y) (Leaf density a)
   | x <= a
   , y >= a
   = density
-unsafeDensityOver (x, y) (Interval (a, b) (density, delete) _ _)
+unsafeDensityOver (x, y) (Interval density _ (a, b) _ _)
   | x <= a
   , y >= b
   = density
-unsafeDensityOver (x, y) (Interval _ (_, delete) left right)
+unsafeDensityOver (x, y) (Interval _ delete _ left right)
   = subtract delete
   $ max l r
-    where
+  where
     l = if x <= upper left  then unsafeDensityOver (x, y) left  else delete
     r = if y >= lower right then unsafeDensityOver (x, y) right else delete
 unsafeDensityOver _ _ = 0
@@ -106,19 +113,16 @@ unsafeDensityOver _ _ = 0
 
 
 compact, unsafeCompact :: Ord a => (a, a) -> SegmentTree a -> SegmentTree a
-compact (x, y) node
-  | x > y
-  = unsafeCompact (y, x) node
-compact (x, y) node
-  = unsafeCompact (x, y) node
+compact int node
+  = unsafeCompact (asc int) node
 
-unsafeCompact (x, y) (Leaf a (density, delete))
+unsafeCompact (x, y) (Leaf density a)
   | x <= a
   , y >= a
-  = Leaf a (succ density, delete)
-unsafeCompact (x, y) (Interval (a, b) (_, delete) left right)
-  = Interval (a, b) (subtract delete $ maxDensity l `max` maxDensity r, delete) l r
-    where
+  = Leaf (succ density) a
+unsafeCompact (x, y) (Interval _ delete (a, b) left right)
+  = Interval (subtract delete $ maxDensity l `max` maxDensity r) delete (a, b) l r
+  where
     l = if x <= upper left  then unsafeCompact (x, y) left  else left
     r = if y >= lower right then unsafeCompact (x, y) right else right
 unsafeCompact _ node = node
@@ -126,38 +130,54 @@ unsafeCompact _ node = node
 
 
 pull, unsafePull :: Ord a => (a, a) -> SegmentTree a -> SegmentTree a
-pull (x, y) node
-  | x > y
-  = unsafePull (y, x) node
-pull (x, y) node
-  = unsafePull (x, y) node
+pull int node
+  = unsafePull (asc int) node
 
-unsafePull (x, y) (Leaf a (density, delete))
+unsafePull (x, y) (Leaf density a)
   | x <= a
   , y >= a
-  = Leaf a (pred density, succ delete)
-unsafePull (x, y) (Interval (a, b) (density, delete) left right)
+  = Leaf (pred density) a
+unsafePull (x, y) (Interval density delete (a, b) left right)
   | x <= a
   , y >= b
-  = Interval (a, b) (pred density, succ delete) left right
-unsafePull (x, y) (Interval (a, b) (_, delete) left right)
-  = Interval (a, b) (subtract delete $ maxDensity l `max` maxDensity r, delete) l r
-    where
+  = Interval (pred density) (succ delete) (a, b) left right
+unsafePull (x, y) (Interval _ delete (a, b) left right)
+  = Interval (subtract delete $ maxDensity l `max` maxDensity r) delete (a, b) l r
+  where
     l = if x <= upper left  then unsafePull (x, y) left  else left
     r = if y >= lower right then unsafePull (x, y) right else right
 unsafePull _ node = node
 {-# INLINABLE pull #-}
 
 
-showTree :: Show a => SegmentTree a -> String
-showTree node = unlines [""] ++ go "    " node
+
+foldMapStabs :: Monoid m => (a -> m) -> SegmentTree a -> m
+foldMapStabs f = go 0
+
   where
 
-  go _ (Leaf a (density, delete)) = unlines
-      [ show a ++ " " ++ show density ++ "/" ++ show delete
+    go k node | maxDensity node <= k = mempty
+
+    go k (Interval _ d _ l r) = go (k + d) l <> go (k + d) r
+
+    go _ (Leaf _ a) = f a
+
+    go _ Nil = mempty
+
+
+
+showTree :: Show a => SegmentTree a -> String
+showTree node = unlines [""] ++ go "    " node
+
+  where
+
+    go _ Nil = "[empty segment tree]"
+
+    go _ (Leaf density a) = unlines
+      [ show a ++ ": " ++ show density
       ]
 
-  go s (Interval (a, b) (density, delete) left right) = unlines
+    go s (Interval density delete (a, b) left right) = unlines
       [ "[" ++ show a ++ "," ++ show b ++ "] " ++ show density ++ "/" ++ show delete
       ] ++ concat 
       [ s ++ go (s ++ "|   ") left

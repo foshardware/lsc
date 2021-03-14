@@ -3,8 +3,8 @@
 
 {-# LANGUAGE TypeApplications #-}
 
-module Spec.LSC.FIFO
-  ( fifo 
+module Spec.LSC.Deque
+  ( deque 
   ) where
 
 import Data.Maybe
@@ -14,12 +14,12 @@ import Test.Tasty
 import Test.Tasty.HUnit
 import Test.Tasty.QuickCheck
 
-import LSC.FIFO (enqueue, dequeue)
+import LSC.Deque (enqueue, dequeue)
 
 
 
-fifo :: TestTree
-fifo = testGroup "FIFO"
+deque :: TestTree
+deque = testGroup "Deque"
   [ testCase "Enqueue"
       $ sequence_
       $ replicate 100
