@@ -8,6 +8,7 @@
 {-# LANGUAGE DeriveAnyClass #-}
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE DeriveFunctor #-}
+{-# LANGUAGE DeriveFoldable #-}
 
 module LSC.Component where
 
@@ -15,14 +16,17 @@ module LSC.Component where
 import Data.Semigroup
 #endif
 
-import Control.Applicative
 import Control.DeepSeq
 import Control.Lens
+import Data.Bifunctor
+import Data.Bifunctor.TH
 import Data.IntSet (IntSet, union, intersection)
 
 import Data.Aeson (FromJSON, ToJSON)
 
 import GHC.Generics
+
+import LSC.Cartesian
 
 
 
@@ -128,8 +132,17 @@ data Component l x y = Component
   , _t :: !y
   , _z :: !IntSet
   , _orientation :: !Orientation
-  } deriving (Eq, Ord, Functor, Generic, NFData, FromJSON, ToJSON, Show)
+  } deriving
+  ( Eq, Ord
+  , Functor, Foldable
+  , Generic
+  , NFData
+  , FromJSON, ToJSON
+  , Show
+  )
 
+$(deriveBifunctor  ''Component)
+$(deriveBifoldable ''Component)
 
 type Component' l a = Component l a a
 
@@ -149,12 +162,11 @@ instance (Ord x, Ord y, Bounded x, Bounded y) => Monoid (Component l x y) where
 #endif
 
 
-instance Bifunctor (Component l) where
-    bimap f g (Component x1 y1 x2 y2 zs o) = Component (f x1) (g y1) (f x2) (g y2) zs o
-
-
-
 newtype BoundingBox l x y = BoundingBox { getBoundingBox :: Component l x y }
+  deriving (Functor, Foldable)
+
+$(deriveBifunctor  ''BoundingBox)
+$(deriveBifoldable ''BoundingBox)
 
 type BoundingBox' l a = BoundingBox l a a
 
@@ -170,12 +182,12 @@ instance (Ord x, Ord y, Bounded x, Bounded y) => Monoid (BoundingBox l x y) wher
 #endif
 
 
-instance Bifunctor (BoundingBox l) where
-    bimap f g (BoundingBox h) = BoundingBox (bimap f g h)
-
-
 
 newtype Overlap l x y = Overlap { getOverlap :: Component l x y }
+  deriving (Functor, Foldable)
+
+$(deriveBifunctor  ''Overlap)
+$(deriveBifoldable ''Overlap)
 
 type Overlap' l a = Overlap l a a
 
@@ -191,20 +203,20 @@ instance (Ord x, Ord y, Bounded x, Bounded y) => Monoid (Overlap l x y) where
 #endif
 
 
-instance Bifunctor (Overlap l) where
-    bimap f g (Overlap h) = Overlap (bimap f g h)
 
+data Line x y = Line (x, y) (x, y) deriving
+  ( Eq, Ord
+  , Functor, Foldable
+  , Generic
+  , NFData
+  , FromJSON, ToJSON
+  , Show
+  )
 
-
-data Line x y = Line (x, y) (x, y)
-  deriving (Eq, Ord, Functor, Generic, NFData, FromJSON, ToJSON, Show)
-
+$(deriveBifunctor  ''Line)
+$(deriveBifoldable ''Line)
 
 type Line' a = Line a a
-
-
-instance Bifunctor Line where
-    bimap f g (Line j k) = Line (bimap f g j) (bimap f g k)
 
 
 line :: Iso' ((x, y), (x, y)) (Line x y)
@@ -219,83 +231,35 @@ makeFieldsNoPrefix ''Component
 makeFieldsNoPrefix ''Line
 
 
+instance (Integral x, Integral y) => Cartesian (Component l) x y where
+
+    minimumX = view l
+    maximumX = view r
+
+    minimumY = view b
+    maximumY = view t
+
+
+instance (Integral x, Integral y) => Cartesian Line x y where
+
+    minimumX (Line (x, _) _) = x
+    maximumX (Line _ (x, _)) = x
+
+    minimumY (Line (_, y) _) = y
+    maximumY (Line _ (_, y)) = y
+
+
 
 implode :: (Integral x, Integral y) => Component l x y -> Component l x y
-implode c = rect (centerX c) (centerY c) (centerX c) (centerY c)
+implode = rect <$> centerX <*> centerY <*> centerX <*> centerY
 {-# INLINABLE implode #-}
 
 
-center :: (Integral x, Integral y) => Component l x y -> (x, y)
-center = liftA2 (,) centerX centerY
-{-# INLINABLE center #-}
-
-
-centerX :: Integral x => Component l x y -> x
-centerX p = div (p ^. r + p ^. l) 2
-{-# INLINABLE centerX #-}
-
-
-centerY :: Integral y => Component l x y -> y
-centerY p = div (p ^. t + p ^. b) 2
-{-# INLINABLE centerY #-}
-
-
-moveX :: Num x => x -> Component l x y -> Component l x y
-moveX x p = p &~ do
-    l += x
-    r += x
-{-# INLINABLE moveX #-}
-
-
-moveY :: Num y => y -> Component l x y -> Component l x y
-moveY y p = p &~ do
-    b += y
-    t += y
-{-# INLINABLE moveY #-}
-
-
-relocateL :: Num x => x -> Component l x y -> Component l x y
-relocateL x p = p &~ do
-    l .= x
-    r += x - p ^. l
-{-# INLINABLE relocateL #-}
-
-
-relocateR :: Num x => x -> Component l x y -> Component l x y
-relocateR x p = p &~ do
-    l += x - p ^. r
-    r .= x
-{-# INLINABLE relocateR #-}
-
-
-relocateB :: Num y => y -> Component l x y -> Component l x y
-relocateB y p = p &~ do
-    b .= y
-    t += y - p ^. b
-{-# INLINABLE relocateB #-}
-
-
-relocateX :: Integral x => x -> Component l x y -> Component l x y
-relocateX x p = p &~ do
-    l += x - centerX p
-    r += x - centerX p
-{-# INLINABLE relocateX #-}
-
-
-relocateY :: Integral y => y -> Component l x y -> Component l x y
-relocateY y p = p &~ do
-    b += y - centerY p
-    t += y - centerY p
-{-# INLINABLE relocateY #-}
-
-
-width :: Num x => Component l x y -> x
-width p = p ^. r - p ^. l
-{-# INLINABLE width  #-}
-
-height :: Num y => Component l x y -> y
-height p = p ^. t - p ^. b
-{-# INLINABLE height #-}
+inline :: Cartesian f x y => Component l x y -> f x y -> f x y
+inline a = case a ^. orientation of
+    FN -> moveX (a ^. l + a ^. r) . first negate . bimap (+ a ^. l) (+ a ^. b)
+    _  -> bimap (+ a ^. l) (+ a ^. b)
+{-# INLINABLE inline #-}
 
 
 areaOverlap :: (Ord x, Ord y) => Component l x y -> Component l x y -> Bool
@@ -325,7 +289,4 @@ outer p = rect (p ^. l . l) (p ^. b . b) (p ^. r . r) (p ^. t . t)
 hypothenuse :: Component l x y -> Line x y
 hypothenuse c = Line (c ^. l, c ^. b) (c ^. r, c ^. t)
 
-
-component :: Line x y -> Component l x y
-component (Line (x1, y1) (x2, y2)) = Component x1 y1 x2 y2 mempty mempty
 

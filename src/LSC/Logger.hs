@@ -3,9 +3,7 @@
 
 module LSC.Logger where
 
-import Control.Applicative
 import Control.Concurrent
-import Data.Char
 import Data.Time.Format
 import Data.Time.LocalTime
 import System.Console.Concurrent
@@ -37,8 +35,12 @@ timestamp = formatTime defaultTimeLocale "[%F %X]" <$> getZonedTime
 
 
 levelString :: LogLevel -> String
-levelString = liftA2 (:) (toLower . head) tail . show
+levelString = show
 
+
+
+withStderrLog :: IO a -> IO a
+withStderrLog = withConcurrentOutput
 
 
 logStderr :: LogLevel -> [String] -> IO ()

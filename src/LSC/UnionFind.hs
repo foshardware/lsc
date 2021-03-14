@@ -30,21 +30,23 @@ pair = do
     x <- DisjointSet <$> newSTRef (Left 1)
     y <- DisjointSet <$> newSTRef (Right x)
     pure (x, y)
-{-# INLINABLE pair #-}
+
 
 
 findRoot :: DisjointSet s -> ST s (Rank, DisjointSet s)
-findRoot i@(DisjointSet s)
-  = do
-    v <- readSTRef s
-    case v of
-      Left w -> pure (w, i)
-      -- ^ arrived at root
-      Right j -> do
-        (w, k) <- findRoot j
-        when (j /= k) $ writeSTRef s (Right k)
-        -- ^ path compression
-        pure (w, k)
+findRoot = go
+  where
+    go i@(DisjointSet s)
+      = do
+        v <- readSTRef s
+        case v of
+          Left w -> pure (w, i)
+          -- ^ arrived at root
+          Right j -> do
+              (w, k) <- go j
+              when (j /= k) $ writeSTRef s (Right k)
+              -- ^ path compression
+              pure (w, k)
 
 
 
@@ -59,15 +61,13 @@ union x y
           EQ -> writeSTRef s2 (Right i1) >> writeSTRef s1 (Left w)
           GT -> writeSTRef s2 (Right i1) -- ^ union by rank
           LT -> writeSTRef s1 (Right i2)
-{-# INLINABLE union #-}
+
 
 
 representation :: DisjointSet s -> ST s (DisjointSet s)
 representation x = snd <$> findRoot x
-{-# INLINABLE representation #-}
 
 
 equivalent :: DisjointSet s -> DisjointSet s -> ST s Bool
 equivalent x y = (==) <$> representation x <*> representation y
-{-# INLINABLE equivalent #-}
 

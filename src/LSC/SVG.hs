@@ -28,6 +28,7 @@ import qualified Text.Blaze.Svg11 as S
 import qualified Text.Blaze.Svg11.Attributes as A
 import Text.Blaze.Svg.Renderer.Text (renderSvg)
 
+import LSC.Cartesian
 import LSC.Component
 import LSC.NetGraph
 import LSC.Polygon
@@ -119,9 +120,10 @@ place g = do
 
     let a = g ^. space
 
-    let x = a ^. l + height a `div` 32
-        y = a ^. b + height a `div` 24
-        k = height a `div` 9
+    let d = rotation $ a ^. orientation
+        (x, y) = label a
+
+    let k = height a `div` 9
 
     drawA ("black", gateColor g) a
 
@@ -130,8 +132,19 @@ place g = do
       ! A.y (toValue y)
       ! A.fontSize (toValue k)
       ! A.fontFamily "monospace"
-      ! A.transform (toValue $ "rotate(90 " <> decimal x <> "," <> decimal y <> ")")
+      ! A.transform (toValue $ "rotate(" <> decimal d <> " " <> decimal x <> "," <> decimal y <> ")")
       $ toSvg $ views number decimal g <> ": " <> views identifier (forShort 8) g
+
+
+label :: Area -> (Int, Int)
+label a = case a ^. orientation of
+    FN -> (a ^. r - height a `div` 32, a ^. t - height a `div` 24)
+    _  -> (a ^. l + height a `div` 32, a ^. b + height a `div` 24)
+
+
+rotation :: Orientation -> Int
+rotation FN = 270
+rotation  _ = 90
 
 
 

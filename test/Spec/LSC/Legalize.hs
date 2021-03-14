@@ -19,6 +19,7 @@ import Test.Tasty
 import Test.Tasty.HUnit
 import Test.Tasty.QuickCheck
 
+import LSC.Cartesian
 import LSC.Component
 import LSC.Legalize
 import LSC.NetGraph

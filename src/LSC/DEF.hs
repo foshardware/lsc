@@ -33,6 +33,7 @@ import Language.DEF.Builder (printDEF, builderDEF, defaultOptions)
 import Language.DEF.Parser (parseDEF)
 import Language.DEF.Syntax as DEF
 
+import LSC.Cartesian
 import LSC.Component as LSC
 import LSC.Types as LSC
 import LSC.Polygon as LSC

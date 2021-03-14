@@ -10,7 +10,7 @@
 {-# LANGUAGE DuplicateRecordFields #-}
 {-# LANGUAGE DeriveAnyClass #-}
 {-# LANGUAGE DeriveGeneric #-}
-{-# LANGUAGE DeriveFunctor, DeriveFoldable, DeriveTraversable #-}
+{-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE BangPatterns #-}
 
 module LSC.Types where
@@ -27,11 +27,12 @@ import Data.Bits
 import Data.Copointed
 import Data.Default
 import Data.Foldable
+import Data.Function
 import Data.HashMap.Lazy (HashMap, unionWith)
 import Data.IntMap (IntMap)
 import Data.IntSet (IntSet)
 import qualified Data.IntSet as IntSet
-import Data.List (sort, group)
+import Data.List (sort, group, groupBy)
 import Data.Semigroup
 import Data.String
 import Data.Text (Text)
@@ -55,8 +56,6 @@ import Control.Monad
 import Control.Monad.Reader
 import Control.Monad.State
 #endif
-
-import System.Console.Concurrent
 
 import GHC.Generics
 import Prelude hiding (lookup, fail)
@@ -296,7 +295,7 @@ snapshot :: Monad m => BootstrapT m Technology
 snapshot = get
 
 frozen :: Monad m => Iso' (BootstrapT m ()) (m Technology)
-frozen = iso (flip execStateT def) ((=<<) put . lift)
+frozen = iso (flip execStateT def) (put <=< lift)
 
 freeze :: Bootstrap () -> Technology
 freeze = copoint . view frozen
@@ -361,8 +360,7 @@ type LSC = Codensity (LST IO)
 
 runLSC :: CompilerOpts -> Technology -> LSC a -> IO a
 runLSC opts tech
-  = withConcurrentOutput
-  . runGnosticT tech
+  = runGnosticT tech
   . runEnvironmentT opts
   . unLST
   . lowerCodensity
@@ -468,20 +466,29 @@ makeFieldsNoPrefix ''Technology
 
 
 
+newtype DistinctNumber n a = DistinctNumber { getDistinctNumber :: a }
+  deriving (Functor, Show)
 
-eqNumber :: HasNumber a Number => a -> a -> Bool
-eqNumber x y = view number x == view number y
-{-# INLINABLE eqNumber #-}
+instance (Eq n, HasNumber a n) => Eq (DistinctNumber n a) where
+    DistinctNumber x == DistinctNumber y
+      = view number x == view number y
+
+instance (Ord n, HasNumber a n) => Ord (DistinctNumber n a) where
+    DistinctNumber x `compare` DistinctNumber y
+      = view number x `compare` view number y
 
 
-eqIdentifier :: HasIdentifier a Identifier => a -> a -> Bool
-eqIdentifier x y = view identifier x == view identifier y
-{-# INLINABLE eqIdentifier #-}
+newtype DistinctIdentifier i a = DistinctIdentifier { getDistinctIdentifier :: a }
+  deriving (Functor, Show)
 
+instance (Eq i, HasIdentifier a i) => Eq (DistinctIdentifier i a) where
+    DistinctIdentifier x == DistinctIdentifier y
+      = view identifier x == view identifier y
 
-ordIdentifier :: HasIdentifier a Identifier => a -> a -> Ordering
-ordIdentifier x y = view identifier x `compare` view identifier y
-{-# INLINABLE ordIdentifier #-}
+instance (Ord i, HasIdentifier a i) => Ord (DistinctIdentifier i a) where
+    DistinctIdentifier x `compare` DistinctIdentifier y
+      = view identifier x `compare` view identifier y
+
 
 
 
@@ -520,6 +527,9 @@ logger k xs = do
 
 
 
+-- | Operations on the list type
+--
+
 distinctPairs :: [a] -> [(a, a)]
 distinctPairs (x : xs) = zip (repeat x) xs ++ distinctPairs xs
 distinctPairs _ = []
@@ -547,6 +557,14 @@ medianElements zs = go zs zs
           go _ _ = error "medianElements: empty list"
 
 
+
+groupOn :: Eq b => (a -> b) -> [a] -> [[a]]
+groupOn = groupBy . on (==)
+{-# INLINABLE groupOn #-}
+
+
+-- | Assorted higher-order functions
+--
 
 ifoldl' :: Foldable f => (Int -> b -> a -> b) -> b -> f a -> b
 ifoldl' f y xs = foldl' (\ g x !i -> f i (g (i - 1)) x) (const y) xs (length xs - 1)

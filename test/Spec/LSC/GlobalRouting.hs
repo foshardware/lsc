@@ -55,7 +55,7 @@ instance Arbitrary (GlobalRouting NetGraph) where
         let top = new & gates %~ Vector.take k
 
         grp <- pure $ runST $ liftA2 mapM rowLegalization (getRows . view gates) =<< rowJuggling 1 top
-        let legal = rebuildEdges $ top & gates %~ flip update (liftA2 (,) (view number) id <$> fold grp)
+        let legal = rebuildHyperedges $ top & gates %~ flip update (liftA2 (,) (view number) id <$> fold grp)
 
         ps <- fromListN standardPins <$> vector standardPins
 
