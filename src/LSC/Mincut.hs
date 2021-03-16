@@ -76,13 +76,12 @@ placeQuad top = do
 
     cells <- view stdCells <$> technology
 
-    let geo g = g & space .~ fold (maybe (padCell g) (gate g) $ cells ^? ix (g ^. identifier) . dims)
+    let geo g = maybe id (set space . gate g) (cells ^? ix (g ^. identifier) . dims) $ g
+        geo :: Gate -> Gate
 
-        gate g (w, h) = table ^? ix (g ^. number)
-            <&> \ (x, y) -> rect x y (x + w) (y + h)
-
-        padCell g = table ^? ix (g ^. number)
-            <&> \ (x, y) -> rect x y (x + fst std) (y + snd std)
+        gate g (w, h)
+          = table ! (g ^. number)
+          & \ (x, y) -> rect x y (x + w) (y + h)
 
         table = runST $ do
             u <- new $ succ $ maximum $ view number <$> m

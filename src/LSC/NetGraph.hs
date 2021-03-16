@@ -23,15 +23,13 @@ import qualified Data.IntSet as IntSet
 import Data.List (sort, sortOn)
 import Data.List.Split (wordsBy)
 import Data.Maybe
-import Data.Monoid
 import Data.Text (unpack)
 import Data.Matrix (Matrix, nrows, ncols, getElem, getMatrixAsVector)
-import Data.Vector (Vector, (!), filter, backpermute)
+import Data.Vector (Vector, (!), backpermute)
 import Data.Vector.Unboxed (unsafeFreeze)
 import Data.Vector.Unboxed.Mutable (new, write)
 import qualified Data.Vector.Unboxed as U
 import qualified Data.Vector as V
-import Prelude hiding (lookup, filter)
 
 import LSC.Cartesian
 import LSC.Component
@@ -41,24 +39,24 @@ import LSC.Polygon
 
 
 
-boundingBox
-  :: (Foldable f, Integral x, Integral y, Bounded x, Bounded y)
-  => f (Component l x y) -> Component l x y
-boundingBox = foldMap' implode 
+boundingBox :: Foldable f => f (Component' l Int) -> Component' l Int
+boundingBox = getBoundingBox . foldMap' (BoundingBox . implode)
 {-# INLINABLE boundingBox #-}
 
 
 
-coarseBoundingBox
-  :: (Foldable f, Ord x, Ord y, Bounded x, Bounded y)
-  => f (Component l x y) -> Component l x y
-coarseBoundingBox = foldMap' id
+coarseBoundingBox :: Foldable f => f (Component' l Int) -> Component' l Int
+coarseBoundingBox = getBoundingBox . foldMap' BoundingBox
 {-# INLINABLE coarseBoundingBox #-}
 
 
 
 hpwl :: Net -> Int
-hpwl = liftA2 (+) width height . foldMap' (implode . view space) . view members
+hpwl
+  = liftA2 (+) width height
+  . getBoundingBox
+  . foldMap' (BoundingBox . implode . view space)
+  . view members
 
 
 
@@ -66,9 +64,10 @@ hpwlDelta :: Foldable f => NetGraph -> f Gate -> Int
 hpwlDelta top gs = sum
   [ width after - width before + height after - height before
   | net <- hyperedges top gs
-  , let before = foldMap' (implode . view space)
+  , let before = foldMap' (BoundingBox . implode . view space)
                           (view members net)
-  , let after  = foldMap' (\ g -> maybe (g ^. space . to implode) (implode . view space)
+  , let after  = foldMap' (\ g -> BoundingBox
+                                $ maybe (g ^. space . to implode) (implode . view space)
                                 $ find (\ h -> g ^. number == h ^. number) gs)
                           (view members net)
   ]
@@ -83,7 +82,7 @@ optimalRegion f
 optimalRegion f
   = rect x1 y1 x2 y2
   where
-    boxes = foldr ((:) . foldMap' (implode . view space)) [] f
+    boxes = foldr ((:) . foldMap' (BoundingBox . implode . view space)) [] f
     [x1, x2] = medianElements $ sort $ foldMap abscissae boxes
     [y1, y2] = medianElements $ sort $ foldMap ordinates boxes
 {-# INLINABLE optimalRegion #-}
@@ -103,7 +102,7 @@ hyperedges top gs
 
 
 
-adjacentByPin :: NetGraph -> Gate -> HashMap Identifier (Vector Gate)
+adjacentByPin :: NetGraph -> Gate -> HashMap Identifier [Gate]
 adjacentByPin top g
   = foldMap (filter (\ h -> g ^. number /= h ^. number) . view members)
   . flip preview (view nets top) . ix
@@ -166,7 +165,7 @@ coordsVector m = runST $ do
 
 
 flattenGateMatrix :: Matrix Gate -> Vector Gate
-flattenGateMatrix = filter (\ g -> g ^. number >= 0) . getMatrixAsVector
+flattenGateMatrix = V.filter (\ g -> g ^. number >= 0) . getMatrixAsVector
 
 
 
@@ -355,7 +354,7 @@ assignCellsToColumns top
 
 
 removeFeedthroughs :: NetGraph -> NetGraph
-removeFeedthroughs = gates %~ imap (set number) . filter (views feedthrough not)
+removeFeedthroughs = gates %~ imap (set number) . V.filter (views feedthrough not)
 
 
 
@@ -388,13 +387,14 @@ region f g top = top &~ do
 netGraphArea :: NetGraph -> Component' l Int
 netGraphArea top
   = castLayer
-  $ coarseBoundingBox (view space <$> view gates top) <> coarseBoundingBox (outerRim top)
+  $ getBoundingBox
+  $ foldMap' (BoundingBox . view space) (view gates top) <> foldMap' BoundingBox (outerRim top)
 
 
 
 outerRim :: NetGraph -> HashMap Identifier (Component' Layer Int)
 outerRim
-  = fmap (foldMap (coarseBoundingBox . polygon) . view geometry)
+  = fmap (coarseBoundingBox . fmap containingBox . view geometry)
   . view (supercell . pins)
 
 

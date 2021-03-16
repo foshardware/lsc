@@ -113,7 +113,7 @@ cellFlipping top = do
 
     info ["Cell flipping"]
 
-    assume "globalDetermineNetSegments: gates are not aligned to rows!"
+    assume "cellFlipping: gates are not aligned to rows!"
       $ all (isJust . getRow top) $ top ^. gates
 
     let program = obtainProgram top
@@ -210,7 +210,7 @@ obtainProgram top
 
 
     formula density segment alpha
-      = flip trace()
+      = liftA2 trace id id
       $ quadraticFormula xs
       $ execState (computeDelta density alpha)
       $ runST (computeBeta _P phi xs alpha)
@@ -226,7 +226,7 @@ obtainProgram top
     vertices
       = accum (flip insert) (replicate (top ^. gates . to length) mempty)
       $ liftA2 (,) (view number . gate) id
-         <$> foldMap biList (fold channels)
+        <$> foldMap biList (fold channels)
 
     edges
       = accum (flip (:)) (replicate (top ^. gates . to length) mempty)
@@ -242,7 +242,7 @@ obtainProgram top
       . foldMap biList
         <$> channels
 
-    ranges = map (liftA2 (,) (succ . view (space . l)) (pred . view (space . r))) <$> cells
+    ranges = map ((,) <$> succ . view (space . l) <*> pred . view (space . r)) <$> cells
 
 
     channels

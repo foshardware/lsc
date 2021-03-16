@@ -24,6 +24,7 @@ import Control.Lens
 import Control.Monad
 import Control.Monad.Trans
 import Data.Foldable
+import Data.Semigroup
 import Prelude hiding ((.), id)
 
 import LSC.CellFlipping
@@ -181,10 +182,19 @@ circuit = DAG (view identifier) subcircuits
 
 
 
+newtype Endomorph c a = Endomorph { appEndomorph :: c a a }
+
+instance Category c => Semigroup (Endomorph c a) where
+  Endomorph g <> Endomorph f = Endomorph (g . f)
+
+instance Category c => Monoid (Endomorph c a) where
+  mempty = Endomorph id
+  mappend = (<>)
+
+
 type Compiler' a = Compiler a a
 
 type Compiler = LSR LS
-
 
 compiler :: Compiler a b -> a -> LSC b
 compiler = unLS . (<+> zeroArrow) . reduce
@@ -217,20 +227,22 @@ instance Show a => Trace (Compiler a) a where
   trace = const $ remote trace
 
 
-type Strategy a = Compiler' a -> Compiler' a
+type Strategy' a = Strategy a a
+
+type Strategy a b = Compiler a b -> Compiler a b
 
 
-strategy0 :: Int -> Strategy a
-strategy0 n = foldl (>>>) id . replicate n
+strategy0 :: Int -> Strategy' a
+strategy0 n = appEndomorph . stimes n . Endomorph
 
 
-strategy1 :: (a -> a -> Ordering) -> Strategy a
+strategy1 :: (a -> a -> Ordering) -> Strategy' a
 strategy1 f a = proc x -> do
     i <- view iterations ^<< remote_ environment -< ()
     minimumBy f ^<< iterator i a -<< [x]
 
 
-strategy2 :: (a -> a -> Ordering) -> Strategy a
+strategy2 :: (a -> a -> Ordering) -> Strategy' a
 strategy2 f a = proc x -> do
     y <- strategy1 f a -< x
     if f x y /= GT
@@ -252,11 +264,8 @@ iterator1 i a = iterator1 (pred i) a <<< uncurry (:) ^<< first a <<^ head &&& id
 
 
 
-env_ :: Setter' CompilerOpts o -> o -> Compiler a b -> Compiler a b
-env_ setter = env setter . const
-
-env :: Setter' CompilerOpts o -> (o -> o) -> Compiler a b -> Compiler a b
-env setter f k = remote $ modifyEnv (setter %~ f) . unLS (reduce k)
+env :: Confinement () -> Compiler a b -> Compiler a b
+env f k = remote $ confine f . unLS (reduce k)
 
 
 
@@ -320,7 +329,7 @@ instance Show LSZero where
   show = const $ "no result, " ++ versionString
 
 instance ArrowZero LS where
-  zeroArrow = LS $ \ _ -> liftIO $ throwIO LSZero
+  zeroArrow = LS $ const $ liftIO $ throwIO LSZero
 
 instance ArrowPlus LS where
   LS k <+> LS m = LS $ \ x -> do
@@ -374,7 +383,7 @@ instance ArrowRace ls => ArrowRace (LSR ls) where
   LSR f /// LSR g = LSR (mapReduce f /// mapReduce g)
 
 
-instance ArrowPlus ls => ArrowZero (LSR ls) where
+instance ArrowZero ls => ArrowZero (LSR ls) where
   zeroArrow = LSR zeroArrow
 
 instance ArrowPlus ls => ArrowPlus (LSR ls) where

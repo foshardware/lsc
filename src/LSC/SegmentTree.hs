@@ -27,7 +27,7 @@ import Data.Ratio
 -- | Custom tree data type for creating stabbing queries over monoids, e. g. always
 --   appending `Sum 1` counts the number of intervals intersecting the stabbing abscissa.
 --
---   Note that the underlying monoid type can be changed at your convenience by using `fmap`.
+--   Note that the underlying monoid type may be changed by using `fmap`.
 --
 data Stabs a m
   = Tip

@@ -131,16 +131,20 @@ data Net = Net
   { _identifier  :: Identifier
   , _geometry    :: [Polygon' Layer Int]
   , _netSegments :: [Line' Int]
-  , _members     :: Vector Gate
+  , _members     :: [Gate]
   , _contacts    :: HashMap Number [Pin]
   } deriving (Generic, NFData, FromJSON, ToJSON, Show)
 
 
 instance Semigroup Net where
+
   Net "" xs ss ns as <> Net is ys ts os bs
     = Net is (xs <> ys) (ss <> ts) (ns <> os) (unionWith (<>) as bs)
   Net is xs ss ns as <> Net  _ ys ts os bs
     = Net is (xs <> ys) (ss <> ts) (ns <> os) (unionWith (<>) as bs)
+
+  stimes = stimesIdempotent
+
 
 instance Monoid Net where
   mempty = Net "" mempty mempty mempty mempty
@@ -175,7 +179,7 @@ data Gate = Gate
 instance Default Gate where
   def = Gate
       { _identifier  = mempty
-      , _space       = mempty
+      , _space       = rect 0 0 0 0
       , _wires       = mempty
       , _number      = -1
       , _fixed       = False
@@ -344,6 +348,11 @@ instance Default CompilerOpts where
       }
 
 
+type ConfinementT = StateT CompilerOpts
+
+type Confinement = ConfinementT Identity
+
+
 type EnvironmentT = ReaderT CompilerOpts
 
 type Environment = EnvironmentT Identity
@@ -370,8 +379,11 @@ evalLSC :: CompilerOpts -> Technology -> LSC a -> IO a
 evalLSC = runLSC
 
 
-realWorldST :: ST RealWorld a -> LSC a
-realWorldST = liftIO . stToIO
+-- | Once a state thread computation is lifted it may not escape monadic context anymore.
+--
+liftST :: ST RealWorld a -> LSC a
+liftST = liftIO . stToIO
+
 
 
 technology :: LSC Technology
@@ -380,8 +392,9 @@ technology = lift $ LST $ lift ask
 environment :: LSC CompilerOpts
 environment = lift $ LST ask
 
-modifyEnv :: (CompilerOpts -> CompilerOpts) -> LSC a -> LSC a
-modifyEnv f = lift . LST . local f . unLST . lowerCodensity
+
+confine :: Confinement () -> LSC a -> LSC a
+confine f = lift . LST . local (execState f) . unLST . lowerCodensity
 
 
 

@@ -23,20 +23,20 @@ class (Bifunctor f, Bifoldable f, Integral x, Integral y) => Cartesian f x y whe
 
 
     width :: f x y -> x
-    width = subtract <$> minimumX <*> maximumX
+    width = subtract <$> minX <*> maxX
 
     height :: f x y -> y
-    height = subtract <$> minimumY <*> maximumY
+    height = subtract <$> minY <*> maxY
 
 
     center :: f x y -> (x, y)
     center = (,) <$> centerX <*> centerY
 
     centerX :: f x y -> x
-    centerX = (`div` 2) . liftA2 (+) minimumX maximumX
+    centerX = (`div` 2) . liftA2 (+) minX maxX
 
     centerY :: f x y -> y
-    centerY = (`div` 2) . liftA2 (+) minimumY maximumY
+    centerY = (`div` 2) . liftA2 (+) minY maxY
 
 
     relocateX :: x -> f x y -> f x y
@@ -46,34 +46,34 @@ class (Bifunctor f, Bifoldable f, Integral x, Integral y) => Cartesian f x y whe
     relocateY y = second (+ y) . liftA2 (second . subtract) centerY id
 
 
-    minimumX, maximumX :: f x y -> x
-    minimumX
+    minX, maxX :: f x y -> x
+    minX
       = getMin
-      . fromMaybe (error "minimumX: empty structure")
+      . fromMaybe (error "minX: empty structure")
       . bifoldMap (Just . Min) (const Nothing)
-    maximumX
+    maxX
       = getMax
-      . fromMaybe (error "maximumX: empty structure")
+      . fromMaybe (error "maxX: empty structure")
       . bifoldMap (Just . Max) (const Nothing)
 
-    minimumY, maximumY :: f x y -> y
-    minimumY
+    minY, maxY :: f x y -> y
+    minY
       = getMin
-      . fromMaybe (error "minimumY: empty structure")
+      . fromMaybe (error "minY: empty structure")
       . bifoldMap (const Nothing) (Just . Min)
-    maximumY
+    maxY
       = getMax
-      . fromMaybe (error "maximumY: empty structure")
+      . fromMaybe (error "maxY: empty structure")
       . bifoldMap (const Nothing) (Just . Max)
 
 
     relocateL, relocateR :: x -> f x y -> f x y
-    relocateL x = first (+ x) . liftA2 (first . subtract) minimumX id
-    relocateR x = first (+ x) . liftA2 (first . subtract) maximumX id
+    relocateL x = first (+ x) . liftA2 (first . subtract) minX id
+    relocateR x = first (+ x) . liftA2 (first . subtract) maxX id
 
     relocateB, relocateT :: y -> f x y -> f x y
-    relocateB y = second (+ y) . liftA2 (second . subtract) minimumY id
-    relocateT y = second (+ y) . liftA2 (second . subtract) maximumY id
+    relocateB y = second (+ y) . liftA2 (second . subtract) minY id
+    relocateT y = second (+ y) . liftA2 (second . subtract) maxY id
 
 
     abscissae :: f x y -> [x]
@@ -81,6 +81,7 @@ class (Bifunctor f, Bifoldable f, Integral x, Integral y) => Cartesian f x y whe
 
     ordinates :: f x y -> [y]
     ordinates = bifoldr (flip const) (:) []
+
 
 
 instance (Integral x, Integral y) => Cartesian (,) x y

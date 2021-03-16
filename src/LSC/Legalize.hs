@@ -42,7 +42,7 @@ legalizeRows top = do
     assume "legalizeRows: gate vector indices do not match gate numbers"
         $ and $ imap (==) $ view number <$> view gates top
 
-    segments <- realWorldST
+    segments <- liftST
         $ sequence
         $ rowLegalization top <$> getRows (top ^. gates)
 
@@ -188,7 +188,7 @@ juggleCells top = do
 
     rc <- view rowCapacity <$> environment
 
-    result <- realWorldST $ rowJuggling rc top
+    result <- liftST . rowJuggling rc $ top
 
     debugRowCapacities result
 
@@ -209,8 +209,8 @@ rowJuggling rc top = do
             ]
 
     let rowWidth p = ceiling $ rc * fromIntegral (view cardinality p * view granularity p)
-    let w = maybe 0 rowWidth . (rs ^?) . ix . view b . foldMap' (view space) <$> table
-    let y = view b . foldMap' (view space) <$> table
+    let w = maybe 0 rowWidth . (rs ^?) . ix . minimum . fmap (minY . view space) <$> table
+    let y = minimum . fmap (minX . view space) <$> table
 
     surplus <- unsafeThaw $ Vector.zipWith (-) (sum . fmap gateWidth <$> table) w
 

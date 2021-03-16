@@ -106,7 +106,7 @@ edgeDisjoint g n i j = do
 determineFeedthroughs :: NetGraph -> LSC NetGraph
 determineFeedthroughs top = do
     info ["Determine feedthroughs"]
-    realWorldST . globalDetermineFeedthroughs $ top
+    liftST . globalDetermineFeedthroughs $ top
 
 
 -- | O(n^2) in the number of pins
@@ -225,7 +225,7 @@ feedthroughGate n = def &~ do
 determineNetSegments :: NetGraph -> LSC NetGraph
 determineNetSegments top = do
     info ["Determine net segments"]
-    result <- realWorldST . globalDetermineNetSegments $ top
+    result <- liftST . globalDetermineNetSegments $ top
     debugChannelDensities result
     pure result
 
@@ -361,7 +361,7 @@ determineRowSpacing top
 determineRowSpacing top
   = do
     info ["Determine row spacing"]
-    realWorldST . densityRowSpacing $ top
+    liftST . densityRowSpacing $ top
 
 
 

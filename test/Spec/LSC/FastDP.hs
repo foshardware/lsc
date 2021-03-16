@@ -128,11 +128,11 @@ layoutIsos = testGroup "NetGraph isomorphism"
           (top ^. nets . to length)
           (nxt ^. nets . to length)
         assertEqual "net information lost"
-          (hypothenuse $ boundingBox $ foldMap' (view space) . view members <$> top ^. nets)
-          (hypothenuse $ boundingBox $ foldMap' (view space) . view members <$> nxt ^. nets)
+          (hypothenuse $ coarseBoundingBox $ view space <$> foldMap (view members) (top ^. nets))
+          (hypothenuse $ coarseBoundingBox $ view space <$> foldMap (view members) (nxt ^. nets))
         assertBool "net information lost" $
-             (foldMap' (view space) . view members <$> top ^. nets)
-          == (foldMap' (view space) . view members <$> nxt ^. nets)
+             (coarseBoundingBox $ view space <$> foldMap (view members) (top ^. nets))
+          == (coarseBoundingBox $ view space <$> foldMap (view members) (nxt ^. nets))
 
   , testCase "from . to"
       $ do
@@ -144,8 +144,8 @@ layoutIsos = testGroup "NetGraph isomorphism"
           (sum $ length . rights . toList <$> lay)
           (sum $ length . rights . toList <$> nxt)
         assertEqual "information lost"
-          (hypothenuse $ boundingBox $ foldMap' (either id (view space)) <$> lay)
-          (hypothenuse $ boundingBox $ foldMap' (either id (view space)) <$> nxt)
+          (hypothenuse $ boundingBox $ either id (view space) <$> fold lay)
+          (hypothenuse $ boundingBox $ either id (view space) <$> fold nxt)
         assertBool "information lost" $
              (fmap (fmap (view space)) <$> lay)
           == (fmap (fmap (view space)) <$> nxt)
@@ -206,8 +206,8 @@ segmentIterators = testGroup "Segment iterators"
 
         k <- generate $ choose (0, n)
 
-        let xs = spaces rightNext k seg $ mempty & l .~ 0 & r .~ 0
-            ys = reverse $ spaces leftNext k seg $ mempty & l .~ n & r .~ n
+        let xs = spaces rightNext k seg $ rect 0 0 0 0
+            ys = reverse $ spaces leftNext k seg $ rect n 0 n 0
 
         let zs = lefts . toList $ seg
 
@@ -267,7 +267,7 @@ cutLayouts = testGroup "Cut layout"
         k <- generate $ choose (0, n)
 
         let cut = cutLayout (min j k, max j k) lay :: Layout
-        let area = foldMap' (foldMap' (either implode (implode . view space))) cut
+        let area = boundingBox $ either id (view space) <$> fold cut
 
         assertBool "top"     $ max j k >= area ^. t
         assertBool "bottom"  $ min j k <= area ^. b
@@ -284,7 +284,7 @@ cutLayouts = testGroup "Cut layout"
         k <- generate $ choose (0, n)
 
         let cut = cutLayout (min j k, max j k) seg :: Segment
-        let area = foldMap' (either implode (implode . view space)) cut
+        let area = boundingBox $ either id (view space) <$> cut
 
         assertBool "left"  $ min j k <= area ^. l
         assertBool "right" $ max j k >= area ^. r

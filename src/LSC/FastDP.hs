@@ -69,14 +69,14 @@ globalSwap :: NetGraph -> LSC NetGraph
 globalSwap top = do
     info ["Global swap"]
     sc <- view scaleFactor <$> technology
-    realWorldST . swapRoutine sc False $ top
+    liftST . swapRoutine sc False $ top
 
 
 verticalSwap :: NetGraph -> LSC NetGraph
 verticalSwap top = do 
     info ["Vertical swap"]
     sc <- view scaleFactor <$> technology
-    realWorldST . swapRoutine sc True $ top
+    liftST . swapRoutine sc True $ top
 
 
 
@@ -309,7 +309,7 @@ localReordering top = do
     assume "localReorder: gate vector indices do not match gate numbers"
         $ and $ imap (==) $ view number <$> view gates top
 
-    segments <- realWorldST
+    segments <- liftST
         $ sequence
         $ localReorderSegment 3 top <$> views gates getSegments top
 
@@ -360,7 +360,7 @@ singleSegmentClustering top = do
     assume "singleSegmentClustering: gate vector indices do not match gate numbers"
         $ and $ imap (==) $ view number <$> view gates top
 
-    segments <- realWorldST
+    segments <- liftST
         $ sequence
         $ clusterSegment top <$> views gates getSegments top
 
@@ -497,7 +497,7 @@ generateBoundsList top segment order c
     $ foldMap abscissae
     $ selfContained
     $ filter (/= mempty)
-      [ boundingBox
+      [ foldMap' (BoundingBox . implode)
         [ case compare <$> order i <*> order (head c ^. number) of
             Just LT -> Vector.head segment ^. space
             Just  _ -> Vector.last segment ^. space
@@ -511,6 +511,6 @@ generateBoundsList top segment order c
 
     where
 
-      selfContained [] = view space <$> c
+      selfContained [] = BoundingBox . view space <$> c
       selfContained xs = xs
 

@@ -20,9 +20,10 @@ import System.IO
 
 class Trace m a where
     trace :: a -> m a
-    -- pointfree usage for `trace :: a -> b -> a`
+    -- pointfree usage of `trace :: a -> a -> a`:
     -- - `liftA2 trace id id`
-    -- - `flip trace ()`
+    -- - `trace undefined`
+    -- - `trace mempty`
     --
 
 
@@ -40,11 +41,11 @@ instance (Monad m, Show a) => Trace (Lazy.StateT s m) a where
     {-# NOINLINE trace #-}
 
 instance (Monad m, Show a) => Trace (Strict.StateT s m) a where
-    trace m = trace m () `seq` pure m
+    trace m = trace m m `seq` pure m
     {-# NOINLINE trace #-}
 
-instance Show a => Trace ((->) b) a where
-    trace = const . unsafePerformIO . trace
+instance Show a => Trace ((->) a) a where
+    trace = const $ unsafePerformIO . trace
     {-# NOINLINE trace #-}
 #else
 instance Show a => Trace IO a where
@@ -63,8 +64,8 @@ instance (Monad m, Show a) => Trace (Strict.StateT s m) a where
     trace = pure
     {-# INLINE trace #-}
 
-instance Show a => Trace ((->) b) a where
-    trace = const
+instance Show a => Trace ((->) a) a where
+    trace = const id
     {-# INLINE trace #-}
 #endif
 

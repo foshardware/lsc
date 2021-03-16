@@ -68,7 +68,7 @@ fromNet :: (Ident -> Gate) -> DEF.Net -> LSC.Net
 fromNet gate (DEF.Net i cs _) = LSC.Net i
     mempty
     mempty
-    (V.fromList $ gate . fst <$> rights cs)
+    (gate . fst <$> rights cs)
     (HashMap.fromListWith (++)
         [ (g ^. number, [def & identifier .~ p]) | (g, p) <- either (def, ) (first gate) <$> cs ])
 
@@ -145,11 +145,11 @@ fromRow (DEF.Row _ i x y o ss _ w _)
 fromComponent :: DEF.Component -> Gate
 fromComponent (DEF.Component _ j placed@(Just (Fixed _ _))) = def &~ do
     identifier .= j
-    space .= foldMap fromPlaced placed
+    space .= maybe (rect 0 0 0 0) fromPlaced placed
     fixed .= True
 fromComponent (DEF.Component _ j placed) = def &~ do
     identifier .= j
-    space .= foldMap fromPlaced placed
+    space .= maybe (rect 0 0 0 0) fromPlaced placed
 
 
 
@@ -158,7 +158,7 @@ fromPlaced (Placed (x, y) ori)
     = LSC.Component (round x) (round y) (round x) (round y) mempty (fromOrientation ori)
 fromPlaced (Fixed (x, y) ori)
     = LSC.Component (round x) (round y) (round x) (round y) mempty (fromOrientation ori)
-fromPlaced _ = mempty 
+fromPlaced _ = rect 0 0 0 0
 
 
 

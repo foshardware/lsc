@@ -17,20 +17,20 @@ SPDX-License-Identifier: GPL-3.0-or-later
 `stack install`  
 
 
-### Custom setup
-
-For any custom build, e. g. by using cabal-install, you will need at least ghc `8.0.1`.  
-
-
 ### GLPK optimizations
 
 `stack install --flag=lsc:glpk`  
 
-Use the GLPK (GNU Linear Programming Kit) for solving integer programs.
+Use the GLPK (GNU Linear Programming Kit) as backend to integer programs.
 
 GLPK optimizations are necessary for:
 
 - Cell flipping
+
+
+### Custom setup
+
+For any custom build (e. g. cabal-install) you will need at least GHC 8.  
 
 
 ## Usage
@@ -43,11 +43,13 @@ GLPK optimizations are necessary for:
 ### Create a detailed placement from replace
 
 `replace < gcd_nontd_test.tcl`  
-`lsc -dp -llibrary/nangate45/NangateOpenCellLibrary.lef gcd_nan45_nontd.def -odef > placed.def`
+`lsc -dp -llibrary/nangate45/NangateOpenCellLibrary.lef gcd_nan45_nontd.def -odef > placed.def`  
+
 
 ### Create graphics from def file
 
 `lsc -l sample/osu035.lef --output=svg sample/map9v3.def > result.svg`  
+
 
 ### Set number of capabilities
 
@@ -73,15 +75,18 @@ GLPK optimizations are necessary for:
 
 `stack test`  
 
+
 ### Enable concurrency tests
 
 Pass the argument `-j4` for enabling concurrency tests with 4 jobs to run simultaneosly.
 
-`stack test --test-arguments -j4`
+`stack test --test-arguments -j4`  
+
 
 ## Licensing
 
-This program is available as open source under the terms of the GPL-3.0-or-later. However, some elements are being licensed under CC0-1.0. For accurate information, please check individual files.
+This program is available as open source under the terms of the GPL-3.0-or-later. However, some elements are being licensed under CC0-1.0. For accurate information, please check individual files.  
+
 
 ## References
 
@@ -138,3 +143,6 @@ This program is available as open source under the terms of the GPL-3.0-or-later
 - Pin permutations
   - [doi:10.1109/iccd.1992.276294](https://doi.org/10.1109/iccd.1992.276294)
 
+- Rent's Rule
+  - [doi:10.1109/tcs.1979.1084635](https://doi.org/10.1109/tcs.1979.1084635)
+  - [doi:10.1147/rd.252.0152](https://doi.org/10.1147/rd.252.0152)
