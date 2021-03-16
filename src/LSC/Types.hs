@@ -137,14 +137,10 @@ data Net = Net
 
 
 instance Semigroup Net where
-
   Net "" xs ss ns as <> Net is ys ts os bs
     = Net is (xs <> ys) (ss <> ts) (ns <> os) (unionWith (<>) as bs)
   Net is xs ss ns as <> Net  _ ys ts os bs
     = Net is (xs <> ys) (ss <> ts) (ns <> os) (unionWith (<>) as bs)
-
-  stimes = stimesIdempotent
-
 
 instance Monoid Net where
   mempty = Net "" mempty mempty mempty mempty
