@@ -30,7 +30,7 @@ GLPK optimizations are necessary for:
 
 ### Custom setup
 
-For any custom build (e. g. cabal-install) you will need at least GHC 8. There is a fallback build system in place which may lack behind in commits: [lsc-cabal](https://github.com/foshardware/lefdef) works with git submodules and cabal-install.  
+For any custom build (e. g. cabal-install) you will need at least GHC 8. [lsc-cabal](https://github.com/foshardware/lsc-cabal) is a fallback build system based on cabal and git submodules but may lack behind in commits.
 
 
 ## Usage
@@ -108,7 +108,7 @@ Annotations:
 ### LSC.FM
 
 - :whale: Fiduccia, et. al. (1982): A Linear-Time Heuristic for Improving Network Partitions [doi:10.1109/dac.1982.1585498](https://doi.org/10.1109/dac.1982.1585498)
-- :whale: Alpert, Huang, Kahng (1998): Multilevel Circuit Partitioning, [doi:10.1109/dac.1997.597204](https://doi.org/10.1109/dac.1997.597204)
+- :whale: Alpert, Huang, Kahng (1998): Multilevel Circuit Partitioning [doi:10.1109/dac.1997.597204](https://doi.org/10.1109/dac.1997.597204)
 
 ### LSC.FastDP
 
@@ -128,7 +128,7 @@ Annotations:
 
 ### LSC.SegmentTree
 
-- :eagle: Bentley (1977): Solutions to Klee's rectangle problems. Unpublished manuscript
+- :eagle: Bentley (1977): Solutions to Klee's rectangle problems, Unpublished manuscript
 
 ### LSC.SuffixTree
 
