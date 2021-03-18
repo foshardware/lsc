@@ -22,10 +22,10 @@ import Test.Tasty.QuickCheck
 import LSC.Cartesian
 import LSC.Component
 import LSC.Legalize
+import LSC.Model
 import LSC.NetGraph
-import LSC.Types
 
-import Spec.LSC.Types
+import Spec.LSC.Model
 
 
 

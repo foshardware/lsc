@@ -18,7 +18,8 @@ import Test.Tasty
 import Test.Tasty.HUnit
 
 import LSC
-import LSC.Types
+import LSC.Model
+import LSC.Transformer
 
 
 

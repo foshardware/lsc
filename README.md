@@ -30,7 +30,7 @@ GLPK optimizations are necessary for:
 
 ### Custom setup
 
-For any custom build (e. g. cabal-install) you will need at least GHC 8.  
+For any custom build (e. g. cabal-install) you will need at least GHC 8. There is a fallback build system in place which may lack behind in commits: [lsc-cabal](https://github.com/foshardware/lefdef) works with git submodules and cabal-install.  
 
 
 ## Usage
@@ -78,7 +78,7 @@ For any custom build (e. g. cabal-install) you will need at least GHC 8.
 
 ### Enable concurrency tests
 
-Pass the argument `-j4` for enabling concurrency tests with 4 jobs to run simultaneosly.
+Pass the argument `-j4` for enabling concurrency tests with 4 jobs to run simultaneously.
 
 `stack test --test-arguments -j4`  
 
@@ -90,46 +90,53 @@ This program is available as open source under the terms of the GPL-3.0-or-later
 
 ## References
 
+Annotations:
+
+- :eagle: The referenced work has fundamentally inspired the implemented algorithms in the namespace
+- :whale: The referenced work and its proposed algorithms have been fully incorporated in the namespace
+- :tiger: The referenced work is soundly applied and the implementation has evolved from the proposed algorithms
+
+
 ### LSC.CellFlipping
 
-- Boros, Hammer, Minoux, Rader (1999): Optimal cell flipping to minimize channel density in VLSI design and pseudo-Boolean optimzation [doi:10.1016/S0166-218X(98)00114-0](https://doi.org/10.1016/S0166-218X%2898%2900114-0)
+- :whale: Boros, Hammer, Minoux, Rader (1999): Optimal cell flipping to minimize channel density in VLSI design and pseudo-Boolean optimzation [doi:10.1016/S0166-218X(98)00114-0](https://doi.org/10.1016/S0166-218X%2898%2900114-0)
 
 ### LSC.Deque
 
-- Okasaki (1998): Purely Functional Data Structures [doi:10.1017/cbo9780511530104](https://doi.org/10.1017/cbo9780511530104)
+- :eagle: Okasaki (1998): Purely Functional Data Structures [doi:10.1017/cbo9780511530104](https://doi.org/10.1017/cbo9780511530104)
 
 ### LSC.FM
 
-- Fiduccia, et. al. (1982): A Linear-Time Heuristic for Improving Network Partitions [doi:10.1109/dac.1982.1585498](https://doi.org/10.1109/dac.1982.1585498)
-- Alpert, Huang, Kahng (1998): Multilevel Circuit Partitioning, [doi:10.1109/dac.1997.597204](https://doi.org/10.1109/dac.1997.597204)
+- :whale: Fiduccia, et. al. (1982): A Linear-Time Heuristic for Improving Network Partitions [doi:10.1109/dac.1982.1585498](https://doi.org/10.1109/dac.1982.1585498)
+- :whale: Alpert, Huang, Kahng (1998): Multilevel Circuit Partitioning, [doi:10.1109/dac.1997.597204](https://doi.org/10.1109/dac.1997.597204)
 
 ### LSC.FastDP
 
-- Pan, Viswanathan, Chu (2005): An efficient and effective detailed placement algorithm [doi:10.1109/iccad.2005.1560039](https://doi.org/10.1109/iccad.2005.1560039)
+- :whale: Pan, Viswanathan, Chu (2005): An efficient and effective detailed placement algorithm [doi:10.1109/iccad.2005.1560039](https://doi.org/10.1109/iccad.2005.1560039)
 
 ### LSC.GlobalRouting
 
-- Cong, Preas (1992): A new algorithm for standard cell global routing [doi:10.1016/0167-9260(92)90010-v](https://doi.org/10.1016/0167-9260%2892%2990010-v)
+- :whale: Cong, Preas (1992): A new algorithm for standard cell global routing [doi:10.1016/0167-9260(92)90010-v](https://doi.org/10.1016/0167-9260%2892%2990010-v)
 
 ### LSC.Legalize
 
-- Kahng, Markov, Reda (2004): On Legalization of Row-Based Placements [doi:10.1145/988952.989004](https://doi.org/10.1145/988952.989004)
+- :tiger: Kahng, Markov, Reda (2004): On Legalization of Row-Based Placements [doi:10.1145/988952.989004](https://doi.org/10.1145/988952.989004)
 
 ### LSC.Polygon
 
-- Gourley, Green (1983): A Polygon-to-Rectangle Conversion Algorithm [doi:10.1109/MCG.1983.262975](https://doi.org/10.1109/MCG.1983.262975)
+- :whale: Gourley, Green (1983): A Polygon-to-Rectangle Conversion Algorithm [doi:10.1109/MCG.1983.262975](https://doi.org/10.1109/MCG.1983.262975)
 
 ### LSC.SegmentTree
 
-- Bentley (1977): Solutions to Klee's rectangle problems. Unpublished manuscript
+- :eagle: Bentley (1977): Solutions to Klee's rectangle problems. Unpublished manuscript
 
 ### LSC.SuffixTree
 
-- Becher, Deymonnaz, Heiber (2013): Efficient repeat finding via suffix arrays [arXiv:1304.0528](https://arxiv.org/abs/1304.0528)
+- :whale: Becher, Deymonnaz, Heiber (2013): Efficient repeat finding via suffix arrays [arXiv:1304.0528](https://arxiv.org/abs/1304.0528)
 
 ### LSC.UnionFind
 
-- Tarjan (1975): Efficiency of a Good But Not Linear Set Union Algorithm [doi:10.1145/321879.321884](https://doi.org/10.1145/321879.321884)
+- :whale: Tarjan (1975): Efficiency of a Good But Not Linear Set Union Algorithm [doi:10.1145/321879.321884](https://doi.org/10.1145/321879.321884)
 
 
 ## To do

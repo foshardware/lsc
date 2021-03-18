@@ -30,9 +30,9 @@ import Text.Blaze.Svg.Renderer.Text (renderSvg)
 
 import LSC.Cartesian
 import LSC.Component
+import LSC.Model
 import LSC.NetGraph
 import LSC.Polygon
-import LSC.Types
 
 
 
@@ -163,10 +163,10 @@ route _
 track :: Area -> Either Track Track -> Svg
 track a (Right x)
   = for_ (x ^. stabs . to elems)
-  $ drawL (x ^. layers . to layerColor) . vertical (a ^. t)
+  $ drawL (x ^. layers z . to layerColor) . vertical (a ^. t)
 track a (Left y)
   = for_ (y ^. stabs . to elems)
-  $ drawL (y ^. layers . to layerColor) . horizontal (a ^. r)
+  $ drawL (y ^. layers z . to layerColor) . horizontal (a ^. r)
 
 
 horizontal, vertical :: Int -> Int -> Marker

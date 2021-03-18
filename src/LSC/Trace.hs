@@ -21,9 +21,7 @@ import System.IO
 class Trace m a where
     trace :: a -> m a
     -- pointfree usage of `trace :: a -> a -> a`:
-    -- - `liftA2 trace id id`
-    -- - `trace undefined`
-    -- - `trace mempty`
+    -- - `trace <$> id <*> id`
     --
 
 
@@ -36,16 +34,16 @@ instance Show a => Trace (ST s) a where
     trace = unsafeIOToST . trace
     {-# NOINLINE trace #-}
 
-instance (Monad m, Show a) => Trace (Lazy.StateT s m) a where
+instance (Show a, Monad m) => Trace (Lazy.StateT s m) a where
     trace m = trace m m `seq` pure m
     {-# NOINLINE trace #-}
 
-instance (Monad m, Show a) => Trace (Strict.StateT s m) a where
+instance (Show a, Monad m) => Trace (Strict.StateT s m) a where
     trace m = trace m m `seq` pure m
     {-# NOINLINE trace #-}
 
-instance Show a => Trace ((->) a) a where
-    trace = const $ unsafePerformIO . trace
+instance Show a => Trace ((->) b) a where
+    trace = const . unsafePerformIO . trace
     {-# NOINLINE trace #-}
 #else
 instance Show a => Trace IO a where
@@ -56,16 +54,16 @@ instance Show a => Trace (ST s) a where
     trace = pure
     {-# INLINE trace #-}
 
-instance (Monad m, Show a) => Trace (Lazy.StateT s m) a where
+instance (Show a, Monad m) => Trace (Lazy.StateT s m) a where
     trace = pure
     {-# INLINE trace #-}
 
-instance (Monad m, Show a) => Trace (Strict.StateT s m) a where
+instance (Show a, Monad m) => Trace (Strict.StateT s m) a where
     trace = pure
     {-# INLINE trace #-}
 
-instance Show a => Trace ((->) a) a where
-    trace = const id
+instance Show a => Trace ((->) b) a where
+    trace = pure
     {-# INLINE trace #-}
 #endif
 

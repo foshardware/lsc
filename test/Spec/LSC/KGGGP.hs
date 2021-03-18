@@ -21,8 +21,8 @@ import Test.Tasty
 import Test.Tasty.HUnit
 
 import LSC.BLIF
-import LSC.Types
 import LSC.KGGGP
+import LSC.Model
 
 
 

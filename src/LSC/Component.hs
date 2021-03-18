@@ -3,8 +3,9 @@
 
 {-# LANGUAGE CPP #-}
 {-# LANGUAGE TemplateHaskell #-}
-{-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE FunctionalDependencies #-}
+{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE Rank2Types #-}
 {-# LANGUAGE DeriveAnyClass #-}
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE DeriveFunctor #-}
@@ -16,7 +17,7 @@ import Control.DeepSeq
 import Control.Lens
 import Data.Bifunctor
 import Data.Bifunctor.TH
-import Data.IntSet (IntSet, union, intersection)
+import Data.IntSet (IntSet, fromList, toList, union, intersection)
 import Data.Semigroup
 
 import Data.Aeson (FromJSON, ToJSON)
@@ -169,6 +170,11 @@ $(deriveBifoldable ''BoundingBox)
 
 type BoundingBox' l a = BoundingBox l a a
 
+implode :: Cartesian f x y => f x y -> BoundingBox l x y
+implode = BoundingBox . (rect <$> centerX <*> centerY <*> centerX <*> centerY)
+{-# INLINABLE implode #-}
+
+
 instance (Integral x, Integral y) => Cartesian (BoundingBox l) x y where
 
     width  = width  . getBoundingBox
@@ -218,47 +224,14 @@ instance (Ord x, Ord y, Bounded x, Bounded y) => Monoid (Overlap l x y) where
 
 
 
-data Line x y = Line (x, y) (x, y) deriving
-  ( Eq, Ord
-  , Functor, Foldable
-  , Generic
-  , NFData
-  , FromJSON, ToJSON
-  , Show
-  )
-
-$(deriveBifunctor  ''Line)
-$(deriveBifoldable ''Line)
-
-type Line' a = Line a a
-
-
-instance (Integral x, Integral y) => Cartesian Line x y where
-
-    minX (Line (x, _) _) = x
-    maxX (Line _ (x, _)) = x
-
-    minY (Line (_, y) _) = y
-    maxY (Line _ (_, y)) = y
-
-
-
-line :: Iso' ((x, y), (x, y)) (Line x y)
-line = iso
-  (\ ((x1, y1), (x2, y2)) -> (Line (x1, y1) (x2, y2)))
-  (\ (Line (x1, y1) (x2, y2)) -> ((x1, y1), (x2, y2)))
-
-
-
 makeFieldsNoPrefix ''Component
 
-makeFieldsNoPrefix ''Line
 
-
-
-implode :: (Integral x, Integral y) => Component l x y -> Component l x y
-implode = rect <$> centerX <*> centerY <*> centerX <*> centerY
-{-# INLINABLE implode #-}
+layers :: Enum l => Lens' a IntSet -> Lens' a [l]
+layers f = lens
+    (map toEnum . toList . view f)
+    (flip $ set f . fromList . map fromEnum)
+{-# INLINABLE layers #-}
 
 
 inline :: Cartesian f x y => Component l x y -> f x y -> f x y

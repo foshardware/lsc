@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 
 name:                lsc
-version:             0.3.0.1
+version:             0.3.0.2
 github:              "foshardware/lsc"
 license:             GPL-3
 author:              "Andreas Westerwick"
@@ -33,6 +33,7 @@ dependencies:
 - base >= 4.9
 - aeson
 - array
+- arrows
 - arrowgant
 - async
 - bifunctors
@@ -52,6 +53,7 @@ dependencies:
 - firrtl
 - hashable
 - hashtables
+- haskell-src-exts
 - kan-extensions
 - lefdef
 - lens

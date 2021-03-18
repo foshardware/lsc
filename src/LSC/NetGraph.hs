@@ -16,6 +16,7 @@ import Control.Monad.ST
 import Data.Default
 import Data.Foldable
 import Data.Function
+import Data.Functor.Contravariant
 import Data.HashMap.Lazy (HashMap)
 import qualified Data.HashMap.Lazy as HashMap
 import qualified Data.IntMap as M
@@ -31,16 +32,18 @@ import Data.Vector.Unboxed.Mutable (new, write)
 import qualified Data.Vector.Unboxed as U
 import qualified Data.Vector as V
 
+import LSC.BinarySearch
 import LSC.Cartesian
 import LSC.Component
 import LSC.Entropy
-import LSC.Types
+import LSC.Model
 import LSC.Polygon
+import LSC.Transformer
 
 
 
 boundingBox :: Foldable f => f (Component' l Int) -> Component' l Int
-boundingBox = getBoundingBox . foldMap' (BoundingBox . implode)
+boundingBox = getBoundingBox . foldMap' implode
 {-# INLINABLE boundingBox #-}
 
 
@@ -55,7 +58,7 @@ hpwl :: Net -> Int
 hpwl
   = liftA2 (+) width height
   . getBoundingBox
-  . foldMap' (BoundingBox . implode . view space)
+  . foldMap' (implode . view space)
   . view members
 
 
@@ -64,10 +67,9 @@ hpwlDelta :: Foldable f => NetGraph -> f Gate -> Int
 hpwlDelta top gs = sum
   [ width after - width before + height after - height before
   | net <- hyperedges top gs
-  , let before = foldMap' (BoundingBox . implode . view space)
+  , let before = foldMap' (implode . view space)
                           (view members net)
-  , let after  = foldMap' (\ g -> BoundingBox
-                                $ maybe (g ^. space . to implode) (implode . view space)
+  , let after  = foldMap' (\ g -> maybe (g ^. space . to implode) (implode . view space)
                                 $ find (\ h -> g ^. number == h ^. number) gs)
                           (view members net)
   ]
@@ -82,7 +84,7 @@ optimalRegion f
 optimalRegion f
   = rect x1 y1 x2 y2
   where
-    boxes = foldr ((:) . foldMap' (BoundingBox . implode . view space)) [] f
+    boxes = foldr ((:) . foldMap' (implode . view space)) [] f
     [x1, x2] = medianElements $ sort $ foldMap abscissae boxes
     [y1, y2] = medianElements $ sort $ foldMap ordinates boxes
 {-# INLINABLE optimalRegion #-}
@@ -91,9 +93,9 @@ optimalRegion f
 
 hyperedges :: Foldable f => NetGraph -> f Gate -> [Net]
 hyperedges top gs
-  = map getDistinctIdentifier
+  = map getDistinct
   . unstableUnique
-  $ [ DistinctIdentifier n
+  $ [ distinct (n ^. identifier) n
     | g <- toList gs
     , k <- toList $ g ^. wires
     , n <- toList $ top ^. nets ^? ix k
@@ -213,12 +215,12 @@ estimations top = do
 
 
 
-significantHpwl :: NetGraph -> NetGraph -> Ordering
-significantHpwl m n = div p x `compare` div q x
-    where
-        x = max 1 $ div p 10000 -- delta below 0.01% is equal
-        p = sum $ hpwl <$> view nets m
-        q = sum $ hpwl <$> view nets n
+significantHpwl :: Comparison NetGraph
+significantHpwl = Comparison $ \ m n ->
+  let p = sum $ hpwl <$> view nets m
+      q = sum $ hpwl <$> view nets n
+      x = max 1 $ div p 10000 -- delta below 0.01% is equal
+  in div p x `compare` div q x
 
 
 

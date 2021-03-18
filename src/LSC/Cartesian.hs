@@ -3,14 +3,27 @@
 
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE DeriveAnyClass #-}
+{-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE DeriveFunctor #-}
+{-# LANGUAGE DeriveFoldable #-}
 
 module LSC.Cartesian where
 
 import Control.Applicative
-import Data.Bifunctor
+import Control.DeepSeq
+import Control.Lens
+
 import Data.Bifoldable
+import Data.Bifunctor
+import Data.Bifunctor.TH
 import Data.Maybe
 import Data.Semigroup
+
+import Data.Aeson (FromJSON, ToJSON)
+
+import GHC.Generics
 
 
 class (Bifunctor f, Bifoldable f, Integral x, Integral y) => Cartesian f x y where
@@ -85,5 +98,36 @@ class (Bifunctor f, Bifoldable f, Integral x, Integral y) => Cartesian f x y whe
 
 
 instance (Integral x, Integral y) => Cartesian (,) x y
+
+
+
+data Line x y = Line (x, y) (x, y) deriving
+  ( Eq, Ord
+  , Functor, Foldable
+  , Generic
+  , NFData
+  , FromJSON, ToJSON
+  , Show
+  )
+
+$(deriveBifunctor  ''Line)
+$(deriveBifoldable ''Line)
+
+type Line' a = Line a a
+
+line :: Iso' ((x, y), (x, y)) (Line x y)
+line = iso
+  (\ ((x1, y1), (x2, y2)) -> (Line (x1, y1) (x2, y2)))
+  (\ (Line (x1, y1) (x2, y2)) -> ((x1, y1), (x2, y2)))
+
+
+instance (Integral x, Integral y) => Cartesian Line x y where
+
+    minX (Line (x, _) _) = x
+    maxX (Line _ (x, _)) = x
+
+    minY (Line (_, y) _) = y
+    maxY (Line _ (_, y)) = y
+
 
 

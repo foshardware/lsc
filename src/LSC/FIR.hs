@@ -10,7 +10,7 @@ import Language.FIRRTL.Lexer
 import Language.FIRRTL.Parser
 import Language.FIRRTL.Syntax
 
-import LSC.Types
+import LSC.Model
 
 
 newtype FIR = FIR Circuit

@@ -41,10 +41,12 @@ import qualified Data.Vector.Unboxed.Mutable as T
 import Data.Vector.Mutable (slice)
 import Prelude hiding (read, lookup)
 
+import LSC.BinarySearch
 import LSC.Cartesian
 import LSC.Component
+import LSC.Model
 import LSC.NetGraph
-import LSC.Types
+import LSC.Transformer
 
 
 
@@ -497,7 +499,7 @@ generateBoundsList top segment order c
     $ foldMap abscissae
     $ selfContained
     $ filter (/= mempty)
-      [ foldMap' (BoundingBox . implode)
+      [ foldMap' implode
         [ case compare <$> order i <*> order (head c ^. number) of
             Just LT -> Vector.head segment ^. space
             Just  _ -> Vector.last segment ^. space

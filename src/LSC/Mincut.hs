@@ -34,8 +34,9 @@ import LSC.Component
 import LSC.Entropy
 import LSC.Improve
 import LSC.FM as FM
+import LSC.Model
 import LSC.NetGraph
-import LSC.Types
+import LSC.Transformer
 
 
 

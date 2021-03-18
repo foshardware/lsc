@@ -55,7 +55,7 @@ fromList xs = Deque (length xs) 0 (toList xs) []
 instance Applicative Deque where
     pure x = Deque 1 0 [x] []
     Deque lf lr fs rs <*> Deque lg ls gs ss
-      = Deque ((lf + lr) * (lg + ls)) 0 (fs ++ reverse rs <*> gs ++ reverse ss) []
+      = Deque ((lf + lr) * (lg + ls)) 0 ((fs ++ reverse rs) <*> (gs ++ reverse ss)) []
 
 
 instance Alternative Deque where

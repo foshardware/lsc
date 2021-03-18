@@ -5,7 +5,6 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE TupleSections #-}
-{-# LANGUAGE Rank2Types #-}
 {-# LANGUAGE DeriveAnyClass #-}
 {-# LANGUAGE TypeApplications #-}
 
@@ -15,6 +14,7 @@ import Control.Arrow
 import Control.Arrow.Algebraic
 import Control.Arrow.Memo
 import Control.Arrow.Select
+import Control.Arrow.Transformer
 import Control.Category
 import Control.Concurrent.Async
 import qualified Control.Concurrent.MSem as MSem
@@ -22,8 +22,9 @@ import Control.DeepSeq
 import Control.Exception
 import Control.Lens
 import Control.Monad
-import Control.Monad.Trans
+import Control.Monad.IO.Class
 import Data.Foldable
+import Data.Functor.Contravariant
 import Data.Semigroup
 import Prelude hiding ((.), id)
 
@@ -32,10 +33,11 @@ import LSC.FastDP
 import LSC.GlobalRouting
 import LSC.Legalize
 import LSC.Logger
+import LSC.Model
 import LSC.Mincut
 import LSC.NetGraph
 import LSC.Trace
-import LSC.Types
+import LSC.Transformer
 import LSC.Version
 
 
@@ -173,7 +175,6 @@ finalEstimate = proc top -> do
 
 
 
-
 netGraph :: DAG Identifier NetGraph
 netGraph = DAG (view identifier) subcells
 
@@ -197,14 +198,18 @@ type Compiler' a = Compiler a a
 type Compiler = LSR LS
 
 compiler :: Compiler a b -> a -> LSC b
-compiler = unLS . (<+> zeroArrow) . reduce
+compiler = unLS . (<+> noResult) . reduce
+
+
+env :: Confinement () -> Compiler a b -> Compiler a b
+env f k = remote $ confine f . unLS (reduce k)
 
 
 remote_ :: LSC b -> Compiler () b
 remote_ = remote . const
 
 remote :: (a -> LSC b) -> Compiler a b
-remote = LSR . Lift . LS
+remote = lift . LS
 
 
 local_ :: LSC b -> Compiler () b
@@ -236,16 +241,16 @@ strategy0 :: Int -> Strategy' a
 strategy0 n = appEndomorph . stimes n . Endomorph
 
 
-strategy1 :: (a -> a -> Ordering) -> Strategy' a
+strategy1 :: Comparison a -> Strategy' a
 strategy1 f a = proc x -> do
     i <- view iterations ^<< remote_ environment -< ()
-    minimumBy f ^<< iterator i a -<< [x]
+    minimumBy (getComparison f) ^<< iterator1 i a -<< [x]
 
 
-strategy2 :: (a -> a -> Ordering) -> Strategy' a
+strategy2 :: Comparison a -> Strategy' a
 strategy2 f a = proc x -> do
     y <- strategy1 f a -< x
-    if f x y /= GT
+    if getComparison f x y /= GT
     then returnA -< x
     else strategy2 f a -< y
 
@@ -261,11 +266,6 @@ iterator i a = proc xs -> do
 iterator1 :: Arrow a => Word -> a b b -> a [b] [b]
 iterator1 0 _ = id
 iterator1 i a = iterator1 (pred i) a <<< uncurry (:) ^<< first a <<^ head &&& id
-
-
-
-env :: Confinement () -> Compiler a b -> Compiler a b
-env f k = remote $ confine f . unLS (reduce k)
 
 
 
@@ -322,11 +322,18 @@ instance ArrowRace LS where
                 Left <$> wait wx
 
 
-data LSZero = LSZero
+data NoResult = NoResult
   deriving Exception
 
-instance Show LSZero where
-  show = const $ "no result, " ++ versionString
+instance Show NoResult where
+  show _ = "no result, " ++ versionString
+
+noResult :: LS a b
+noResult = LS $ const $ liftIO $ throwIO NoResult
+
+
+data LSZero = LSZero
+  deriving (Exception, Show)
 
 instance ArrowZero LS where
   zeroArrow = LS $ const $ liftIO $ throwIO LSZero
@@ -358,6 +365,10 @@ reduce :: Arrow ls => LSR ls a b -> ls a b
 reduce = algebraic . mapReduce . unLSR
 
 
+instance Arrow ls => ArrowTransformer LSR ls where
+  lift = LSR . Lift
+
+
 instance Arrow ls => Category (LSR ls) where
   id = LSR id
   LSR f . LSR g = LSR (f . g)
@@ -373,7 +384,7 @@ instance Arrow ls => Arrow (LSR ls) where
 
 
 instance ArrowApply ls => ArrowApply (LSR ls) where
-  app = LSR $ Lift $ arr (\ (f, x) -> (reduce f, x)) >>> app
+  app = lift $ arr (\ (f, x) -> (reduce f, x)) >>> app
 
 
 instance ArrowSelect ls => ArrowSelect (LSR ls) where

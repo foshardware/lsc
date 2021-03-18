@@ -4,66 +4,38 @@
 {-# LANGUAGE CPP #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE FunctionalDependencies #-}
 {-# LANGUAGE DuplicateRecordFields #-}
 {-# LANGUAGE DeriveAnyClass #-}
 {-# LANGUAGE DeriveGeneric #-}
-{-# LANGUAGE DeriveFunctor #-}
-{-# LANGUAGE BangPatterns #-}
 
-module LSC.Types where
+module LSC.Model where
 
-import Control.Applicative
-import Control.Lens hiding (element)
+import Control.Lens
 import Control.Concurrent (getNumCapabilities)
 import Control.Concurrent.MSem (MSem)
 import qualified Control.Concurrent.MSem as MSem
 import Control.DeepSeq
-import Control.Exception
-import Control.Monad.ST
+
+import Data.Aeson (FromJSON, ToJSON)
 import Data.Bits
-import Data.Copointed
 import Data.Default
-import Data.Foldable
-import Data.Function
 import Data.HashMap.Lazy (HashMap, unionWith)
 import Data.IntMap (IntMap)
 import Data.IntSet (IntSet)
-import qualified Data.IntSet as IntSet
-import Data.List (sort, group, groupBy)
-import Data.Semigroup
-import Data.String
 import Data.Text (Text)
 import qualified Data.Text.Lazy as Lazy
 import Data.Text.Lazy.Builder
 import Data.Text.Lazy.Builder.Int
 import Data.Vector (Vector)
 
-import Data.Aeson (FromJSON, ToJSON)
-
-import Control.Monad.IO.Class
-import Control.Monad.Codensity
-import Control.Monad.Morph
-#if MIN_VERSION_base(4,10,0)
-import Control.Monad hiding (fail)
-import Control.Monad.Fail
-import Control.Monad.Reader hiding (fail)
-import Control.Monad.State hiding (fail)
-#else
-import Control.Monad
-import Control.Monad.Reader
-import Control.Monad.State
-#endif
-
 import GHC.Generics
-import Prelude hiding (lookup, fail)
 import System.IO
 
+import LSC.Cartesian
 import LSC.Component
 import LSC.Logger
-import LSC.Trace
 import LSC.Polygon
 
 
@@ -284,34 +256,6 @@ instance Default Technology where
       }
 
 
-type BootstrapT = StateT Technology
-
-type Bootstrap = BootstrapT Identity
-
-bootstrap :: Monad m => (Technology -> Technology) -> BootstrapT m ()
-bootstrap = modify
-
-snapshot :: Monad m => BootstrapT m Technology
-snapshot = get
-
-frozen :: Monad m => Iso' (BootstrapT m ()) (m Technology)
-frozen = iso (flip execStateT def) (put <=< lift)
-
-freeze :: Bootstrap () -> Technology
-freeze = copoint . view frozen
-
-
-type GnosticT = ReaderT Technology
-
-type Gnostic = GnosticT Identity
-
-runGnosticT :: Technology -> GnosticT m r -> m r
-runGnosticT = flip runReaderT
-
-runGnostic :: Technology -> Gnostic r -> r
-runGnostic x = copoint . runGnosticT x
-
-
 
 type Workers = MSem Word
 
@@ -344,111 +288,6 @@ instance Default CompilerOpts where
       }
 
 
-type ConfinementT = StateT CompilerOpts
-
-type Confinement = ConfinementT Identity
-
-
-type EnvironmentT = ReaderT CompilerOpts
-
-type Environment = EnvironmentT Identity
-
-runEnvironmentT :: Monad m => CompilerOpts -> EnvironmentT m r -> m r
-runEnvironmentT = flip runReaderT
-
-runEnvironment :: CompilerOpts -> Environment r -> r
-runEnvironment x = copoint . runEnvironmentT x
-
-
-
-type LSC = Codensity (LST IO)
-
-runLSC :: CompilerOpts -> Technology -> LSC a -> IO a
-runLSC opts tech
-  = runGnosticT tech
-  . runEnvironmentT opts
-  . unLST
-  . lowerCodensity
-
-
-evalLSC :: CompilerOpts -> Technology -> LSC a -> IO a
-evalLSC = runLSC
-
-
--- | Once a state thread computation is lifted it may not escape monadic context anymore.
---
-liftST :: ST RealWorld a -> LSC a
-liftST = liftIO . stToIO
-
-
-
-technology :: LSC Technology
-technology = lift $ LST $ lift ask
-
-environment :: LSC CompilerOpts
-environment = lift $ LST ask
-
-
-confine :: Confinement () -> LSC a -> LSC a
-confine f = lift . LST . local (execState f) . unLST . lowerCodensity
-
-
-
-newtype LST m a = LST { unLST :: EnvironmentT (GnosticT m) a }
-  deriving Functor 
-
-
-instance Applicative m => Applicative (LST m) where
-  pure = LST . pure
-  LST x <*> LST y = LST (x <*> y)
-
-instance Monad m => Monad (LST m) where
-  return = LST . return
-  m >>= k = LST (unLST m >>= unLST . k)
-
-
-instance MFunctor LST where
-  hoist m = LST . hoist (hoist m) . unLST
-
-instance MonadTrans LST where
-  lift = LST . lift . lift
-
-
-instance MonadIO m => MonadIO (LST m) where
-  liftIO = LST . liftIO
-
-#if MIN_VERSION_base(4,10,0)
-instance MonadIO m => MonadFail (LST m) where
-  fail = catchFail . Fail
-
-newtype Fail = Fail { unFail :: String }
-  deriving Exception
-
-instance Show Fail where
-  show = unFail
-
-
-catchFail :: MonadIO m => Fail -> LST m a
-catchFail = liftIO . throwIO
-
-assume :: MonadFail m => String -> Bool -> m ()
-assume = flip unless . fail
-#else
-assume :: Monad m => String -> Bool -> m ()
-assume = flip unless . fail
-#endif
-
-
-instance (MonadIO m, Show a) => Trace (LST m) a where
-  trace = liftIO . trace
-  {-# INLINE trace #-}
-
-instance Show a => Trace LSC a where
-  trace = lift . trace
-  {-# INLINE trace #-}
-
-
-
 makeFieldsNoPrefix ''RTL
 
 makeFieldsNoPrefix ''LogicPort
@@ -473,115 +312,4 @@ makeFieldsNoPrefix ''CompilerOpts
 
 makeFieldsNoPrefix ''Technology
 
-
-
-newtype DistinctNumber n a = DistinctNumber { getDistinctNumber :: a }
-  deriving (Functor, Show)
-
-instance (Eq n, HasNumber a n) => Eq (DistinctNumber n a) where
-    DistinctNumber x == DistinctNumber y
-      = view number x == view number y
-
-instance (Ord n, HasNumber a n) => Ord (DistinctNumber n a) where
-    DistinctNumber x `compare` DistinctNumber y
-      = view number x `compare` view number y
-
-
-newtype DistinctIdentifier i a = DistinctIdentifier { getDistinctIdentifier :: a }
-  deriving (Functor, Show)
-
-instance (Eq i, HasIdentifier a i) => Eq (DistinctIdentifier i a) where
-    DistinctIdentifier x == DistinctIdentifier y
-      = view identifier x == view identifier y
-
-instance (Ord i, HasIdentifier a i) => Ord (DistinctIdentifier i a) where
-    DistinctIdentifier x `compare` DistinctIdentifier y
-      = view identifier x `compare` view identifier y
-
-
-
-
-layers :: (HasZ a IntSet, Enum l) => Lens' a [l]
-layers = lens
-    (map toEnum . IntSet.toList . view z)
-    (flip $ set z . IntSet.fromList . map fromEnum)
-{-# INLINABLE layers #-}
-
-
-
-rescale :: Double -> Bootstrap ()
-rescale m = do
-    k <- view scaleFactor <$> snapshot
-    scaleFactor .= m
-    let f = round . (/ k) . (* m) . fromIntegral
-    stdCells %= (fmap . over vdd . over geometry . fmap) (bimap f f)
-    stdCells %= (fmap . over gnd . over geometry . fmap) (bimap f f)
-    stdCells %= (fmap . over dims) (bimap f f)
-    stdCells %= (fmap . over pins . fmap . over geometry . fmap) (bimap f f)
-
-
-
-
-debug, info, warning :: [String] -> LSC ()
-debug   = logger Debug
-info    = logger Info
-warning = logger Warning
-
-
-logger :: LogLevel -> [String] -> LSC ()
-logger k xs = do
-    level <- view logLevel <$> environment
-    when (k <= level) $ liftIO $ logStderr k xs
-
-
-
-
--- | Operations on the list type
---
-
-distinctPairs :: [a] -> [(a, a)]
-distinctPairs (x : xs) = zip (repeat x) xs ++ distinctPairs xs
-distinctPairs _ = []
-
-
-
-unstableUnique :: Ord a => [a] -> [a]
-unstableUnique = map head . group . sort
-{-# INLINABLE unstableUnique #-}
-
-
-median :: Integral a => [a] -> a
-median
-    = uncurry div
-    . foldl (\ (a, len) x -> (a + x, len + 1)) (0, 0)
-    . medianElements
-{-# INLINABLE median #-}
-
-
-medianElements :: [a] -> [a]
-medianElements zs = go zs zs
-    where go (x : _)         (_ : []) = [x]
-          go (x : y : _) (_ : _ : []) = [x, y]
-          go (_ : xs)    (_ : _ : ys) = go xs ys
-          go _ _ = error "medianElements: empty list"
-
-
-
-groupOn :: Eq b => (a -> b) -> [a] -> [[a]]
-groupOn = groupBy . on (==)
-{-# INLINABLE groupOn #-}
-
-
--- | Assorted higher-order functions
---
-
-ifoldl' :: Foldable f => (Int -> b -> a -> b) -> b -> f a -> b
-ifoldl' f y xs = foldl' (\ g x !i -> f i (g (i - 1)) x) (const y) xs (length xs - 1)
-{-# INLINE ifoldl' #-}
-
-#if !MIN_VERSION_base(4,13,0)
-foldMap' :: (Foldable f, Monoid m) => (a -> m) -> f a -> m
-foldMap' f = foldl' (\ acc a -> acc `mappend` f a) mempty
-{-# INLINE foldMap' #-}
-#endif
 

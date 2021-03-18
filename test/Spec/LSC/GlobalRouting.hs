@@ -23,11 +23,11 @@ import Test.Tasty.QuickCheck
 import LSC.Component
 import LSC.GlobalRouting
 import LSC.Legalize
+import LSC.Model
 import LSC.NetGraph
 import LSC.Polygon
-import LSC.Types
 
-import Spec.LSC.Types
+import Spec.LSC.Model
 
 
 

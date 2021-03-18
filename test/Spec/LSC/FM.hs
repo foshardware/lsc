@@ -28,8 +28,8 @@ import Test.Tasty.QuickCheck
 
 import LSC.BLIF
 import LSC.Entropy
-import LSC.Types
 import LSC.FM
+import LSC.Model
 
 
 

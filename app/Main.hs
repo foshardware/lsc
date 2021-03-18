@@ -32,9 +32,10 @@ import LSC.DEF     (printDEF, toDEF, fromDEF, parseDEF)
 
 import LSC
 import LSC.Logger
+import LSC.Model
 import LSC.NetGraph
 import LSC.SVG
-import LSC.Types
+import LSC.Transformer
 import LSC.Version
 
 
@@ -129,7 +130,6 @@ type Flag = (FlagKey, FlagValue)
 
 data FlagKey
   = Help
-  | Verbose
   | LogLevel
   | Stage2
   | Stage3
@@ -156,7 +156,10 @@ args =
   [ Option ['h']      ["help"]                  (NoArg (Help, ""))
     "print usage"
 
-  , Option ['v', 'd'] ["verbose"]               (NoArg (Verbose, ""))
+  , Option ['q']      ["quiet"]                 (NoArg (LogLevel, "0"))
+    "stay quiet"
+
+  , Option ['v', 'd'] ["verbose"]               (NoArg (LogLevel, "4"))
     "verbose output on stderr"
   , Option []         ["log-level"]             (ReqArg (LogLevel, ) "0,1,2,3,4")
     "set log level"
@@ -205,7 +208,7 @@ compilerOpts flags = do
     i <- last $ pure 3 : (either (die . show) pure . (parse decimal "-i") <$> lst Iterations)
 
     let ks = either (die . show) (pure . toEnum) . (parse decimal "--log-level") <$> lst LogLevel
-    k <- last $ pure Warning : (pure Debug <$ lst Verbose) ++ ks
+    k <- last $ pure Warning : ks
 
     j <- rtsWorkers
 

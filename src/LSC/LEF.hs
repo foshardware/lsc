@@ -19,8 +19,9 @@ import Language.LEF.Parser (parseLEF)
 import Language.LEF.Syntax
 
 import LSC.Component as LSC
-import LSC.Types
+import LSC.Model
 import LSC.Polygon
+import LSC.Transformer
 
 
 
@@ -80,7 +81,7 @@ portLayer _ = AnyLayer
 
 portLayerRectangle tech ident xs
     = constructPolygon (f $ round . (g *) <$> xs)
-    & layers .~ [portLayer ident] :: Polygon' LSC.Layer Int
+    & layers z .~ [portLayer ident] :: Polygon' LSC.Layer Int
     where g = view scaleFactor (tech :: Technology)
           f (x : y : ys) = (x, y) : f ys
           f _ = []

@@ -27,10 +27,12 @@ import qualified Data.Vector.Unboxed.Mutable as ST
 import Prelude hiding (read, lookup)
 import Text.Printf
 
+import LSC.BinarySearch
 import LSC.Cartesian
 import LSC.Component
+import LSC.Model
 import LSC.NetGraph
-import LSC.Types
+import LSC.Transformer
 
 
 

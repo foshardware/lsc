@@ -23,14 +23,16 @@ import Data.Vector ((!), slice, filter, zipWith, accum, replicate)
 
 import Prelude hiding (filter, zipWith, replicate)
 
+import LSC.BinarySearch
 import LSC.Cartesian
 import LSC.Component
 import LSC.Integer
+import LSC.Model
 import LSC.NetGraph
 import LSC.Polygon
 import LSC.SegmentTree
 import LSC.Trace
-import LSC.Types
+import LSC.Transformer
 
 
 
@@ -133,7 +135,7 @@ cellFlipping top = do
 
             let solution = toEnum <$> views gates (slice 0 . length) top vector
 
-            debug $ "Cells flipped:" : take 800
+            debug $ "Cells flipped" : take 800
               [ show i ++ " - " ++ g ^. identifier . to unpack ++ ": " ++ show o
               | g <- toList $ top ^. gates
               , let i = g ^. number
@@ -235,9 +237,9 @@ obtainProgram top
 
 
     cells
-      = map getDistinctNumber
+      = map getDistinct
       . unstableUnique
-      . map DistinctNumber
+      . map (liftA2 distinct (view number) id)
       . map gate
       . foldMap biList
         <$> channels

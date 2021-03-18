@@ -23,8 +23,8 @@ import Language.BLIF.Parser (parseBLIF)
 import Language.BLIF.Syntax
 import Language.BLIF.Builder
 
+import LSC.Model
 import LSC.NetGraph
-import LSC.Types
 
 
 

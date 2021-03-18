@@ -49,13 +49,16 @@ import Data.Vector.Mutable (modify)
 
 import Prelude hiding (replicate)
 
+import LSC.BinarySearch
 import LSC.Cartesian
 import LSC.Component
+import LSC.HigherOrder
+import LSC.Model
 import LSC.NetGraph
 import LSC.SegmentTree (pull, maxDensity, densityRatio)
 import qualified LSC.SegmentTree as SegmentTree
 import LSC.Polygon
-import LSC.Types
+import LSC.Transformer
 import LSC.UnionFind
 
 
@@ -366,7 +369,11 @@ determineRowSpacing top
 
 
 oneRowSpacing :: NetGraph -> NetGraph
-oneRowSpacing top = top &~ do
+oneRowSpacing top
+  | or $ imap (/=) $ view number <$> view gates top
+  = error "oneRowSpacing: gate vector indices do not match gate numbers"
+oneRowSpacing top
+  = top &~ do
 
     gates %= flip unsafeUpd (liftA2 (,) (view number) id <$> fold relocated)
 
@@ -396,7 +403,7 @@ debugChannelDensities :: NetGraph -> LSC ()
 debugChannelDensities top = do
 
     debug
-      $ "Channel densities:" :
+      $ "Channel densities" :
       [ "Channel " ++ show i ++ ": " ++ show d
       | (i, d) <- zip [ 1 :: Int .. ] densities
       ]

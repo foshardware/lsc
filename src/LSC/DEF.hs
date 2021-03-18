@@ -18,7 +18,7 @@ import Data.Either
 import Data.Foldable
 import qualified Data.HashMap.Lazy as HashMap
 import Data.Maybe
-import Data.Map (fromList, lookup)
+import Data.IntMap (fromDistinctAscList)
 import qualified Data.IntMap as IntMap
 import qualified Data.IntSet as IntSet
 import Data.Monoid
@@ -35,42 +35,46 @@ import Language.DEF.Syntax as DEF
 
 import LSC.Cartesian
 import LSC.Component as LSC
-import LSC.Types as LSC
+import LSC.Model as LSC
 import LSC.Polygon as LSC
 
 
 
 fromDEF :: DEF -> NetGraph
-fromDEF (DEF options _ area rs ts _ _ cs ps ns _) = def &~ do
+fromDEF (DEF options _ area rs ts _ _ cs ps ns _)
+  = def &~ do
     identifier .= identifierFrom options
     supercell .= supercellFrom area ts rs (toList ps)
     gates .= V.zipWith (set wires) paths nodes
     nets .= edges
-    where
 
-      paths = V.accum (\ m (k, v) -> HashMap.insert k v m) (mempty <$ nodes)
-          [ (i, (x ^. identifier, e ^. identifier))
-          | e <- toList edges
-          , (i, xs) <- views contacts HashMap.toList e
-          , i >= 0
-          , x <- xs
-          ]
+  where
 
-      nodes = set number `imap` fmap fromComponent cs
+    paths = V.accum (\ m (k, v) -> HashMap.insert k v m) (mempty <$ nodes)
+      [ (i, (x ^. identifier, e ^. identifier))
+      | e <- toList edges
+      , (i, xs) <- views contacts HashMap.toList e
+      , i >= 0
+      , x <- xs
+      ]
 
-      edges = HashMap.fromList [ (n ^. identifier, n) | n <- fromNet gate <$> toList ns ]
+    nodes = set number `imap` fmap fromComponent cs
 
-      gate y = maybe def id $ lookup y $ fromList [ (x, g) | (DEF.Component x _ _, g) <- toList $ V.zip cs nodes ]
+    edges = HashMap.fromList [ (n ^. identifier, n) | n <- fromNet gate <$> toList ns ]
+
+    gate i = maybe def id $ byIdentifier ^? ix i
+    byIdentifier = HashMap.fromList [ (i, g) | (DEF.Component i _ _, g) <- toList $ V.zip cs nodes ]
 
 
 
 fromNet :: (Ident -> Gate) -> DEF.Net -> LSC.Net
-fromNet gate (DEF.Net i cs _) = LSC.Net i
+fromNet gate (DEF.Net i cs _)
+  = LSC.Net i
     mempty
     mempty
     (gate . fst <$> rights cs)
     (HashMap.fromListWith (++)
-        [ (g ^. number, [def & identifier .~ p]) | (g, p) <- either (def, ) (first gate) <$> cs ])
+      [(g ^. number, [def & identifier .~ p]) | (g, p) <- either (def, ) (first gate) <$> cs])
 
 
 fromLayer :: LayerName -> LSC.Layer
@@ -89,30 +93,31 @@ fromLayer _ = AnyLayer
 
 
 supercellFrom :: DieArea -> [Tracks] -> [DEF.Row] -> [DEF.Pin] -> AbstractCell
-supercellFrom (DieArea (x1, y1) (x2, y2)) ts rs ps = def &~ do
+supercellFrom (DieArea (x1, y1) (x2, y2)) ts rs ps
+  = def &~ do
     geometry .= [rect (round x1) (round y1) (round x2) (round y2)]
-    tracks .= fmap fromTracks ts
-    rows .= IntMap.fromDistinctAscList
-        ( fmap (\ (i, (y, row)) -> (y, set number i row))
-        $ zip [0..] $ IntMap.assocs
-        $ IntMap.fromList [ (p ^. b, p) | p <- fromRow <$> rs ]
-        )
+    tracks .= map fromTracks ts
     pins .= HashMap.fromList [ (p ^. identifier, p) | p <- fmap fromPin ps ] 
+    rows .= fromDistinctAscList
+      (zipWith (\ i row -> (row ^. b, row & number .~ i)) [0..]
+        $ toList $ IntMap.fromList [ (row ^. b, row) | row <- fromRow <$> rs ])
 
 
 fromPin :: DEF.Pin -> LSC.Pin
-fromPin (DEF.Pin p _ d layer placed) = def &~ do
+fromPin (DEF.Pin p _ d layer placed)
+  = def &~ do
     identifier .= p
     dir .= fmap fromDirection d
     geometry .=
-      [ fromPlaced f
-        & l +~ fromIntegral x1
-        & b +~ fromIntegral y1
-        & r +~ fromIntegral x2
-        & t +~ fromIntegral y2
-        & layers .~ [fromLayer q]
-        & simplePolygon
-      | (Layer q (x1, y1) (x2, y2), f) <- maybeToList $ (,) <$> layer <*> placed
+      [ simplePolygon
+      $ fromPlaced f &~ do
+        l += fromIntegral x1
+        b += fromIntegral y1
+        r += fromIntegral x2
+        t += fromIntegral y2
+        layers z .= [fromLayer q]
+      | f <- toList placed
+      , Layer q (x1, y1) (x2, y2) <- toList layer
       ]
 
 
@@ -124,54 +129,58 @@ fromDirection DEF.InputOutput = InOut
 
 fromTracks :: DEF.Tracks -> Either Track Track
 fromTracks (Tracks "X" a ss c ls)
-    = Right
-    $ Track (IntSet.fromList $ (round a +) . (round c *) <$> [ 0 .. fromIntegral ss - 1])
-            (IntSet.fromList $ fromEnum . fromLayer <$> ls)
+  = Right
+  $ Track (IntSet.fromList $ (round a +) . (round c *) <$> [ 0 .. fromIntegral ss - 1])
+          (IntSet.fromList $ fromEnum . fromLayer <$> ls)
 fromTracks (Tracks "Y" a ss c ls)
-    = Left
-    $ Track (IntSet.fromList $ (round a +) . (round c *) <$> [ 0 .. fromIntegral ss - 1])
-            (IntSet.fromList $ fromEnum . fromLayer <$> ls)
-fromTracks (Tracks d _ _ _ _) = error $ "fromTracks: undefined axis " ++ unpack d
+  = Left
+  $ Track (IntSet.fromList $ (round a +) . (round c *) <$> [ 0 .. fromIntegral ss - 1])
+          (IntSet.fromList $ fromEnum . fromLayer <$> ls)
+fromTracks (Tracks d _ _ _ _)
+  = error $ "fromTracks: undefined axis " ++ unpack d
 
 
 fromRow :: DEF.Row -> LSC.Row
 fromRow (DEF.Row _ i x y o ss _ w _)
-    = LSC.Row i (-1)
-      (fromIntegral x) (fromIntegral y)
-      (fromOrientation o) (fromIntegral ss) (fromIntegral w)
+  = LSC.Row i (-1)
+    (fromIntegral x) (fromIntegral y)
+    (fromOrientation o) (fromIntegral ss) (fromIntegral w)
 
 
 
 fromComponent :: DEF.Component -> Gate
-fromComponent (DEF.Component _ j placed@(Just (Fixed _ _))) = def &~ do
+fromComponent (DEF.Component _ j placed@(Just (Fixed _ _)))
+  = def &~ do
     identifier .= j
     space .= maybe (rect 0 0 0 0) fromPlaced placed
     fixed .= True
-fromComponent (DEF.Component _ j placed) = def &~ do
+fromComponent (DEF.Component _ j placed)
+  = def &~ do
     identifier .= j
     space .= maybe (rect 0 0 0 0) fromPlaced placed
 
 
 
 fromPlaced :: Placed -> Component' LSC.Layer Int
-fromPlaced (Placed (x, y) ori)
-    = LSC.Component (round x) (round y) (round x) (round y) mempty (fromOrientation ori)
-fromPlaced (Fixed (x, y) ori)
-    = LSC.Component (round x) (round y) (round x) (round y) mempty (fromOrientation ori)
+fromPlaced (Placed (x, y) o)
+  = LSC.Component (round x) (round y) (round x) (round y) mempty (fromOrientation o)
+fromPlaced (Fixed (x, y) o)
+  = LSC.Component (round x) (round y) (round x) (round y) mempty (fromOrientation o)
 fromPlaced _ = rect 0 0 0 0
 
 
 
 fromOrientation :: Identifier -> Orientation
-fromOrientation "N" = N
-fromOrientation "S" = S
-fromOrientation "W" = W
-fromOrientation "E" = E
+fromOrientation  "N" = N
+fromOrientation  "S" = S
+fromOrientation  "W" = W
+fromOrientation  "E" = E
 fromOrientation "FN" = FN
 fromOrientation "FS" = FS
 fromOrientation "FW" = FW
 fromOrientation "FE" = FE
-fromOrientation o = error $ "fromOrientation: undefined orientation " ++ unpack o
+fromOrientation o
+  = error $ "fromOrientation: undefined orientation " ++ unpack o
 
 
 
@@ -183,29 +192,29 @@ identifierFrom _ = "top"
 
 
 toDEF :: Double -> NetGraph -> DEF
-toDEF scale top = DEF
-  (filter units (defaultOptions $ Just $ top ^. identifier) ++ [Units $ DistanceList $ round scale])
-  mempty
-  (dieArea $ listToMaybe $ top ^. supercell . geometry)
-  (toList $ top ^. supercell . rows <&> toRow)
-  (toList $ top ^. supercell . tracks <&> toTracks)
-  mempty
-  mempty
-  (top ^. gates <&> toComponent)
-  (V.fromListN (top ^. supercell . pins . to length) $ toList $ top ^. supercell . pins <&> toPin)
-  (V.fromListN (top ^. nets . to length) $ toList $ view nets top <&> toNet top)
-  mempty
-
+toDEF scale top
+  = DEF
+    (filter units (defaultOptions $ Just $ top ^. identifier) ++ [Units $ DistanceList $ round scale])
+    mempty
+    (dieArea $ listToMaybe $ top ^. supercell . geometry)
+    (toList $ top ^. supercell . rows <&> toRow)
+    (toList $ top ^. supercell . tracks <&> toTracks)
+    mempty
+    mempty
+    (top ^. gates <&> toComponent)
+    (V.fromList $ toList $ top ^. supercell . pins <&> toPin)
+    (V.fromList $ toList $ top ^. nets <&> toNet top)
+    mempty
   where
-
     units (Units _) = False
     units _ = True
 
 
 
 toRow :: LSC.Row -> DEF.Row
-toRow x = DEF.Row
-    (toStrict $ toLazyText $ enumeratedRow (view number x))
+toRow x
+  = DEF.Row
+    (enumeratedRow (x ^. number))
     (view identifier x)
     (fromIntegral $ view l x) (fromIntegral $ view b x)
     (toOrientation $ view orientation x)
@@ -220,67 +229,72 @@ toTracks (Right tr)
     (fromIntegral g)
     (fromIntegral $ IntSet.size $ tr ^. stabs)
     (fromIntegral $ h - g)
-    (tr ^. layers <&> toLayer)
+    (tr ^. layers z <&> toLayer)
     where g : h : _ = IntSet.elems $ tr ^. stabs
 toTracks (Left tr)
   = Tracks "Y"
     (fromIntegral g)
     (fromIntegral $ IntSet.size $ tr ^. stabs)
     (fromIntegral $ h - g)
-    (tr ^. layers <&> toLayer)
+    (tr ^. layers z <&> toLayer)
     where g : h : _ = IntSet.elems $ tr ^. stabs
 
 
 
 dieArea :: Maybe (Component' l Int) -> DieArea
-dieArea (Just p) = DieArea
-    (fromIntegral $ p^.l, fromIntegral $ p^.b)
-    (fromIntegral $ p^.r, fromIntegral $ p^.t)
-dieArea _ = DieArea (0, 0) (0, 0)
+dieArea (Just p)
+  = DieArea
+    (fromIntegral (p ^. l), fromIntegral (p ^. b))
+    (fromIntegral (p ^. r), fromIntegral (p ^. t))
+dieArea _
+  = DieArea (0, 0) (0, 0)
 
 
 
-enumeratedGate :: Gate -> Builder
+enumeratedGate :: Gate -> Identifier
 enumeratedGate g
-    =  fromText (view identifier g)
-    <> singleton '_'
-    <> decimal (view number g)
+  = toStrict . toLazyText
+  $ fromText (view identifier g) <> singleton '_' <> decimal (view number g)
 
-enumeratedRow :: Int -> Builder
+enumeratedRow :: Int -> Identifier
 enumeratedRow n
-    =  fromText "ROW_"
-    <> decimal n
+  = toStrict . toLazyText
+  $ fromText "ROW_" <> decimal n
 
 
 toComponent :: Gate -> DEF.Component
-toComponent g = DEF.Component
-  (toStrict $ toLazyText $ enumeratedGate g)
-  (g ^. identifier)
-  (Just $ place $ g ^. space)
+toComponent g
+  = DEF.Component
+    (enumeratedGate g)
+    (g ^. identifier)
+    (Just $ place $ g ^. space)
   where
-    place x | g ^. fixed = Fixed (fromIntegral $ x^.l, fromIntegral $ x^.b) "N"
-    place x = Placed (fromIntegral $ x^.l, fromIntegral $ x^.b) "N"
+    place :: Component' LSC.Layer Int -> DEF.Placed
+    place x
+      | g ^. fixed
+      = Fixed (fromIntegral (x ^. l), fromIntegral (x ^. b)) (toOrientation (x ^. orientation))
+    place x
+      = Placed (fromIntegral (x ^. l), fromIntegral (x ^. b)) (toOrientation (x ^. orientation))
 
 
 
 toNet :: NetGraph -> LSC.Net -> DEF.Net
-toNet top n = DEF.Net (n ^. identifier)
-
-    [ maybe (Left (p ^. identifier)) (Right . (, p ^. identifier) . toStrict . toLazyText . enumeratedGate)
-    $ top ^. gates ^? ix i
+toNet top n
+  = DEF.Net (n ^. identifier)
+    [ maybe (Left (p ^. identifier)) (Right . (, p ^. identifier) . enumeratedGate) (top ^. gates ^? ix i)
     | (i, ps) <- n ^. contacts & HashMap.toList
     , p <- ps
     ]
-
     Nothing
 
 
 
 toPin :: LSC.Pin -> DEF.Pin
-toPin pin = DEF.Pin (pin ^. identifier)
+toPin pin
+  = DEF.Pin (pin ^. identifier)
     (Just $ pin ^. identifier)
     (pin ^. dir <&> toDirection)
-    (listToMaybe [ Layer (toLayer $ last $ AnyLayer : p ^. layers) (0, 0)
+    (listToMaybe [ Layer (toLayer $ last $ AnyLayer : p ^. layers z) (0, 0)
                          (fromIntegral $ width p, fromIntegral $ height p)
                  | p <- polygon =<< pin ^. geometry
                  ])

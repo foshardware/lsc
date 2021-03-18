@@ -20,8 +20,9 @@ module LSC.SegmentTree
 
 import Data.Bifoldable
 import Data.Foldable
-import Data.List (group, sort)
 import Data.Ratio
+
+import LSC.BinarySearch
 
 
 -- | Custom tree data type for creating stabbing queries over monoids, e. g. always
@@ -158,9 +159,7 @@ constructSegmentTree xs is
 
 
 endpoints :: Ord a => [(a, a)] -> [a]
-endpoints
-  = map head . group . sort
-  . foldMap biList
+endpoints = binarySearch . foldMap biList
 {-# INLINABLE endpoints #-}
 
 

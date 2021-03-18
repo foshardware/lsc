@@ -1,11 +1,11 @@
 cabal-version: 1.24
 
--- This file has been generated from package.yaml by hpack version 0.34.3.
+-- This file has been generated from package.yaml by hpack version 0.34.4.
 --
 -- see: https://github.com/sol/hpack
 
 name:           lsc
-version:        0.3.0.1
+version:        0.3.0.2
 homepage:       https://github.com/foshardware/lsc#readme
 bug-reports:    https://github.com/foshardware/lsc/issues
 author:         Andreas Westerwick
@@ -39,6 +39,7 @@ flag glpk
 library
   exposed-modules:
       LSC
+      LSC.BinarySearch
       LSC.BLIF
       LSC.Cartesian
       LSC.CellFlipping
@@ -50,6 +51,7 @@ library
       LSC.FIR
       LSC.FM
       LSC.GlobalRouting
+      LSC.HigherOrder
       LSC.Improve
       LSC.Integer
       LSC.KGGGP
@@ -57,13 +59,14 @@ library
       LSC.Legalize
       LSC.Logger
       LSC.Mincut
+      LSC.Model
       LSC.NetGraph
       LSC.Polygon
       LSC.SegmentTree
       LSC.SuffixTree
       LSC.SVG
       LSC.Trace
-      LSC.Types
+      LSC.Transformer
       LSC.UnionFind
       LSC.Verilog
       LSC.Version
@@ -77,6 +80,7 @@ library
     , aeson
     , array
     , arrowgant
+    , arrows
     , async
     , base >=4.9
     , bifunctors
@@ -96,6 +100,7 @@ library
     , firrtl
     , hashable
     , hashtables
+    , haskell-src-exts
     , kan-extensions
     , lefdef
     , lens
@@ -147,6 +152,7 @@ executable lsc
     , aeson
     , array
     , arrowgant
+    , arrows
     , async
     , base >=4.9
     , bifunctors
@@ -166,6 +172,7 @@ executable lsc
     , firrtl
     , hashable
     , hashtables
+    , haskell-src-exts
     , kan-extensions
     , lefdef
     , lens
@@ -206,6 +213,7 @@ test-suite lsc-test
   main-is: Spec.hs
   other-modules:
       Spec.LSC
+      Spec.LSC.BinarySearch
       Spec.LSC.Deque
       Spec.LSC.Entropy
       Spec.LSC.FastDP
@@ -213,10 +221,10 @@ test-suite lsc-test
       Spec.LSC.GlobalRouting
       Spec.LSC.KGGGP
       Spec.LSC.Legalize
+      Spec.LSC.Model
       Spec.LSC.NetGraph
       Spec.LSC.Polygon
       Spec.LSC.SegmentTree
-      Spec.LSC.Types
       Spec.LSC.UnionFind
       Paths_lsc
   hs-source-dirs:
@@ -227,6 +235,7 @@ test-suite lsc-test
     , aeson
     , array
     , arrowgant
+    , arrows
     , async
     , base >=4.9
     , bifunctors
@@ -246,6 +255,7 @@ test-suite lsc-test
     , firrtl
     , hashable
     , hashtables
+    , haskell-src-exts
     , kan-extensions
     , lefdef
     , lens
