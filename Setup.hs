@@ -34,8 +34,8 @@ checkGitTree = do
   git ["status", "--short"] $ \ files -> do
     if null files
     then git ["rev-parse", "HEAD"] $ \ commit -> do
-      unless (length (take 40 commit) < 4)
-        $ writeFile status . ("commit " ++) $ take 40 commit
+      unless (length (take 256 commit) < 4)
+        $ writeFile status $ take 256 commit
     else writeFile status "dirty"
 
 

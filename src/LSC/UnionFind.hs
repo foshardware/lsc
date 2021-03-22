@@ -40,12 +40,11 @@ findRoot = go
       = do
         v <- readSTRef s
         case v of
-          Left w -> pure (w, i)
-          -- ^ arrived at root
+          Left w -> pure (w, i) -- arrived at root
           Right j -> do
               (w, k) <- go j
               when (j /= k) $ writeSTRef s (Right k)
-              -- ^ path compression
+              -- path compression
               pure (w, k)
 
 
@@ -59,7 +58,7 @@ union x y
     unless (i1 == i2)
       $ case w1 `compare` w2 of -- merge the smaller tree, left-biased
           EQ -> writeSTRef s2 (Right i1) >> writeSTRef s1 (Left w)
-          GT -> writeSTRef s2 (Right i1) -- ^ union by rank
+          GT -> writeSTRef s2 (Right i1) -- union by rank
           LT -> writeSTRef s1 (Right i2)
 
 

@@ -97,10 +97,6 @@ class (Bifunctor f, Bifoldable f, Integral x, Integral y) => Cartesian f x y whe
 
 
 
-instance (Integral x, Integral y) => Cartesian (,) x y
-
-
-
 data Line x y = Line (x, y) (x, y) deriving
   ( Eq, Ord
   , Functor, Foldable
@@ -129,5 +125,8 @@ instance (Integral x, Integral y) => Cartesian Line x y where
     minY (Line (_, y) _) = y
     maxY (Line _ (_, y)) = y
 
+
+
+instance (Integral x, Integral y) => Cartesian (,) x y
 
 

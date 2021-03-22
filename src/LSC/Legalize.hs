@@ -8,7 +8,6 @@ import Control.Lens
 import Control.Monad
 import Control.Monad.Loops
 import Control.Monad.ST
-import Control.Monad.Writer
 import qualified Data.Array as G
 import Data.Default
 import Data.Foldable
@@ -42,31 +41,33 @@ legalizeRows top = do
     info ["Row legalization"]
 
     assume "legalizeRows: gate vector indices do not match gate numbers"
-        $ and $ imap (==) $ view number <$> view gates top
+      $ and $ imap (==) $ view number <$> view gates top
 
     segments <- liftST
-        $ sequence
-        $ rowLegalization top <$> getRows (top ^. gates)
+      $ sequence
+      $ rowLegalization top <$> getRows (top ^. gates)
 
-    pure $ top &~ do
+    pure
+      $ top &~ do
         gates %= flip update (liftA2 (,) (view number) id <$> fold segments)
 
 
 rowLegalization :: NetGraph -> Vector Gate -> ST s (Vector Gate)
 rowLegalization _ gs
-    | length gs <= 1
-    = pure gs
+  | length gs <= 1
+  = pure gs
 rowLegalization _ gs
-    | all (view fixed) gs
-    = pure gs
+  | all (view fixed) gs
+  = pure gs
 rowLegalization _ gs
-    | all (\ (g, h) -> g ^. space . l <= h ^. space . l) $ Vector.zip gs (Vector.tail gs)
-    , not $ or $ Vector.zipWith gateOverlap gs (Vector.tail gs)
-    = pure gs
-rowLegalization top gs = do
+  | all (\ (g, h) -> g ^. space . l <= h ^. space . l) $ Vector.zip gs (Vector.tail gs)
+  , not $ or $ Vector.zipWith gateOverlap gs (Vector.tail gs)
+  = pure gs
+rowLegalization top gs
+  = do
 
     assume "rowLegalization: row is unsorted!"
-        $ all (\ (g, h) -> g ^. space . l <= h ^. space . l) $ Vector.zip gs (Vector.tail gs)
+      $ all (\ (g, h) -> g ^. space . l <= h ^. space . l) $ Vector.zip gs (Vector.tail gs)
 
     let y = Vector.head gs ^. space . b
 
@@ -168,13 +169,23 @@ topologicalShortestPath weight graph target = do
         dv <- ST.read d v
         du <- ST.read d u
 
-        when (dv > du + w) $ do
-          ST.write d v $ du + w
-          ST.write p v $ u
+        when (dv > du + w)
+          $ do
+            ST.write d v $ du + w
+            ST.write p v $ u
 
     predecessor <- Unbox.unsafeFreeze p
 
     pure $ takeWhile (> 0) (iterate (Unbox.unsafeIndex predecessor) target)
+
+
+
+
+sortVectorOn :: Ord b => (a -> b) -> Vector a -> ST s (Vector a)
+sortVectorOn f v = do
+    u <- Vector.thaw v
+    Intro.sortBy (on compare f) u
+    unsafeFreeze u
 
 
 
@@ -184,7 +195,7 @@ juggleCells top = do
     info ["Row juggling"]
 
     assume "juggleCells: gate vector indices do not match gate numbers"
-        $ and $ imap (==) $ view number <$> view gates top
+      $ and $ imap (==) $ view number <$> view gates top
 
     debugRowCapacities top
 
@@ -199,28 +210,30 @@ juggleCells top = do
 
 rowJuggling :: Double -> NetGraph -> ST s NetGraph
 rowJuggling _ top
-    | views gates null top
-    = pure top
-rowJuggling rc top = do
+  | views gates null top
+  = pure top
+rowJuggling rc top
+  = do
 
     let rs = top ^. supercell . rows
 
-    let table = Vector.fromList
-            [ HashMap.fromList [ (g ^. number, g) | g <- toList row ]
-            | row <- top ^. gates . to getRows
-            ]
+    let table
+          = Vector.fromList
+          [ HashMap.fromList [ (g ^. number, g) | g <- toList row ]
+          | row <- top ^. gates . to getRows
+          ]
 
     let rowWidth p = ceiling $ rc * fromIntegral (view cardinality p * view granularity p)
-    let w = maybe 0 rowWidth . (rs ^?) . ix . minimum . fmap (minY . view space) <$> table
-    let y = minimum . fmap (minX . view space) <$> table
 
-    surplus <- unsafeThaw $ Vector.zipWith (-) (sum . fmap gateWidth <$> table) w
+    let w = maybe 0 rowWidth . (rs ^?) . ix . minimum . fmap (minY . view space) <$> table
+        y = minimum . fmap (minX . view space) <$> table
+
+    surplus <- unsafeThaw $ Vector.zipWith subtract w $ sum . fmap gateWidth <$> table
 
     matrix <- Vector.thaw table
 
-    loaded <- liftM2 (>>) (Intro.sortBy (compare `on` negate . snd)) unsafeFreeze
-          =<< unsafeThaw . Vector.filter ((0 <) . snd) . Vector.indexed
-          =<< Vector.freeze surplus
+    loaded <- sortVectorOn (negate . snd) . Vector.filter ((0 <) . snd) . Vector.indexed
+          <=< Vector.freeze $ surplus
 
     for_ loaded $ \ (i, _) -> do
 
@@ -253,7 +266,7 @@ rowJuggling rc top = do
           c <- readSTRef bestCell
 
           assume "rowJuggling: no space left to juggle - increase row capacity!"
-              $ k > minBound
+            $ k > minBound
 
           modify matrix (views number delete c) i
           modify matrix (views number insert c c) k
@@ -263,7 +276,8 @@ rowJuggling rc top = do
 
     grouped <- unsafeFreeze matrix
 
-    pure $ top &~ do
+    pure
+      $ top &~ do
         gates %= flip unsafeUpd (foldMap HashMap.toList grouped)
 
 

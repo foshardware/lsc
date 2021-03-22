@@ -1,7 +1,6 @@
 -- Copyright 2018 - Andreas Westerwick <westerwick@pconas.de>
 -- SPDX-License-Identifier: GPL-3.0-or-later
 
-{-# LANGUAGE CPP #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE DeriveAnyClass #-}
@@ -11,6 +10,7 @@ module LSC.Transformer where
 
 import Control.Applicative
 import Control.Lens
+import Control.DeepSeq
 import Control.Exception
 import Control.Monad.ST
 import Data.Copointed
@@ -21,19 +21,13 @@ import Data.String
 import Control.Monad.IO.Class
 import Control.Monad.Codensity
 import Control.Monad.Morph
-#if MIN_VERSION_base(4,10,0)
-import Control.Monad hiding (fail)
 import Control.Monad.Fail
-import Control.Monad.Reader hiding (fail)
-import Control.Monad.State hiding (fail)
-#else
-import Control.Monad
-import Control.Monad.Reader
-import Control.Monad.State
-#endif
+import Control.Monad.Reader (ReaderT, runReaderT, ask, local)
+import Control.Monad.State (StateT, execStateT, execState, get, put, modify)
 
 import Prelude hiding (fail)
 
+import LSC.HigherOrder
 import LSC.Logger
 import LSC.Model
 import LSC.Trace
@@ -55,6 +49,9 @@ frozen = iso (flip execStateT def) (put <=< lift)
 
 freeze :: Bootstrap () -> Technology
 freeze = copoint . view frozen
+
+deepFreeze :: Bootstrap () -> IO Technology
+deepFreeze = evaluate . force . freeze
 
 
 type GnosticT = ReaderT Technology
@@ -142,7 +139,6 @@ instance MonadTrans LST where
 instance MonadIO m => MonadIO (LST m) where
   liftIO = LST . liftIO
 
-#if MIN_VERSION_base(4,10,0)
 instance MonadIO m => MonadFail (LST m) where
   fail = catchFail . Fail
 
@@ -158,13 +154,8 @@ catchFail = liftIO . throwIO
 
 assume :: MonadFail m => String -> Bool -> m ()
 assume = flip unless . fail
-#else
-assume :: Monad m => String -> Bool -> m ()
-assume = flip unless . fail
-#endif
 
 
-#ifdef DEBUG
 instance (Show a, MonadIO m) => Trace (LST m) a where
   trace = liftIO . trace
   {-# INLINE trace #-}
@@ -172,15 +163,6 @@ instance (Show a, MonadIO m) => Trace (LST m) a where
 instance Show a => Trace LSC a where
   trace = lift . trace
   {-# INLINE trace #-}
-#else
-instance (Show a, MonadIO m) => Trace (LST m) a where
-  trace = pure
-  {-# INLINE trace #-}
-
-instance Show a => Trace LSC a where
-  trace = pure
-  {-# INLINE trace #-}
-#endif
 
 
 rescale :: Double -> Bootstrap ()

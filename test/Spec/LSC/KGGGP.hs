@@ -12,7 +12,7 @@ import Control.Monad
 import Control.Monad.ST
 import Data.FileEmbed
 import Data.Foldable
-import qualified Data.HashMap.Lazy as HashMap
+import Data.HashMap.Lazy (keys)
 import Data.Text (Text)
 import Data.Text.Encoding
 import Prelude hiding (replicate)
@@ -102,8 +102,8 @@ blifHypergraph netlist = inputRoutine
     (top ^. nets . to length)
     (top ^. gates . to length)
     [ (n, c)
-    | (n, w) <- zip [0..] $ toList $ top ^. nets
-    , c <- w ^. contacts . to HashMap.keys
+    | (n, w) <- [0 ..] `zip` views nets toList top
+    , c <- views contacts keys w
     ] where top = fromBLIF netlist
 
 

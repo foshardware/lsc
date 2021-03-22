@@ -172,5 +172,5 @@ getPm :: (Int, Int) -> Int -> PTR -> Maybe (Int, Int)
 getPm (xk, yk) xl
   = listToMaybe
   . ifoldMap (\ y -> fmap (, y) . X.elems . snd . X.split (pred xk) . fst . X.split xl)
-  . snd . Y.split yk -- ^ this is suboptimal
+  . snd . Y.split yk -- this is suboptimal
 

@@ -1,7 +1,6 @@
 -- Copyright 2018 - Andreas Westerwick <westerwick@pconas.de>
 -- SPDX-License-Identifier: GPL-3.0-or-later
 
-{-# LANGUAGE CPP #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE FunctionalDependencies #-}
@@ -10,13 +9,6 @@
 {-# LANGUAGE TupleSections #-}
 
 module LSC.FM where
-
-#if MIN_VERSION_base(4,10,0)
-import Data.Semigroup (Endo(..))
-#else
-import Data.Semigroup
-import Data.Monoid hiding ((<>))
-#endif
 
 import Control.Conditional (whenM)
 import Control.Lens hiding (indexed, imap)
@@ -31,6 +23,8 @@ import Data.HashTable.ST.Cuckoo (HashTable)
 import Data.HashTable.ST.Cuckoo (mutate, lookup, new, newSized)
 import Data.IntSet hiding (filter, null, foldr, foldl', toList)
 import qualified Data.IntSet as S
+import Data.Monoid
+import Data.Semigroup
 import Data.Ratio
 import Data.STRef
 import Data.Vector
@@ -81,33 +75,8 @@ data Move
   deriving Show
 
 
-data Lock = Lock
-  { _lft :: !IntSet
-  , _rgt :: !IntSet
-  } deriving Show
-
-makeLenses ''Lock
-
-
-instance Semigroup Lock where
-  a <> b = a &~ do
-    lft <>= view lft b
-    rgt <>= view rgt b
-
-instance Monoid Lock where
-  mempty = Lock mempty mempty
-  mappend = (<>)
-
-
-lockSwap :: Lock -> Lock
-lockSwap lock = lock &~ do
-    lft .= view rgt lock
-    rgt .= view lft lock
-
-
 
 data Bipartitioning = Bisect !IntSet !IntSet
-
 
 instance Eq Bipartitioning where
   Bisect a _ == Bisect b _ = a == b
@@ -118,7 +87,6 @@ instance Semigroup Bipartitioning where
 
 instance Monoid Bipartitioning where
   mempty = Bisect mempty mempty
-  mappend = (<>)
 
 
 instance Show Bipartitioning where
@@ -126,8 +94,11 @@ instance Show Bipartitioning where
 
 
 move :: Int -> Bipartitioning -> Bipartitioning
-move c (Bisect a b) | member c a = Bisect (delete c a) (insert c b)
-move c (Bisect a b) = Bisect (insert c a) (delete c b)
+move c (Bisect a b)
+  | member c a
+  = Bisect (delete c a) (insert c b)
+move c (Bisect a b)
+  = Bisect (insert c a) (delete c b)
 
 
 bisectBalance :: Bipartitioning -> Int
@@ -138,9 +109,9 @@ bisectSwap (Bisect p q) = Bisect q p
 
 
 cutSize :: (V, E) -> Bipartitioning -> Int
-cutSize (v, _) (Bisect p q) = size $ intersection
-    (foldMap (v!) $ elems p)
-    (foldMap (v!) $ elems q)
+cutSize (v, _) (Bisect p q)
+  = size
+  $ intersection (foldMap (v!) $ elems p) (foldMap (v!) $ elems q)
 
 
 
@@ -195,20 +166,18 @@ snapshot = st . readSTRef . snd =<< ask
 
 
 
-fmMultiLevel :: (V, E) -> Lock -> Int -> Rational -> FM s Bipartitioning
-fmMultiLevel (v, e) lock t r = do
+fmMultiLevel :: (V, E) ->Int -> Rational -> FM s Bipartitioning
+fmMultiLevel (v, e) t r = do
 
     i <- st $ newSTRef 0
 
     let it = 64
 
     hypergraphs  <- replicate it mempty
-    locks        <- replicate it mempty
     clusterings  <- replicate it mempty
     partitioning <- replicate it mempty
 
     write hypergraphs 0 (v, e)
-    write locks 0 lock
 
     let continue = st $ do
             j <- readSTRef i
@@ -225,7 +194,7 @@ fmMultiLevel (v, e) lock t r = do
         modifySTRef i succ
 
         -- interim clustering
-        (pk, lk) <- match hi lock r u
+        pk <- match hi r u
 
         -- interim hypergraph
         hs <- induce hi pk
@@ -233,57 +202,50 @@ fmMultiLevel (v, e) lock t r = do
         j <- readSTRef i
         write clusterings j pk
         write hypergraphs j hs
-        write locks j lk
-
 
     -- number of levels
     m <- st $ readSTRef i
 
     by <- read hypergraphs m
-    lk <- read locks m
-    write partitioning m =<< bipartition by lk =<< bipartitionRandom by lk
+    write partitioning m =<< bipartition by =<< bipartitionRandom by
 
     for_ (reverse [0 .. pred m]) $ \ j -> do
         pk <- read clusterings  $ succ j
         p  <- read partitioning $ succ j
 
-        l <- read locks j
         h <- read hypergraphs j
         q <- rebalance =<< project pk p
 
-        write partitioning j =<< bipartition h l q
+        write partitioning j =<< bipartition h q
 
     read partitioning 0
 
 
 
 
-refit :: (V, E) -> Int -> Lock -> Bipartitioning -> Bipartitioning
-refit _ k _ (Bisect p q)
-    | size p <= k
-    , size q <= k
-    = Bisect p q
-refit (v, e) k lock (Bisect p q)
-    | size p + size q > 2 * k
-    = error
-    $ "impossible size: "++ show (lock, size p, size q, k, p, q, length v, length e)
-refit _ _ _ (Bisect p q)
-    | size p == size q
-    = Bisect p q
-refit (v, e) k lock (Bisect p q)
-    | size p < size q
-    = bisectSwap $ refit (v, e) k (lockSwap lock) (bisectSwap $ Bisect p q) 
-refit (v, e) k lock (Bisect p q) = runST $ do
+refit :: (V, E) -> Int -> Bipartitioning -> Bipartitioning
+refit _ k (Bisect p q)
+  | size p <= k
+  , size q <= k
+  = Bisect p q
+refit (v, e) k (Bisect p q)
+  | size p + size q > 2 * k
+  = error
+  $ "refit: impossible size: "++ show (size p, size q, k, p, q, length v, length e)
+refit _ _ (Bisect p q)
+  | size p == size q
+  = Bisect p q
+refit (v, e) k (Bisect p q)
+  | size p < size q
+  = bisectSwap $ refit (v, e) k (bisectSwap $ Bisect p q) 
+refit (v, e) k (Bisect p q)
+  = runST
+  $ do
 
     let f x = size . intersection x . foldMap (e!) . elems
         len = size p - k
 
-    u <- thaw
-        $ uncurry (<>)
-        $ unstablePartition (\ (i, _) -> notMember i $ lock ^. lft)
-        $ fst 
-        $ unstablePartition (\ (i, _) -> member i p)
-        $ imap (,) v
+    u <- thaw $ fst $ unstablePartition (\ (i, _) -> member i p) $ imap (,) v
     Intro.partialSortBy (compare `on` \ (_, x) -> f p x - f q x) u len
     (iv, _) <- unzip . take len <$> unsafeFreeze u
 
@@ -330,10 +292,9 @@ project pk (Bisect p q) = pure $ Bisect
 
 
 
-match :: (V, E) -> Lock -> Rational -> Permutation -> ST s (Clustering, Lock)
-match (v, e) lock r u = do
+match :: (V, E) -> Rational -> Permutation -> ST s (Clustering)
+match (v, e) r u = do
 
-  clusteredLock <- newSTRef mempty
   clustering <- replicate (length v) mempty
 
   nMatch <- newSTRef 0
@@ -358,10 +319,8 @@ match (v, e) lock r u = do
 
           let neighbours = elems $ foldMap (e!) (elems $ v!uj)
 
-          for_ neighbours $ \ w ->
-            whenM (yet w)
-              $ unless (member w (view (lft <> rgt) lock) && member uj (view (lft <> rgt) lock))
-                $ write connectivity w $ conn w uj
+          for_ neighbours $ \ w -> whenM (yet w)
+            $ write connectivity w $ conn w uj
 
           -- find maximum connectivity
           suchaw <- newSTRef (0, Nothing)
@@ -377,12 +336,6 @@ match (v, e) lock r u = do
               matched w
               modifySTRef' nMatch (+2)
 
-              when (member w (view lft lock) || member uj (view lft lock))
-                  $ modifySTRef clusteredLock . over lft . insert =<< readSTRef k
-              when (member w (view rgt lock) || member uj (view rgt lock))
-                  $ modifySTRef clusteredLock . over rgt . insert =<< readSTRef k
-
-
           -- reset connectivity
           for_ neighbours $ modify connectivity (const 0)
 
@@ -394,21 +347,15 @@ match (v, e) lock r u = do
     $ do
 
       uj <- (u!) <$> readSTRef j
-      whenM (yet uj) $ do
+      whenM (yet uj)
+        $ do
           modify clustering (insert uj) =<< readSTRef k
           matched uj
           modifySTRef' k succ
 
-          when (member uj (view lft lock))
-              $ modifySTRef clusteredLock . over lft . insert =<< readSTRef k
-          when (member uj (view rgt lock))
-              $ modifySTRef clusteredLock . over rgt . insert =<< readSTRef k
-
       modifySTRef' j succ
 
-  (,)
-    <$> (take <$> readSTRef k <*> unsafeFreeze clustering)
-    <*> readSTRef clusteredLock
+  take <$> readSTRef k <*> unsafeFreeze clustering
 
   where
 
@@ -419,29 +366,24 @@ match (v, e) lock r u = do
 
 
 
-bipartitionEven :: (V, E) -> Lock -> Bipartitioning
-bipartitionEven (v, _) lock = Bisect
-    ((S.filter even base <> intersection base (view lft lock)) \\ view rgt lock)
-    ((S.filter  odd base <> intersection base (view rgt lock)) \\ view lft lock)
-    where base = fromDistinctAscList [0 .. length v - 1]
-
-
-
-bipartitionRandom :: (V, E) -> Lock -> FM s Bipartitioning
-bipartitionRandom (v, _) lock = do
-  u <- st . randomPermutation (length v) =<< prng
-  let (p, q) = splitAt (length v `div` 2) (toList u)
-  pure $ Bisect
-    ((fromList p <> intersection base (view lft lock)) \\ view rgt lock)
-    ((fromList q <> intersection base (view rgt lock)) \\ view lft lock)
+bipartitionEven :: (V, E) -> Bipartitioning
+bipartitionEven (v, _) = Bisect (S.filter even base) (S.filter odd base)
   where base = fromDistinctAscList [0 .. length v - 1]
 
 
+bipartitionRandom :: (V, E) -> FM s Bipartitioning
+bipartitionRandom (v, _)
+  = do
+    u <- st . randomPermutation (length v) =<< prng
+    let (p, q) = splitAt (length v `div` 2) (toList u)
+    pure $ Bisect (fromList p) (fromList q)
 
-bipartition :: (V, E) -> Lock -> Bipartitioning -> FM s Bipartitioning
-bipartition (v, e) lock p = do
 
-  update freeCells $ const $ fromAscList [0 .. length v - 1] \\ view (lft <> rgt) lock
+
+bipartition :: (V, E) -> Bipartitioning -> FM s Bipartitioning
+bipartition (v, e) p = do
+
+  update freeCells $ const $ fromAscList [0 .. length v - 1]
   update moves $ const mempty
 
   initialGains (v, e) p
@@ -451,7 +393,7 @@ bipartition (v, e) lock p = do
 
   if g <= 0
     then pure p
-    else bipartition (v, e) lock q
+    else bipartition (v, e) q
 
 
 
@@ -460,14 +402,14 @@ computeG p0 ms = let (_, g, h) = foldl' accum (0, 0, p0) ms in (g, h)
   where
     accum :: (Int, Int, Bipartitioning) -> (Move, Bipartitioning) -> (Int, Int, Bipartitioning)
     accum (gmax, g, _) (Move gc _, q)
-        | g + gc > gmax
-        = (g + gc, g + gc, q)
+      | g + gc > gmax
+      = (g + gc, g + gc, q)
     accum (gmax, g, p) (Move gc _, q)
-        | g + gc == gmax
-        , bisectBalance p > bisectBalance q
-        = (gmax, g + gc, q)
+      | g + gc == gmax
+      , bisectBalance p > bisectBalance q
+      = (gmax, g + gc, q)
     accum (gmax, g, p) (Move gc _, _)
-        = (gmax, g + gc, p)
+      = (gmax, g + gc, p)
 
 
 
@@ -591,7 +533,7 @@ initialGains (v, e) p = do
 
   initial <- st $ do
       gain <- newSized $ 2 * size gmax + 1
-      flip imapM_ nodes $ \ k x ->
+      ifor_ nodes $ \ k x ->
           mutate gain x $ if member x free
              then (, ()) . pure . maybe [k] (k:)
              else (, ())
@@ -603,11 +545,11 @@ initialGains (v, e) p = do
 
 balanceCriterion :: Int -> Bipartitioning -> Int -> Bool
 balanceCriterion v (Bisect p q) c
-    | size p > size q
-    = balanceCriterion v (Bisect q p) c
+  | size p > size q
+  = balanceCriterion v (Bisect q p) c
 balanceCriterion v (Bisect p q) c
-    =  (fromIntegral v * (1 - r)) / 2 <= fromIntegral a
-    && (fromIntegral v * (1 + r)) / 2 >= fromIntegral b
+  =  (fromIntegral v * (1 - r)) / 2 <= fromIntegral a
+  && (fromIntegral v * (1 + r)) / 2 >= fromIntegral b
   where
     a = last (succ : [pred | member c p]) (size p)
     b = last (succ : [pred | member c q]) (size q)
@@ -615,10 +557,16 @@ balanceCriterion v (Bisect p q) c
 
 
 fromBlock, toBlock :: Bipartitioning -> Int -> E -> Int -> IntSet
-fromBlock (Bisect a _) i e n | member i a = intersection a $ e ! n
-fromBlock (Bisect _ b) _ e n = intersection b $ e ! n
-toBlock (Bisect a b) i e n | member i a = intersection b $ e ! n
-toBlock (Bisect a _) _ e n = intersection a $ e ! n
+fromBlock (Bisect a _) i e n
+  | member i a
+  = intersection a $ e ! n
+fromBlock (Bisect _ b) _ e n
+  = intersection b $ e ! n
+toBlock (Bisect a b) i e n
+  | member i a
+  = intersection b $ e ! n
+toBlock (Bisect a _) _ e n
+  = intersection a $ e ! n
 
 
 inputRoutine :: Foldable f => Int -> Int -> f (Int, Int) -> ST s (V, E)
@@ -629,5 +577,5 @@ inputRoutine n c xs = do
     modify ns (insert y) x
     modify cs (insert x) y
   (,) <$> unsafeFreeze cs <*> unsafeFreeze ns
-{-# SPECIALIZE inputRoutine :: Int -> Int -> [(Int, Int)] -> ST s (V, E) #-}
+{-# INLINABLE inputRoutine #-}
 

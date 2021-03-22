@@ -56,7 +56,6 @@ instance (Ord a, Num b) => Semigroup (LinFunc a b) where
 
 instance (Ord a, Num b) => Monoid (LinFunc a b) where
     mempty = LinFunc mempty
-    mappend = (<>)
 
 
 type LPM a b = GLP.LPM a b
@@ -120,7 +119,6 @@ instance (Ord a, Num b) => Semigroup (LinFunc a b) where
 
 instance (Ord a, Num b) => Monoid (LinFunc a b) where
     mempty = LinFunc
-    mappend = (<>)
 
 
 

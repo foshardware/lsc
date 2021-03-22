@@ -32,6 +32,7 @@ import Prelude hiding (concat, lookup, read, unzip)
 
 import LSC.Component
 import LSC.Entropy
+import LSC.Estimate
 import LSC.Improve
 import LSC.FM as FM
 import LSC.Model
@@ -204,8 +205,8 @@ placeMatrix m = do
     (q1, q2, q3, q4) <- liftIO $ nonDeterministic Nothing $ runFMWithGen $ do
 
         by <- st $ hypergraph (set number `imap` v) e
-        Bisect q21 q34 <- improve it ((-) `on` cutSize by) (bisect by mempty) $ \ _ ->
-            refit by (2*w*h) mempty <$> fmMultiLevel by mempty coarseningThreshold matchingRatio
+        Bisect q21 q34 <- improve it ((-) `on` cutSize by) (bisect by) $ \ _ ->
+            refit by (2*w*h) <$> fmMultiLevel by coarseningThreshold matchingRatio
 
 
         let v21 = fromListN (size q21) $ (v!) <$> elems q21
@@ -215,12 +216,12 @@ placeMatrix m = do
 
 
         h21 <- st $ hypergraph (set number `imap` v21) e21
-        Bisect q2 q1 <- improve it ((-) `on` cutSize h21) (bisect h21 mempty) $ \ _ ->
-            refit h21 (w*h) mempty <$> fmMultiLevel h21 mempty coarseningThreshold matchingRatio
+        Bisect q2 q1 <- improve it ((-) `on` cutSize h21) (bisect h21) $ \ _ ->
+            refit h21 (w*h) <$> fmMultiLevel h21 coarseningThreshold matchingRatio
 
         h34 <- st $ hypergraph (set number `imap` v34) e34
-        Bisect q3 q4 <- improve it ((-) `on` cutSize h34) (bisect h34 mempty) $ \ _ ->
-            refit h34 (w*h) mempty <$> fmMultiLevel h34 mempty coarseningThreshold matchingRatio
+        Bisect q3 q4 <- improve it ((-) `on` cutSize h34) (bisect h34) $ \ _ ->
+            refit h34 (w*h) <$> fmMultiLevel h34 coarseningThreshold matchingRatio
 
 
         pure
@@ -254,8 +255,8 @@ hypergraph :: Vector Gate -> HashMap Identifier Net -> ST s (V, E)
 hypergraph v e = inputRoutine (length e) (length v)
     [ (n, c)
     | (n, w) <- zip [0..] $ toList e
-    , w ^. identifier /= "clk"
-    , c <- w ^. contacts & HashMap.keys
+    , views clock not w
+    , c <- views contacts HashMap.keys w
     ]
 
 

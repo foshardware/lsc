@@ -29,6 +29,7 @@ import Data.Semigroup
 import Prelude hiding ((.), id)
 
 import LSC.CellFlipping
+import LSC.Estimate
 import LSC.FastDP
 import LSC.GlobalRouting
 import LSC.Legalize
@@ -36,32 +37,63 @@ import LSC.Logger
 import LSC.Model
 import LSC.Mincut
 import LSC.NetGraph
-import LSC.Trace
+import LSC.Technology
 import LSC.Transformer
 import LSC.Version
 
 
 
 
-stage1 :: Compiler' NetGraph
-stage1 = zeroArrow
+stage3 :: Compiler' NetGraph
+stage4 :: Compiler' NetGraph
 
 
+stage3 = id
 
-stage2 :: Compiler' NetGraph
-stage2 = id
     >>> remote gateGeometry
     >>> arr rebuildHyperedges >>> estimate
-    >>> stage2'
-    >>> strategy1 significantHpwl stage2'
+
+    >>> detailedPlacement
+    >>> strategy1 significantHpwl detailedPlacement
+
     >>> finalEstimate
 
 
-stage2' :: Compiler' NetGraph
-stage2' = id
+
+stage4 = id
+
+    >>> local determineRowSpacing
+    >>> arr rebuildHyperedges >>> estimate
+
+    >>> remote pinGeometry
+
+    >>> local cellFlipping
+    >>> estimate
+
+    >>> remote pinGeometry
+
+    >>> local determineNetSegments
+    >>> finalEstimate
+
+    -- >>> local determineRowSpacing
+    -- >>> arr rebuildHyperedges >>> finalEstimate
+
+
+
+globalPlacement :: Compiler' NetGraph
+globalPlacement = local placeQuad
+
+
+
+detailedPlacement :: Compiler' NetGraph
+detailedPlacement = id
 
     >>> remote gateGeometry
-    >>> legalization >>> estimate
+
+    >>> arr assignCellsToRows
+    >>> local juggleCells
+    >>> local legalizeRows
+    >>> arr rebuildHyperedges >>> estimate
 
     >>> fastDP >>> estimate
 
@@ -104,37 +136,6 @@ stage2' = id
 
 
 
-stage3 :: Compiler' NetGraph
-stage3 = id
-
-    >>> local determineRowSpacing
-    >>> arr rebuildHyperedges >>> estimate
-
-    >>> remote pinGeometry
-
-    >>> local cellFlipping
-    >>> estimate
-
-    >>> remote pinGeometry
-
-    >>> local determineNetSegments
-    >>> finalEstimate
-
-    -- >>> local determineRowSpacing
-    -- >>> arr rebuildHyperedges >>> finalEstimate
-
-
-
-stage4 :: Compiler' NetGraph
-stage4 = zeroArrow
-
-
-
-globalPlacement :: Compiler' NetGraph
-globalPlacement = local placeQuad
-
-
-
 fastDP :: Compiler' NetGraph
 fastDP = id
     -- >>> local singleSegmentClustering >>> arr rebuildHyperedges >>> estimate
@@ -151,14 +152,6 @@ fastDP = id
     -- >>> strategy1 significantHpwl
     --     (local singleSegmentClustering >>> arr rebuildHyperedges >>> estimate)
 
-
-
-legalization :: Compiler' NetGraph
-legalization = id
-    >>> arr assignCellsToRows
-    >>> local juggleCells
-    >>> local legalizeRows
-    >>> arr rebuildHyperedges
 
 
 
@@ -190,7 +183,6 @@ instance Category c => Semigroup (Endomorph c a) where
 
 instance Category c => Monoid (Endomorph c a) where
   mempty = Endomorph id
-  mappend = (<>)
 
 
 type Compiler' a = Compiler a a
@@ -227,9 +219,6 @@ local k = remote $ \ x -> do
 expensive :: NFData b => (a -> b) -> Compiler a b
 expensive f = local $ liftIO . evaluate . force f
 
-
-instance Show a => Trace (Compiler a) a where
-  trace = const $ remote trace
 
 
 type Strategy' a = Strategy a a
@@ -269,6 +258,8 @@ iterator1 i a = iterator1 (pred i) a <<< uncurry (:) ^<< first a <<^ head &&& id
 
 
 
+-- | A Kleisli category with specialized arrow instances for concurrency and exception handling
+--
 newtype LS a b = LS { unLS :: a -> LSC b }
 
 instance Category LS where
@@ -326,7 +317,7 @@ data NoResult = NoResult
   deriving Exception
 
 instance Show NoResult where
-  show _ = "no result, " ++ versionString
+  show _ = "no result, " ++ versionString ++ ", commit " ++ commitString
 
 noResult :: LS a b
 noResult = LS $ const $ liftIO $ throwIO NoResult
@@ -359,6 +350,8 @@ instance ArrowApply LS where
 
 
 
+-- | An arrow transformer with effects on the evaluation of the underlying arrow
+--
 newtype LSR ls a b = LSR { unLSR :: Algebraic ls a b }
 
 reduce :: Arrow ls => LSR ls a b -> ls a b

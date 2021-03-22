@@ -1,7 +1,6 @@
 -- Copyright 2018 - Andreas Westerwick <westerwick@pconas.de>
 -- SPDX-License-Identifier: GPL-3.0-or-later
 
-{-# LANGUAGE CPP #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE DeriveFunctor #-}
@@ -12,10 +11,6 @@ module LSC.GlobalRouting
   , determineRowSpacing, densityRowSpacing
   ) where
 
-#if !MIN_VERSION_base(4,10,0)
-import Data.Semigroup ((<>))
-#endif
-
 import Control.Applicative
 import Control.Lens hiding (ifoldl')
 import Control.Monad
@@ -24,7 +19,6 @@ import Control.Monad.ST
 import Data.Array ((//))
 import Data.Bifoldable
 import Data.Copointed
-import Data.Default
 import Data.Foldable
 import Data.Graph hiding (Vertex, Edge, vertices, edges, components)
 import qualified Data.Graph as Graph
@@ -133,7 +127,7 @@ globalDetermineFeedthroughs top = do
             edgeDisjoint g n
             (maybe 0 (view number) (getRow top g))
             (centerX $ coarseBoundingBox $ p ^. geometry <&> containingBox)
-            -- ^ the built-in edges for all pins in the layout grouped by net and row
+            -- the built-in edges for all pins in the layout grouped by net and row
 
 
     vertices <- newSTRef $ foldMap Vector.fromList <$> builtInEdges
@@ -161,7 +155,7 @@ globalDetermineFeedthroughs top = do
         (_, (pos, (u, v))) <- ifoldl'
             (\ i (w, e) f -> let x = weight ps f in if x < w then (x, (i, f)) else (w, e))
             (maxBound, undefined) <$> readSTRef edges
-            -- ^ find the minimum weighted edge and its position in the sequence
+            -- find the minimum weighted edge and its position in the sequence
 
         modifySTRef edges $ Seq.deleteAt pos
 
@@ -176,13 +170,13 @@ globalDetermineFeedthroughs top = do
                     edgeDisjoint (feedthroughGate (net u)) (net u)
                     (ordinate u + succ i)
                     (abscissa u + div (succ i * (abscissa v - abscissa u)) (ordinate v - ordinate u))
-                    -- ^ the built-in edges for feedthroughs
+                    -- the built-in edges for feedthroughs
 
                 sequence_
                   $ Vector.zipWith union
                     (copoint . snd <$> intersections)
                     (copoint . fst <$> Vector.tail intersections)
-                    -- ^ the chain of feedthroughs is interconnected
+                    -- the chain of feedthroughs is interconnected
 
                 -- connect feedthroughs to every pin in the net
                 subgraph <- view (net u ^. identifier . to ix) <$> readSTRef vertices
@@ -212,15 +206,6 @@ globalDetermineFeedthroughs top = do
     pure $ top &~ do
         gates <>= foldMap (gate . fst <$>) intersections
         gates  %= imap (set number)
-
-
-
-feedthroughGate :: Net -> Gate
-feedthroughGate n = def &~ do
-    identifier .= ("FEEDTHROUGH." <> n ^. identifier)
-    feedthrough .= True
-    wires .= HashMap.singleton "FD" (n ^. identifier)
-
 
 
 
@@ -281,7 +266,7 @@ globalDetermineNetSegments top = do
         (_, (u, v)) <- (foldl' . foldl')
             (\ (w, e) f -> let x = weight d f in if x > w then (x, f) else (w, e))
             (-1, undefined) <$> readSTRef cycles
-            -- ^ find the maximum weighted edge
+            -- find the maximum weighted edge
 
         let n = u ^. to net . identifier
 

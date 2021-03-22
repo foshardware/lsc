@@ -4,6 +4,7 @@
 .status
 
 dist/
+doc/dist/
 
 *.svg
 *.prof

@@ -1,7 +1,6 @@
 -- Copyright 2018 - Andreas Westerwick <westerwick@pconas.de>
 -- SPDX-License-Identifier: GPL-3.0-or-later
 
-{-# LANGUAGE CPP #-}
 {-# LANGUAGE DeriveFunctor #-}
 
 module LSC.Deque
@@ -9,10 +8,6 @@ module LSC.Deque
   , enqueue, dequeue, deq
   , fromList
   ) where
-
-#if !MIN_VERSION_base(4,10,0)
-import Data.Semigroup
-#endif
 
 import Control.Applicative
 import Data.Foldable
@@ -69,16 +64,9 @@ instance Foldable Deque where
     foldr g s (Deque _ _ fs rs) = foldr g s (fs ++ reverse rs)
     foldl g s (Deque _ _ fs rs) = foldl g s (fs ++ reverse rs)
 
-#if MIN_VERSION_base(4,10,0)
     foldMap g (Deque _ _ fs rs) = foldMap g fs <> foldMap g (reverse rs)
-#else
-    foldMap g (Deque _ _ fs rs) = foldMap g fs `mappend` foldMap g (reverse rs)
-#endif
 
     foldl' g s (Deque _ _ fs rs) = foldl' g s (fs ++ reverse rs)
-#if MIN_VERSION_base(4,13,0)
-    foldMap' g (Deque _ _ fs rs) = case foldMap' g fs <> foldMap' g (reverse rs) of m -> m
-#endif
 
     toList (Deque _ _ fs rs) = fs ++ reverse rs
 
@@ -104,7 +92,4 @@ instance Semigroup (Deque a) where
 
 instance Monoid (Deque a) where
     mempty = empty
-#if !MIN_VERSION_base(4,11,0)
-    mappend = (<>)
-#endif
 

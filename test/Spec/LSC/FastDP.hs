@@ -27,6 +27,7 @@ import Test.Tasty.QuickCheck
 
 import LSC.Component
 import LSC.FastDP
+import LSC.Layout
 import LSC.Legalize
 import LSC.Model
 import LSC.NetGraph

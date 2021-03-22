@@ -25,7 +25,6 @@ custom-setup
       Cabal
     , base >=4.9
     , file-embed
-    , filepath
     , process
 
 flag debug
@@ -47,6 +46,7 @@ library
       LSC.DEF
       LSC.Deque
       LSC.Entropy
+      LSC.Estimate
       LSC.FastDP
       LSC.FIR
       LSC.FM
@@ -55,6 +55,7 @@ library
       LSC.Improve
       LSC.Integer
       LSC.KGGGP
+      LSC.Layout
       LSC.LEF
       LSC.Legalize
       LSC.Logger
@@ -62,9 +63,12 @@ library
       LSC.Model
       LSC.NetGraph
       LSC.Polygon
+      LSC.Quadtree
+      LSC.Rent
       LSC.SegmentTree
       LSC.SuffixTree
       LSC.SVG
+      LSC.Technology
       LSC.Trace
       LSC.Transformer
       LSC.UnionFind
@@ -74,7 +78,7 @@ library
       Paths_lsc
   hs-source-dirs:
       src
-  ghc-options: -Wall
+  ghc-options: -Wall -O2
   build-depends:
       SafeSemaphore
     , aeson
@@ -94,13 +98,17 @@ library
     , containers >=0.5.8
     , data-default
     , deepseq
+    , dir-traverse
+    , directory
     , entropy
     , file-embed
     , filepath
     , firrtl
+    , foldl
+    , foldl-statistics
+    , haddock-api
     , hashable
     , hashtables
-    , haskell-src-exts
     , kan-extensions
     , lefdef
     , lens
@@ -116,6 +124,7 @@ library
     , pointed
     , pretty-terminal
     , primitive
+    , process
     , silently
     , split
     , tasty
@@ -129,15 +138,12 @@ library
     , vector-algorithms
     , verilog
   if flag(glpk)
-    ghc-options: -O2
     cpp-options: -DGLPK
     build-depends:
         glpk-hs
   if flag(debug)
-    ghc-options: -g -dcore-lint -debug
+    ghc-options: -g -dcore-lint -ddump-simpl -fforce-recomp -debug
     cpp-options: -DDEBUG
-  else
-    ghc-options: -O2
   default-language: Haskell2010
 
 executable lsc
@@ -146,7 +152,7 @@ executable lsc
       Paths_lsc
   hs-source-dirs:
       app
-  ghc-options: -Wall -rtsopts -threaded
+  ghc-options: -Wall -rtsopts -threaded -O2
   build-depends:
       SafeSemaphore
     , aeson
@@ -166,13 +172,17 @@ executable lsc
     , containers >=0.5.8
     , data-default
     , deepseq
+    , dir-traverse
+    , directory
     , entropy
     , file-embed
     , filepath
     , firrtl
+    , foldl
+    , foldl-statistics
+    , haddock-api
     , hashable
     , hashtables
-    , haskell-src-exts
     , kan-extensions
     , lefdef
     , lens
@@ -189,6 +199,7 @@ executable lsc
     , pointed
     , pretty-terminal
     , primitive
+    , process
     , silently
     , split
     , tasty
@@ -202,10 +213,76 @@ executable lsc
     , vector-algorithms
     , verilog
   if flag(debug)
-    ghc-options: -g -dcore-lint -debug
+    ghc-options: -g -dcore-lint -ddump-simpl -fforce-recomp -debug
     cpp-options: -DDEBUG
-  else
-    ghc-options: -O2
+  default-language: Haskell2010
+
+executable lsc-doc
+  main-is: Evid.hs
+  other-modules:
+      Paths_lsc
+  hs-source-dirs:
+      doc
+  ghc-options: -Wall -threaded -rtsopts -dynamic
+  build-depends:
+      SafeSemaphore
+    , aeson
+    , array
+    , arrowgant
+    , arrows
+    , async
+    , base >=4.9
+    , bifunctors
+    , blaze-svg
+    , blif
+    , bytestring
+    , cabal-file-th
+    , cereal
+    , concurrent-output
+    , cond
+    , containers >=0.5.8
+    , data-default
+    , deepseq
+    , dir-traverse
+    , directory
+    , entropy
+    , file-embed
+    , filepath
+    , firrtl
+    , foldl
+    , foldl-statistics
+    , haddock-api
+    , hashable
+    , hashtables
+    , kan-extensions
+    , lefdef
+    , lens
+    , linear
+    , lsc
+    , matrix
+    , mmorph
+    , monad-loops
+    , mtl
+    , mwc-random
+    , parallel
+    , parsec
+    , parsec-numbers
+    , pointed
+    , pretty-terminal
+    , primitive
+    , process
+    , silently
+    , split
+    , tasty
+    , tasty-hunit
+    , tasty-quickcheck
+    , template-haskell
+    , text
+    , time
+    , unordered-containers
+    , vector
+    , vector-algorithms
+    , verilog
   default-language: Haskell2010
 
 test-suite lsc-test
@@ -229,7 +306,7 @@ test-suite lsc-test
       Paths_lsc
   hs-source-dirs:
       test
-  ghc-options: -Wall -rtsopts
+  ghc-options: -Wall -rtsopts -threaded -O2 -dynamic
   build-depends:
       SafeSemaphore
     , aeson
@@ -249,13 +326,17 @@ test-suite lsc-test
     , containers >=0.5.8
     , data-default
     , deepseq
+    , dir-traverse
+    , directory
     , entropy
     , file-embed
     , filepath
     , firrtl
+    , foldl
+    , foldl-statistics
+    , haddock-api
     , hashable
     , hashtables
-    , haskell-src-exts
     , kan-extensions
     , lefdef
     , lens
@@ -272,6 +353,7 @@ test-suite lsc-test
     , pointed
     , pretty-terminal
     , primitive
+    , process
     , silently
     , split
     , tasty
@@ -287,6 +369,4 @@ test-suite lsc-test
   if flag(debug)
     ghc-options: -g -dcore-lint -debug
     cpp-options: -DDEBUG
-  else
-    ghc-options: -O2 -threaded
   default-language: Haskell2010

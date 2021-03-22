@@ -35,6 +35,7 @@ import LSC.Logger
 import LSC.Model
 import LSC.NetGraph
 import LSC.SVG
+import LSC.Technology
 import LSC.Transformer
 import LSC.Version
 
@@ -70,26 +71,26 @@ program = do
   when (arg Lef)
     $ do
 
-      tech <- either (die . show) (pure . freeze . fromLEF) . parseLEF
+      tech <- either (die . show) (deepFreeze . fromLEF) . parseLEF
           <=< Text.readFile . head $ lst Lef
 
       let scale = tech ^. scaleFactor
 
       netlist <- readNetGraph inputs
 
-      when (arg Stage2 && arg Stage3)
+      when (arg Stage3 && arg Stage4)
         $ do
-          ckt <- silence $ evalLSC opts tech $ compiler (stage2 >>> stage3) netlist
-          last $ printStdout scale ckt <$> lst Output
-          exitSuccess
-
-      when (arg Stage2)
-        $ do
-          ckt <- silence $ evalLSC opts tech $ compiler stage2 netlist
+          ckt <- silence $ evalLSC opts tech $ compiler (stage3 >>> stage4) netlist
           last $ printStdout scale ckt <$> lst Output
           exitSuccess
 
       when (arg Stage3)
+        $ do
+          ckt <- silence $ evalLSC opts tech $ compiler stage3 netlist
+          last $ printStdout scale ckt <$> lst Output
+          exitSuccess
+
+      when (arg Stage4)
         $ do
           ckt <- silence $ evalLSC opts tech $ compiler stage3 netlist
           last $ printStdout scale ckt <$> lst Output
@@ -131,8 +132,8 @@ type Flag = (FlagKey, FlagValue)
 data FlagKey
   = Help
   | LogLevel
-  | Stage2
   | Stage3
+  | Stage4
   | Lef
   | Seed
   | RowCapacity
@@ -170,9 +171,9 @@ args =
   , Option []         ["row-capacity"]          (ReqArg (RowCapacity, ) "ratio")
     "set row capacity (e.g. 0.7)"
 
-  , Option ['p']      ["stage2"]                (NoArg (Stage2, ""))
+  , Option ['p']      ["stage3"]                (NoArg (Stage3, ""))
     "detailed placement"
-  , Option ['g']      ["stage3"]                (NoArg (Stage3, ""))
+  , Option ['g']      ["stage4"]                (NoArg (Stage4, ""))
     "routing"
 
 --    , Option ['g']      ["visuals"]    (NoArg  (Visuals, mempty))   "show visuals"

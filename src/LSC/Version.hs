@@ -11,7 +11,7 @@ import Distribution.PackageDescription.TH
 
 
 versionString :: String
-versionString = $(packageVariable package) ++ ", " ++ commitString
+versionString = $(packageVariable package)
 
 
 commitString :: String

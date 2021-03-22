@@ -14,7 +14,7 @@ import Control.Monad.Loops
 import Control.Monad.ST
 import Data.FileEmbed
 import Data.Foldable
-import qualified Data.HashMap.Lazy as HashMap
+import Data.HashMap.Lazy (keys)
 import Data.IntSet (fromList, fromAscList, size)
 import Data.Ratio
 import Data.Text (Text)
@@ -40,7 +40,6 @@ fm = testGroup "FM"
   , testCase "Deterministic" fmDeterministic
   , testCase "Balance criterion" fmBalanceCriterion
   , fmML
-  , fmLocks
   ]
 
 
@@ -58,51 +57,12 @@ fmRealWorld = testGroup "Real world instances"
   ]
 
 
-fmLocks :: TestTree
-fmLocks = testGroup "Locks"
-  [ testCase "Even bipartition" fmEvenPartition
-  , testCase "Random bipartition" fmRandomPartition
-  ]
-
-
-
-fmEvenPartition :: IO ()
-fmEvenPartition = do
-
-    (v, e) <- arbitraryHypergraph 1000
-
-    xs <- generate $ vectorOf 20 $ choose (0, length v - 1)
-    let Bisect p q = bipartitionEven (v, e) (Lock (fromList xs) mempty)
-    assertEqual "duplicates" (size p + size q) (length v)
-
-    ys <- generate $ vectorOf 20 $ choose (0, length v - 1)
-    let Bisect p1 q1 = bipartitionEven (v, e) (Lock mempty (fromList ys))
-    assertEqual "duplicates" (size p1 + size q1) (length v)
-
-
-
-
-fmRandomPartition :: IO ()
-fmRandomPartition = do
-
-    (v, e) <- arbitraryHypergraph 1000
-
-    xs <- generate $ vectorOf 20 $ choose (0, length v - 1)
-    Bisect p q <- nonDeterministic Nothing $ runFMWithGen $ bipartitionRandom (v, e) (Lock (fromList xs) mempty)
-    assertEqual "duplicates" (size p + size q) (length v)
-
-    ys <- generate $ vectorOf 20 $ choose (0, length v - 1)
-    Bisect p1 q1 <- nonDeterministic Nothing $ runFMWithGen $ bipartitionRandom (v, e) (Lock mempty (fromList ys))
-    assertEqual "duplicates" (size p1 + size q1) (length v)
-
-
-
 
 fmMulti :: Int -> (V, E) -> IO ()
 fmMulti cut h = do
   let predicate p = cutSize h p <= cut
   p <- iterateUntil predicate $ nonDeterministic Nothing $ runFMWithGen
-    $ fmMultiLevel h mempty coarseningThreshold matchingRatio
+    $ fmMultiLevel h coarseningThreshold matchingRatio
   assertBool "unexpected cut size" $ cutSize h p <= cut
 
 
@@ -110,9 +70,9 @@ fmMulti cut h = do
 fmMatch :: IO ()
 fmMatch = do
   (v, e) <- arbitraryHypergraph 10000
-  (clustering, _) <- nonDeterministic Nothing $ runFMWithGen $ do
+  clustering <- nonDeterministic Nothing $ runFMWithGen $ do
       u <- st . randomPermutation (length v) =<< prng
-      st $ match (v, e) mempty matchingRatio u
+      st $ match (v, e) matchingRatio u
 
   assertEqual "length does not match" (length v) (sum $ size <$> clustering)
   assertBool "elements do not match" $ fold clustering == fromAscList [0 .. length v - 1]
@@ -160,7 +120,7 @@ fmBalanceCriterion = do
 fmDeterministic :: IO ()
 fmDeterministic = do
   h <- stToIO queue_1Hypergraph
-  p <- stToIO $ evalFM $ bipartition h mempty $ bipartitionEven h mempty
+  p <- stToIO $ evalFM $ bipartition h $ bipartitionEven h
   assertEqual "cut size" 9 $ cutSize h p
 
 
@@ -170,8 +130,8 @@ blifHypergraph netlist = inputRoutine
     (top ^. nets . to length)
     (top ^. gates . to length)
     [ (n, c)
-    | (n, w) <- zip [0..] $ toList $ top ^. nets
-    , c <- w ^. contacts . to HashMap.keys
+    | (n, w) <- [0 ..] `zip` views nets toList top
+    , c <- views contacts keys w
     ] where top = fromBLIF netlist
 
 

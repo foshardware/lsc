@@ -1,32 +1,32 @@
 -- Copyright 2018 - Andreas Westerwick <westerwick@pconas.de>
 -- SPDX-License-Identifier: GPL-3.0-or-later
 
-{-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE Rank2Types #-}
 {-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE OverloadedStrings #-}
 
+-- | Pure morphisms on the netgraph model
+--
 module LSC.NetGraph where
 
 import Control.Applicative
 import Control.Lens
 import Control.Monad
-import Control.Monad.IO.Class
 import Control.Monad.ST
+import Data.Char
 import Data.Default
-import Data.Foldable
 import Data.Function
 import Data.Functor.Contravariant
 import Data.HashMap.Lazy (HashMap)
 import qualified Data.HashMap.Lazy as HashMap
 import qualified Data.IntMap as M
-import qualified Data.IntSet as IntSet
+import qualified Data.IntSet as S
 import Data.List (sort, sortOn)
 import Data.List.Split (wordsBy)
 import Data.Maybe
-import Data.Text (unpack)
 import Data.Matrix (Matrix, nrows, ncols, getElem, getMatrixAsVector)
-import Data.Vector (Vector, (!), backpermute)
+import qualified Data.Text as T
+import Data.Vector (Vector, (!))
 import Data.Vector.Unboxed (unsafeFreeze)
 import Data.Vector.Unboxed.Mutable (new, write)
 import qualified Data.Vector.Unboxed as U
@@ -35,10 +35,9 @@ import qualified Data.Vector as V
 import LSC.BinarySearch
 import LSC.Cartesian
 import LSC.Component
-import LSC.Entropy
+import LSC.HigherOrder
 import LSC.Model
 import LSC.Polygon
-import LSC.Transformer
 
 
 
@@ -132,7 +131,7 @@ verticesByColumn top net =
 verticesOf :: NetGraph -> Net -> [(Gate, Pin)]
 verticesOf top net =
   [ (view gates top ! i, p)
-  | (i, ps) <- HashMap.toList $ net ^. contacts
+  | (i, ps) <- views contacts HashMap.toList net
   , i >= 0
   , p <- ps
   ]
@@ -141,12 +140,12 @@ verticesOf top net =
 
 
 hpwlMatrix :: U.Vector (Int, Int) -> Net -> Int
-hpwlMatrix _ n | elem (n ^. identifier) ["clk"] = 1
+hpwlMatrix _ n | n ^. clock = 1
 hpwlMatrix m n = width p + height p
   where
     p = boundingBox
       [ rect x y (succ x) (succ y)
-      | i <- n ^. contacts & HashMap.keys
+      | i <- views contacts HashMap.keys n 
       , (x, y) <- toList $ m ^? ix i
       ]
 
@@ -174,44 +173,6 @@ flattenGateMatrix = V.filter (\ g -> g ^. number >= 0) . getMatrixAsVector
 sumOfHpwlMatrix :: Matrix Gate -> Int
 sumOfHpwlMatrix m = sum $ hpwlMatrix (coordsVector m) <$> generateHyperedges m
 
-
-
-estimationsMatrix :: Matrix Gate -> LSC ()
-estimationsMatrix m = do
-
-  info
-    [ show $ view number <$> m
-    , unwords [show $ nrows m, "x", show $ ncols m]
-    , unwords ["gate count:", show $ foldl' (\ a g -> if g ^. number < 0 then a else succ a :: Int) 0 m]
-    , unwords [" net count:", show $ length $ generateHyperedges m]
-    , unwords ["sum of hpwl:", show $ sumOfHpwlMatrix m]
-    ]
-
-
-
-estimations :: NetGraph -> LSC ()
-estimations top = do
- 
-  let gs = top ^. gates
-      ns = top ^. nets
- 
-  let box = coarseBoundingBox $ view space <$> gs
-
-  let area = head (top ^. supercell . geometry)
-      pivot = div (area ^. r + area ^. l) 2
-  let (xs, ys) = V.partition ((<= pivot) . centerX) (view space <$> V.filter (views fixed not) gs)
-
-  let segs = sum $ length . view netSegments <$> ns
-
-  let k = views identifier unpack top
-
-  info $
-    [ k ++ " layout area: " ++ show (width box, height box)
-    , k ++ " sum of hpwl: " ++ show (sum $ hpwl <$> ns)
-    , k ++ " gate count: "  ++ show (length gs)
-    ]
-    ++ [ k ++ " net segments: " ++ show segs | segs > 0 ]
-    ++ [ k ++ " row balance: " ++ show (sum $ width <$> xs) ++ " | " ++ show (sum $ width <$> ys) ]
 
 
 
@@ -263,66 +224,6 @@ inlineGeometry top
 
 
 
-gateGeometry :: NetGraph -> LSC NetGraph
-gateGeometry top = do
-    tech <- technology
-    assume ("invalid scale factor: " ++ views scaleFactor show tech)
-      $ tech ^. scaleFactor > 0
-    pure $ rebuildGates (tech ^. stdCells) top
-
-
-rebuildGates :: HashMap Identifier Cell -> NetGraph -> NetGraph
-rebuildGates cells top = top &~ do
-
-    gates %= fmap expand
-
-    where
-
-    fh = maximum $ cells <&> snd . view dims
-    fw = maximum $ top ^. supercell . rows <&> view granularity
-
-    expand g | g ^. feedthrough = g & space %~ \ x -> x & r .~ x^.l + fw & t .~ x^.b + fh
-    expand g = g & space %~ maybe id drag (cells ^? views identifier ix g . dims)
-
-    drag (w, h) p = p & r .~ view l p + w & t .~ view b p + h
-
-
-
-pinGeometry :: NetGraph -> LSC NetGraph
-pinGeometry top = do
-    tech <- technology
-    assume ("invalid scale factor: " ++ views scaleFactor show tech)
-      $ tech ^. scaleFactor > 0
-    pure $ rebuildPins (tech ^. stdCells) top
-
-
-rebuildPins :: HashMap Identifier Cell -> NetGraph -> NetGraph
-rebuildPins cells top = top &~ do
-
-    nets %= fmap (over contacts . imap $ fmap . maybe id align . views gates (^?) top . ix)
-
-  where
-
-    align g p
-      | g ^. feedthrough
-      = p & geometry .~ pure (g ^. space . to simplePolygon)
-    align g p
-      = maybe p (absolute g) $ cells ^? views identifier ix g . pins . views identifier ix p
-
-    absolute g
-      = over geometry . fmap
-      $ inline (g ^. space)
-
-
-
-perturbGates :: NetGraph -> LSC NetGraph
-perturbGates top = do
-    let getVector = randomPermutation $ top ^. gates . to length :: Gen s -> ST s Permutation
-    v <- liftIO $ nonDeterministic Nothing getVector
-    pure $ top &~ do
-        gates .= set number `imap` views gates backpermute top v
-
-
 
 assignCellsToRows :: NetGraph -> NetGraph
 assignCellsToRows top
@@ -367,7 +268,7 @@ rebuildHyperedges = set nets <$> generateHyperedges . view gates <*> id
 
 generateHyperedges :: Foldable f => f Gate -> HashMap Identifier Net
 generateHyperedges gs = HashMap.fromListWith (<>)
-  [ (i, Net i mempty mempty (pure gate) (HashMap.singleton (gate ^. number) [pin]))
+  [ (i, Net i mempty mempty [gate] (HashMap.singleton (gate ^. number) [pin]))
   | gate <- toList gs
   , (contact, i) <- HashMap.toList $ gate ^. wires
   , let pin = def & identifier .~ contact
@@ -379,7 +280,7 @@ generateHyperedges gs = HashMap.fromListWith (<>)
 region :: (Int -> Int) -> (Int -> Int) -> NetGraph -> NetGraph
 region f g top = top &~ do
     supercell %= (over pins . fmap . over geometry . fmap) (bimap f g)
-    supercell %= (over tracks . fmap) (bimap (over stabs (IntSet.map f)) (over stabs (IntSet.map g)))
+    supercell %= (over tracks . fmap) (bimap (over stabs (S.map f)) (over stabs (S.map g)))
     gates %= (fmap . over space) (bimap f g)
     nets %= (fmap . over contacts . fmap . fmap . over geometry . fmap) (bimap f g)
     nets %= (fmap . over netSegments . fmap) (bimap f g)
@@ -398,6 +299,19 @@ outerRim :: NetGraph -> HashMap Identifier (Component' Layer Int)
 outerRim
   = fmap (coarseBoundingBox . fmap containingBox . view geometry)
   . view (supercell . pins)
+
+
+-- cheating!
+clock :: Getter Net Bool
+clock = identifier . to ((== "clk") . T.map toLower)
+
+
+
+feedthroughGate :: Net -> Gate
+feedthroughGate n = def &~ do
+    identifier .= ("FEEDTHROUGH." <> n ^. identifier)
+    feedthrough .= True
+    wires .= HashMap.singleton "FD" (n ^. identifier)
 
 
 

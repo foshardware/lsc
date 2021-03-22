@@ -1,7 +1,6 @@
 -- Copyright 2018 - Andreas Westerwick <westerwick@pconas.de>
 -- SPDX-License-Identifier: GPL-3.0-or-later
 
-{-# LANGUAGE CPP #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE FlexibleInstances #-}
@@ -24,6 +23,7 @@ import Data.Default
 import Data.HashMap.Lazy (HashMap, unionWith)
 import Data.IntMap (IntMap)
 import Data.IntSet (IntSet)
+import Data.Semigroup
 import Data.Text (Text)
 import qualified Data.Text.Lazy as Lazy
 import Data.Text.Lazy.Builder
@@ -62,9 +62,6 @@ instance Semigroup AbstractGate where
 
 instance Monoid AbstractGate where
   mempty = AbstractGate mempty mempty
-#if !MIN_VERSION_base(4,11,0)
-  mappend = (<>)
-#endif
 
 
 data LogicPort = LogicPort
@@ -109,16 +106,17 @@ data Net = Net
 
 
 instance Semigroup Net where
+
   Net "" xs ss ns as <> Net is ys ts os bs
     = Net is (xs <> ys) (ss <> ts) (ns <> os) (unionWith (<>) as bs)
   Net is xs ss ns as <> Net  _ ys ts os bs
     = Net is (xs <> ys) (ss <> ts) (ns <> os) (unionWith (<>) as bs)
 
+  stimes = stimesIdempotent
+
+
 instance Monoid Net where
   mempty = Net "" mempty mempty mempty mempty
-#if !MIN_VERSION_base(4,11,0)
-  mappend = (<>)
-#endif
 
 
 
@@ -138,8 +136,9 @@ base16Identifier
 data Gate = Gate
   { _identifier  :: Identifier
   , _space       :: Component' Layer Int
+                    -- | Key: Pin, Value: Net
   , _wires       :: HashMap Identifier Identifier
-  , _number      :: Number  -- ^ pin     ^ net
+  , _number      :: Number
   , _fixed       :: Bool
   , _feedthrough :: Bool
   } deriving (Eq, Generic, NFData, FromJSON, ToJSON, Show)
@@ -209,7 +208,7 @@ data Cell = Cell
   , _vdd        :: Pin
   , _gnd        :: Pin
   , _dims       :: (Int, Int)
-  } deriving (Generic, FromJSON, ToJSON, Show)
+  } deriving (Generic, NFData, FromJSON, ToJSON, Show)
 
 instance Default Cell where
   def = Cell
@@ -246,7 +245,7 @@ instance Default Pin where
 data Technology = Technology
   { _scaleFactor    :: Double
   , _stdCells       :: HashMap Identifier Cell
-  } deriving (Generic, FromJSON, ToJSON, Show)
+  } deriving (Generic, NFData, FromJSON, ToJSON, Show)
 
 
 instance Default Technology where
@@ -311,5 +310,4 @@ makeFieldsNoPrefix ''Net
 makeFieldsNoPrefix ''CompilerOpts
 
 makeFieldsNoPrefix ''Technology
-
 

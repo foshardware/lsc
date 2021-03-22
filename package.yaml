@@ -25,7 +25,6 @@ custom-setup:
   dependencies:
   - base >= 4.9
   - file-embed
-  - filepath
   - Cabal
   - process
 
@@ -47,13 +46,15 @@ dependencies:
 - cond
 - data-default
 - deepseq
+- directory
+- dir-traverse
 - entropy
 - file-embed
 - filepath
 - firrtl
+- haddock-api
 - hashable
 - hashtables
-- haskell-src-exts
 - kan-extensions
 - lefdef
 - lens
@@ -69,9 +70,12 @@ dependencies:
 - pointed
 - pretty-terminal
 - primitive
+- process
 - SafeSemaphore
 - silently
 - split
+- foldl
+- foldl-statistics
 - tasty
 - tasty-hunit
 - tasty-quickcheck
@@ -87,25 +91,22 @@ library:
   source-dirs: src
   ghc-options:
   - -Wall
+  - -O2
   when:
   - condition: flag(glpk)
     dependencies:
     - glpk-hs
     cpp-options:
     - -DGLPK
-    ghc-options:
-    - -O2
   - condition: flag(debug)
-    then:
-      cpp-options:
-      - -DDEBUG
-      ghc-options:
-      - -g
-      - -dcore-lint
-      - -debug
-    else:
-      ghc-options:
-      - -O2
+    cpp-options:
+    - -DDEBUG
+    ghc-options:
+    - -g
+    - -dcore-lint
+    - -ddump-simpl
+    - -fforce-recomp
+    - -debug
 
 executables:
   lsc:
@@ -117,18 +118,28 @@ executables:
     - -Wall
     - -rtsopts
     - -threaded
+    - -O2
     when:
     - condition: flag(debug)
-      then:
-        cpp-options:
-        - -DDEBUG
-        ghc-options:
-        - -g
-        - -dcore-lint
-        - -debug
-      else:
-        ghc-options:
-        - -O2
+      cpp-options:
+      - -DDEBUG
+      ghc-options:
+      - -g
+      - -dcore-lint
+      - -ddump-simpl
+      - -fforce-recomp
+      - -debug
+
+  lsc-doc:
+    main:                Evid.hs
+    source-dirs:         doc
+    dependencies:
+    - lsc
+    ghc-options:
+    - -Wall
+    - -threaded
+    - -rtsopts
+    - -dynamic
 
 tests:
   lsc-test:
@@ -139,17 +150,15 @@ tests:
     ghc-options:
     - -Wall
     - -rtsopts
+    - -threaded
+    - -O2
+    - -dynamic
     when:
     - condition: flag(debug)
-      then:
-        cpp-options:
-        - -DDEBUG
-        ghc-options:
-        - -g
-        - -dcore-lint
-        - -debug
-      else:
-        ghc-options:
-        - -O2
-        - -threaded
+      cpp-options:
+      - -DDEBUG
+      ghc-options:
+      - -g
+      - -dcore-lint
+      - -debug
 

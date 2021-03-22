@@ -40,6 +40,7 @@ import LSC.Polygon as LSC
 
 
 
+
 fromDEF :: DEF -> NetGraph
 fromDEF (DEF options _ area rs ts _ _ cs ps ns _)
   = def &~ do
@@ -73,8 +74,10 @@ fromNet gate (DEF.Net i cs _)
     mempty
     mempty
     (gate . fst <$> rights cs)
-    (HashMap.fromListWith (++)
-      [(g ^. number, [def & identifier .~ p]) | (g, p) <- either (def, ) (first gate) <$> cs])
+  $ HashMap.fromListWith (++)
+    [ (g ^. number, [def & identifier .~ p])
+    | (g, p) <- either (def, ) (first gate) <$> cs
+    ]
 
 
 fromLayer :: LayerName -> LSC.Layer
@@ -282,7 +285,7 @@ toNet :: NetGraph -> LSC.Net -> DEF.Net
 toNet top n
   = DEF.Net (n ^. identifier)
     [ maybe (Left (p ^. identifier)) (Right . (, p ^. identifier) . enumeratedGate) (top ^. gates ^? ix i)
-    | (i, ps) <- n ^. contacts & HashMap.toList
+    | (i, ps) <- views contacts HashMap.toList n
     , p <- ps
     ]
     Nothing

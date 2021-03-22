@@ -1,15 +1,9 @@
 -- Copyright 2018 - Andreas Westerwick <westerwick@pconas.de>
 -- SPDX-License-Identifier: GPL-3.0-or-later
 
-{-# LANGUAGE CPP #-}
-{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TupleSections #-}
 
 module LSC.FastDP where
-
-#if !MIN_VERSION_base(4,10,0)
-import Data.Semigroup
-#endif
 
 import Control.Applicative
 import Control.Lens
@@ -17,20 +11,9 @@ import Control.Monad
 import Control.Monad.Loops
 import Control.Monad.ST
 import Data.Either
-import Data.Foldable
 import Data.Function
 import qualified Data.HashMap.Lazy as HashMap
-import Data.IntMap
-    ( IntMap
-    , lookupLE, lookupLT, lookupGT
-    , split, splitLookup
-    , insert, alter
-    , adjust, delete
-    , singleton
-    , fromAscList, toAscList
-    , toDescList
-    )
-import qualified Data.IntMap as IntMap
+import Data.IntMap (adjust, lookupLT, lookupGT)
 import Data.List (sort, permutations)
 import Data.Maybe
 import Data.STRef
@@ -44,6 +27,8 @@ import Prelude hiding (read, lookup)
 import LSC.BinarySearch
 import LSC.Cartesian
 import LSC.Component
+import LSC.HigherOrder
+import LSC.Layout
 import LSC.Model
 import LSC.NetGraph
 import LSC.Transformer
@@ -82,91 +67,18 @@ verticalSwap top = do
 
 
 
-
-type Layout = IntMap Segment
-
-type Segment = IntMap (Either Area Gate)
-
-type Slot = (Int, Either Area Gate)
-
-type Area = Component' Layer Int
-
-
-type SegmentIterator = Segment -> Int -> [Slot]
-
-
-leftNext, rightNext :: SegmentIterator
-leftNext  segment k = toDescList $ delete k $ fst $ split k segment
-rightNext segment k = toAscList  $ delete k $ snd $ split k segment
-
-
-spaces :: SegmentIterator -> Int -> Segment -> Area -> [Area]
-spaces it n segment = lefts . map snd . take n . it segment . centerX
-
-
-
-buildLayout :: Foldable f => f Gate -> Layout
-buildLayout
-    = fmap intersperseSpace
-    . foldl' (\ a g -> alter (pure . insertGate g . fold) (rowIndex g) a) mempty
-{-# INLINABLE buildLayout #-}
-
-
-rowIndex :: Gate -> Int
-rowIndex = centerY . view space
-
-
-insertGate :: Gate -> Segment -> Segment
-insertGate = liftA2 insert (centerX . view space) Right
-
-
-removeGate :: Gate -> Segment -> Segment
-removeGate = delete . centerX . view space
-
-
-intersperseSpace :: Segment -> Segment
-intersperseSpace segment = gs <> fromAscList
-    [ (centerX area, Left area)
-    | (u, v) <- xs `zip` tail xs
-    , let area = u ^. space & l .~ view (space . r) u & r .~ view (space . l) v
-    ] where xs = rights $ snd <$> toAscList gs
-            gs = IntMap.filter isRight segment
-
-
-
-cutLayout :: (Int, Int) -> IntMap a -> IntMap a
-cutLayout (lower, upper) zs
-    = foldMap (singleton lower) y <> xs <> foldMap (singleton upper) x
-    where (_, y, ys) = splitLookup lower zs
-          (xs, x, _) = splitLookup upper ys
-
-
-
-cutSegment :: (Int, Int) -> Segment -> Segment
-cutSegment (lower, upper) zs
-    | null $ cutLayout (lower, upper) zs -- TODO: not obvious what to return when the
-    = fold                               --       optimal region's width has degraded
-      [ singleton pos g                  --       or a vertical swap is performed
-      | (pos, g) <- toList (lookupLE lower zs)
-      , lower <= either (view r) (view (space . r)) g + either width gateWidth g `div` 2
-      ]
-cutSegment (lower, upper) zs
-    = cutLayout (lower, upper) zs
-
-
-
-
 swapRoutine :: Double -> Bool -> NetGraph -> ST s NetGraph
 swapRoutine _ _ top
-    | views gates length top < 3
-    = pure top
-swapRoutine sc vertical top = do
+  | views gates length top < 3
+  = pure top
+swapRoutine sc vertical top
+  = do
 
     assume "swapRoutine: gate vector indices do not match gate numbers"
-        $ and $ imap (==) $ view number <$> view gates top
+      $ and $ imap (==) $ view number <$> view gates top
 
     assume "swapRoutine: gates have different heights"
-        $ all (== gateHeight (view gates top ! 0)) $ gateHeight <$> view gates top
+      $ all (== gateHeight (view gates top ! 0)) $ gateHeight <$> view gates top
 
     v <- Vector.thaw $ view gates top
 
@@ -208,8 +120,8 @@ swapRoutine sc vertical top = do
                     $ T.modify taint (const True) . view number
 
                   modifySTRef layout
-                    $ adjust (intersperseSpace . insertGate i . removeGate h) (rowIndex i)
-                    . adjust (intersperseSpace . insertGate j . removeGate g) (rowIndex g)
+                    $ adjust (intersperseSpace . insertGate i . removeGate h) (ordinate i)
+                    . adjust (intersperseSpace . insertGate j . removeGate g) (ordinate g)
 
               (_, _, Left a) -> do
 
@@ -221,8 +133,8 @@ swapRoutine sc vertical top = do
                     $ T.modify taint (const True) . view number
 
                   modifySTRef layout
-                    $ adjust (intersperseSpace . insertGate i) (rowIndex i)
-                    . adjust (intersperseSpace . removeGate g) (rowIndex g)
+                    $ adjust (intersperseSpace . insertGate i) (ordinate i)
+                    . adjust (intersperseSpace . removeGate g) (ordinate g)
 
     gs <- unsafeFreeze v
 
@@ -244,61 +156,63 @@ type Benefit = Int
 
 benefit :: NetGraph -> Gate -> Penalty -> Either Area Gate -> Benefit
 benefit top g penalty (Right h)
-    = negate . (+ penalty)
-    $ hpwlDelta top [g & space .~ view space h, h & space .~ view space g]
+  = negate . (+ penalty)
+  $ hpwlDelta top [g & space .~ view space h, h & space .~ view space g]
 benefit top g penalty (Left a)
-    = negate . (+ penalty)
-    $ hpwlDelta top [g & space .~ a]
+  = negate . (+ penalty)
+  $ hpwlDelta top [g & space .~ a]
 
 
 
 findSwaps :: Bool -> Gate -> Area -> Layout -> [(Penalty, Either Area Gate)]
 findSwaps vertical i a layout =
-    [ (max 0 penalty, j)
-    | (cut, segj) <- if vertical
-                     then verticalSwapSegments i layout
-                     else globalSwapSegments a layout
-    , j <- toList cut
-    , let penalty = either (penaltyForSpace i segj) (penaltyForCell segi i segj) j
-    ] where segi = fold $ layout ^? ix (rowIndex i)
+  [ (max 0 penalty, j)
+  | (cut, segj) <- if vertical
+                   then verticalSwapSegments i layout
+                   else globalSwapSegments a layout
+  , j <- toList cut
+  , let penalty = either (penaltyForSpace i segj) (penaltyForCell segi i segj) j
+  ] where segi = fold $ layout ^? ix (ordinate i)
 
 
 verticalSwapSegments :: Gate -> Layout -> [(Segment, Segment)]
 verticalSwapSegments g
-    = map (liftA2 (,) (cutSegment (g ^. space . l, g ^. space . r)) id)
-    . fmap snd
-    . liftA2 (++) (toList . lookupLT (rowIndex g)) (toList . lookupGT (rowIndex g))
+  = map (liftA2 (,) (cutSegment (g ^. space . l, g ^. space . r)) id)
+  . fmap snd
+  . liftA2 (++) (toList . lookupLT (ordinate g)) (toList . lookupGT (ordinate g))
 
 
 globalSwapSegments :: Area -> Layout -> [(Segment, Segment)]
 globalSwapSegments a
-    = map (liftA2 (,) (cutSegment (a ^. l, a ^. r)) id)
-    . toList
-    . cutLayout (a ^. b, a ^. t)
+  = map (liftA2 (,) (cutSegment (a ^. l, a ^. r)) id)
+  . toList
+  . cutLayout (a ^. b, a ^. t)
 
 
 
 penaltyForSpace :: Gate -> Segment -> Area -> Penalty
 penaltyForSpace i segj s
-    = fromIntegral (gateWidth i - width s) * wt1
-    + fromIntegral (gateWidth i - (s1 + width s + s2)) * wt2
-    where s1 = maybe 0 width $ listToMaybe $ spaces  leftNext 2 segj s
-          s2 = maybe 0 width $ listToMaybe $ spaces rightNext 2 segj s
+  = fromIntegral (gateWidth i - width s) * wt1
+  + fromIntegral (gateWidth i - (s1 + width s + s2)) * wt2
+  where
+    s1 = maybe 0 width $ listToMaybe $ spaces  leftNext 2 segj s
+    s2 = maybe 0 width $ listToMaybe $ spaces rightNext 2 segj s
 
 
 penaltyForCell :: Segment -> Gate -> Segment -> Gate -> Penalty
 penaltyForCell _ i segj j
-    | gateWidth i >= gateWidth j
-    = fromIntegral ((gateWidth i - gateWidth j) - (s2 + s3)) * wt1
-    + fromIntegral ((gateWidth i - gateWidth j) - (s1 + s2 + s3 + s4)) * wt2
-    where ls = spaces  leftNext 3 segj (j ^. space)
-          rs = spaces rightNext 3 segj (j ^. space)
-          s1 = maybe 0 width $ listToMaybe $ drop 1 ls
-          s2 = maybe 0 width $ listToMaybe ls
-          s3 = maybe 0 width $ listToMaybe rs
-          s4 = maybe 0 width $ listToMaybe $ drop 1 rs
+  | gateWidth i >= gateWidth j
+  = fromIntegral ((gateWidth i - gateWidth j) - (s2 + s3)) * wt1
+  + fromIntegral ((gateWidth i - gateWidth j) - (s1 + s2 + s3 + s4)) * wt2
+  where
+    ls = spaces  leftNext 3 segj (j ^. space)
+    rs = spaces rightNext 3 segj (j ^. space)
+    s1 = maybe 0 width $ listToMaybe $ drop 1 ls
+    s2 = maybe 0 width $ listToMaybe ls
+    s3 = maybe 0 width $ listToMaybe rs
+    s4 = maybe 0 width $ listToMaybe $ drop 1 rs
 penaltyForCell segi i segj j
-    = penaltyForCell segj j segi i
+  = penaltyForCell segj j segi i
 
 
 
@@ -504,7 +418,7 @@ generateBoundsList top segment order c
             Just LT -> Vector.head segment ^. space
             Just  _ -> Vector.last segment ^. space
             Nothing -> view gates top ! i ^. space
-        | i <- HashMap.keys $ net ^. contacts
+        | i <- views contacts HashMap.keys net
         , i >= 0
         , not $ elem i $ view number <$> c
         ]

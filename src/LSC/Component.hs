@@ -1,7 +1,6 @@
 -- Copyright 2018 - Andreas Westerwick <westerwick@pconas.de>
 -- SPDX-License-Identifier: GPL-3.0-or-later
 
-{-# LANGUAGE CPP #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE FunctionalDependencies #-}
 {-# LANGUAGE FlexibleInstances #-}
@@ -112,9 +111,6 @@ instance Semigroup Orientation where
 
 instance Monoid Orientation where
   mempty = N
-#if !MIN_VERSION_base(4,11,0)
-  mappend = (<>)
-#endif
 
 
 
@@ -191,9 +187,6 @@ instance (Ord x, Ord y) => Semigroup (BoundingBox l x y) where
 
 instance (Ord x, Ord y, Bounded x, Bounded y) => Monoid (BoundingBox l x y) where
     mempty = BoundingBox (rect maxBound maxBound minBound minBound)
-#if !MIN_VERSION_base(4,11,0)
-    mappend = (<>)
-#endif
 
 
 
@@ -218,9 +211,6 @@ instance (Ord x, Ord y) => Semigroup (Overlap l x y) where
 
 instance (Ord x, Ord y, Bounded x, Bounded y) => Monoid (Overlap l x y) where
     mempty = Overlap (rect minBound minBound maxBound maxBound)
-#if !MIN_VERSION_base(4,11,0)
-    mappend = (<>)
-#endif
 
 
 

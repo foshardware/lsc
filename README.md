@@ -30,7 +30,7 @@ GLPK optimizations are necessary for:
 
 ### Custom setup
 
-For any custom build (e. g. cabal-install) you will need at least GHC 8. [lsc-cabal](https://github.com/foshardware/lsc-cabal) is a fallback build system based on cabal and git submodules but may lack behind in commits.
+For any custom build (e. g. cabal-install) you will need at least GHC version 8.6.3. [lsc-cabal](https://github.com/foshardware/lsc-cabal) is a fallback build system based on cabal and git submodules but may lack behind in commits.
 
 
 ## Usage
@@ -54,6 +54,16 @@ For any custom build (e. g. cabal-install) you will need at least GHC 8. [lsc-ca
 ### Set number of capabilities
 
 `lsc +RTS -N8 -RTS`  
+
+
+## Documentation
+
+The latest haddock documentation is available on [github pages](https://foshardware.github.io/lsc/latest).  
+
+
+### Compile documentation from source
+
+`stack exec -- lsc-doc`  
 
 
 ## Stacktraces
@@ -150,6 +160,13 @@ Annotations:
 - Pin permutations
   - [doi:10.1109/iccd.1992.276294](https://doi.org/10.1109/iccd.1992.276294)
 
-- Rent's Rule
+- Rent
   - [doi:10.1109/tcs.1979.1084635](https://doi.org/10.1109/tcs.1979.1084635)
   - [doi:10.1147/rd.252.0152](https://doi.org/10.1147/rd.252.0152)
+
+- Layout
+  - decouple from netgraph model
+
+- Polygon
+  - improve ptr data structure
+

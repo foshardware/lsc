@@ -6,9 +6,22 @@
 
 -- | Assorted higher-order functions
 --
-module LSC.HigherOrder where
+module LSC.HigherOrder
+  ( ifoldl'
 
+#if !MIN_VERSION_base(4,13,0)
+  , foldMap'
+#endif
+
+  , module Control.Applicative
+  , module Control.Monad
+  , module Data.Foldable
+  ) where
+
+import Control.Applicative (liftA2)
+import Control.Monad (join, (<=<), when, unless)
 import Data.Foldable
+
 
 
 ifoldl' :: Foldable f => (Int -> b -> a -> b) -> b -> f a -> b
