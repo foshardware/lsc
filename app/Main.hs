@@ -6,7 +6,6 @@
 module Main where
 
 import Control.Arrow
-import Control.Concurrent
 import Control.Lens
 import Control.Monad
 import Data.Aeson (encode, eitherDecode)
@@ -15,6 +14,7 @@ import qualified Data.ByteString.Lazy as Lazy
 import Data.Default
 import Data.List (intersperse)
 import Data.Maybe
+import Data.Scientific
 import Data.Text.Encoding (encodeUtf8Builder)
 import qualified Data.Text.IO as Text
 import System.Console.GetOpt
@@ -31,7 +31,7 @@ import LSC.LEF     (parseLEF, fromLEF)
 import LSC.DEF     (printDEF, toDEF, fromDEF, parseDEF)
 
 import LSC
-import LSC.Logger
+import LSC.Log
 import LSC.Model
 import LSC.NetGraph
 import LSC.SVG
@@ -74,29 +74,37 @@ program = do
       tech <- either (die . show) (deepFreeze . fromLEF) . parseLEF
           <=< Text.readFile . head $ lst Lef
 
-      let scale = tech ^. scaleFactor
+      let scale = views scaleFactor toRealFloat tech
 
       netlist <- readNetGraph inputs
 
       when (arg Stage3 && arg Stage4)
         $ do
-          ckt <- silence $ evalLSC opts tech $ compiler (stage3 >>> stage4) netlist
+          ckt <- silence
+            $ evalLSC opts tech
+            $ compiler (stage3 >>> stage4) netlist
           last $ printStdout scale ckt <$> lst Output
           exitSuccess
 
       when (arg Stage3)
         $ do
-          ckt <- silence $ evalLSC opts tech $ compiler stage3 netlist
+          ckt <- silence
+            $ evalLSC opts tech
+            $ compiler stage3 netlist
           last $ printStdout scale ckt <$> lst Output
           exitSuccess
 
       when (arg Stage4)
         $ do
-          ckt <- silence $ evalLSC opts tech $ compiler stage3 netlist
+          ckt <- silence
+            $ evalLSC opts tech
+            $ compiler stage3 netlist
           last $ printStdout scale ckt <$> lst Output
           exitSuccess
 
-      ckt <- silence $ evalLSC opts tech $ compiler estimate . rebuildHyperedges =<< gateGeometry netlist
+      ckt <- silence
+        $ evalLSC opts tech
+        $ compiler (induce gateGeometry >>> arr rebuildHyperedges >>> estimate) netlist
       last $ printStdout scale ckt <$> lst Output
       exitSuccess
 
@@ -205,24 +213,20 @@ compilerOpts flags = do
     let known = last $ True : map (`elem` outputFormats) (lst Output)
     unless known $ die $ "unknown format: " ++ head (lst Output)
 
-    c <- last $ pure 1 : (either (die . show) pure . (parse fractional "--row-capacity") <$> lst RowCapacity)
-    i <- last $ pure 3 : (either (die . show) pure . (parse decimal "-i") <$> lst Iterations)
+    c <- last $ pure 1 : (either (die . show) pure . parse fractional "--row-capacity" <$> lst RowCapacity)
+    i <- last $ pure 3 : (either (die . show) pure . parse decimal "-i" <$> lst Iterations)
 
-    let ks = either (die . show) (pure . toEnum) . (parse decimal "--log-level") <$> lst LogLevel
+    let ks = either (die . show) (pure . toEnum) . parse decimal "--log-level" <$> lst LogLevel
     k <- last $ pure Warning : ks
 
     j <- rtsWorkers
-
-    n <- getNumCapabilities
-    unless (n < 2 || null (lst Seed))
-      $ die "cannot seed from file descriptor in concurrent setting"
 
     pure $ def &~ do
       logLevel .= k
       rowCapacity .= c
       iterations .= i
       workers .= j
-      seedHandle .= listToMaybe (stdin <$ lst Seed)
+      entropy .= listToMaybe (stdin <$ lst Seed)
 
 
 

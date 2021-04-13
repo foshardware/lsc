@@ -1,36 +1,74 @@
 -- Copyright 2018 - Andreas Westerwick <westerwick@pconas.de>
 -- SPDX-License-Identifier: GPL-3.0-or-later
 
+{-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE TypeApplications #-}
+{-# LANGUAGE DeriveAnyClass #-}
+
 module LSC.Entropy
-  ( nonDeterministic
-  , entropyVectorInt, entropyVector32
+  ( nonDeterministically, deterministically
+  , entropyVector32, entropyVector64
   , Permutation, randomPermutation
-  , module System.Random.MWC
+  , Gen, genBitSize
   ) where
 
+import Control.Exception
 import Control.Monad.Primitive
-import Data.ByteString hiding (replicate)
+import Data.Bits
+import Data.ByteString
 import Data.Serialize.Get
-import Data.Vector
+import Data.Vector (Vector, generate, replicateM, unsafeFreeze, unsafeThaw)
 import Data.Vector.Mutable (unsafeSwap)
 import Data.Word
-import Prelude hiding (replicate, sequence_)
 
 import System.Entropy
 import System.IO
-import System.Random.MWC
+import qualified System.Random.MWC as MWC
 
 
 
-nonDeterministic :: PrimBase m => Maybe Handle -> (Gen (PrimState m) -> m a) -> IO a
-nonDeterministic Nothing action = do
-    v <- entropyVector32 258
-    unsafePrimToIO $ action =<< initialize v
-nonDeterministic (Just handle) action = do
-    seed <- hGet handle $ 258 * 4
-    v <- either fail pure $ replicateM 258 getWord32be `runGet` seed
-    unsafePrimToIO $ action =<< initialize v
-{-# INLINABLE nonDeterministic #-}
+size32 :: Int
+size32 = 258
+
+
+finiteOctetSize :: FiniteBits a => a -> Int
+finiteOctetSize n = finiteBitSize n `shiftR` 3 
+
+
+type Gen = MWC.Gen
+
+genBitSize :: Int
+genBitSize = size32 * finiteBitSize @Word32 0
+
+
+newtype SourceRunOut = SourceRunOut String
+  deriving Exception
+
+instance Show SourceRunOut where
+  show (SourceRunOut msg) = "entropy source: " ++ msg
+
+
+
+nonDeterministically
+  :: (PrimBase m, PrimState m ~ RealWorld)
+  => Maybe Handle
+  -> (Gen (PrimState m) -> m a)
+  -> IO a
+nonDeterministically Nothing action
+  = do
+    state <- entropyVector32 size32
+    primToIO $ action =<< MWC.initialize state
+nonDeterministically (Just h) action
+  = do
+    bytes <- hGet h $ size32 * finiteOctetSize @Word32 0
+    state <- either (throwIO . SourceRunOut) pure $ replicateM size32 getWord32be `runGet` bytes
+    primToIO $ action =<< MWC.initialize state
+{-# INLINABLE nonDeterministically #-}
+
+
+deterministically :: PrimBase m => (Gen (PrimState m) -> m a) -> m a
+deterministically k = k =<< MWC.create
+{-# INLINABLE deterministically #-}
 
 
 type Permutation = Vector Int
@@ -56,20 +94,18 @@ type Permutation = Vector Int
 randomPermutation :: PrimBase m => Int -> Gen (PrimState m) -> m Permutation
 randomPermutation n gen = do
     v <- unsafeThaw $ generate n id
-    sequence_ $ generate (n - 1) $ \ i -> unsafeSwap v i =<< uniformR (i, n - 1) gen
+    sequence_ $ generate (n - 1) $ \ i -> unsafeSwap v i =<< MWC.uniformR (i, n - 1) gen
     unsafeFreeze v
 {-# INLINABLE randomPermutation #-}
 
 
-
 entropyVector32 :: Int -> IO (Vector Word32)
 entropyVector32 n = do
-    seed <- getEntropy $ 4 * n
+    seed <- getEntropy $ n * finiteOctetSize @Word32 0
     either fail pure $ replicateM n getWord32be `runGet` seed
 
-
-entropyVectorInt :: Int -> IO (Vector Int)
-entropyVectorInt n = do
-    seed <- getEntropy $ 8 * n
-    either fail (pure . fmap fromIntegral) $ replicateM n getInt64be `runGet` seed
+entropyVector64 :: Int -> IO (Vector Word64)
+entropyVector64 n = do
+    seed <- getEntropy $ n * finiteOctetSize @Word32 0
+    either fail pure $ replicateM n getWord64be `runGet` seed
 

@@ -22,7 +22,7 @@ import Test.Tasty.QuickCheck
 
 import LSC.Component
 import LSC.GlobalRouting
-import LSC.Legalize
+import LSC.Legalization
 import LSC.Model
 import LSC.NetGraph
 import LSC.Polygon
@@ -67,7 +67,7 @@ instance Arbitrary (GlobalRouting NetGraph) where
             where
 
             locatePin :: Gate -> Pin -> [Port]
-            locatePin g = map (bimap (+ g ^. space . l) (+ g ^. space . b)) . view geometry
+            locatePin g = map (bimap (+ g ^. geometry . l) (+ g ^. geometry . b)) . view geometry
 
 
 
@@ -104,6 +104,6 @@ feedthroughs = testGroup "Determine feedthroughs"
         (foldl' (\ a (p, n, g, s) ->
             adjust (over contacts $ insert g [def & identifier .~ p & geometry .~ [simplePolygon s]]) n a))
 
-        (((,,,) <$> head . keys . view wires <*> head . elems . view wires <*> view number <*> view space)
+        (((,,,) <$> head . keys . view wires <*> head . elems . view wires <*> view number <*> view geometry)
                 <$> Vector.filter (view feedthrough) (top ^. gates))
 

@@ -77,22 +77,22 @@ buildLayout
 
 
 ordinate :: Gate -> Int
-ordinate = centerY . view space
+ordinate = centerY . view geometry
 
 
 insertGate :: Gate -> Segment -> Segment
-insertGate = liftA2 insert (centerX . view space) Right
+insertGate = liftA2 insert (centerX . view geometry) Right
 
 
 removeGate :: Gate -> Segment -> Segment
-removeGate = delete . centerX . view space
+removeGate = delete . centerX . view geometry
 
 
 intersperseSpace :: Segment -> Segment
 intersperseSpace segment = gs <> fromAscList
   [ (centerX area, Left area)
   | (u, v) <- xs `zip` tail xs
-  , let area = u ^. space & l .~ view (space . r) u & r .~ view (space . l) v
+  , let area = u ^. geometry & l .~ view (geometry . r) u & r .~ view (geometry . l) v
   ]
   where
     xs = rights $ snd <$> toAscList gs
@@ -115,7 +115,7 @@ cutSegment (lower, upper) zs
   = fold                               --       optimal region's width has degraded
     [ singleton pos g                  --       or a vertical swap is performed
     | (pos, g) <- toList (lookupLE lower zs)
-    , lower <= either (view r) (view (space . r)) g + either width gateWidth g `div` 2
+    , lower <= either (view r) (view (geometry . r)) g + either width gateWidth g `div` 2
     ]
 cutSegment (lower, upper) zs
   = cutLayout (lower, upper) zs

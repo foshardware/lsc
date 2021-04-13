@@ -2,7 +2,7 @@
 -- SPDX-License-Identifier: GPL-3.0-or-later
 
 {-# LANGUAGE TemplateHaskell #-}
-{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE ConstrainedClassMethods #-}
 {-# LANGUAGE FunctionalDependencies #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE RankNTypes #-}
@@ -11,16 +11,15 @@
 module LSC.KGGGP where
 
 import Control.Lens hiding (parts, set)
-import Control.Monad
+import Control.Monad (when)
 import Control.Monad.Loops
-import Control.Monad.Reader
+import Control.Monad.Reader (ReaderT, runReaderT, ask, asks, lift)
 import Control.Monad.ST
 import Data.Foldable
 import Data.Function
 import Data.Maybe
 import Data.Monoid
-import Data.HashTable.ST.Cuckoo (HashTable)
-import Data.HashTable.ST.Cuckoo (mutate, lookup, new)
+import Data.HashTable.ST.Cuckoo (HashTable, mutate, lookup, new)
 import Data.IntSet hiding (filter, null, fold, foldr, foldl', toList)
 import qualified Data.IntSet as S
 import Data.Ratio
@@ -29,7 +28,7 @@ import Data.Vector
   ( Vector
   , unsafeThaw
   , freeze, thaw
-  , replicate
+  , replicate, replicateM
   , (!)
   )
 import Data.Vector.Mutable
@@ -120,7 +119,7 @@ st = lift
 
 balanceConstraint :: V -> Int -> Int -> KGGGP s Bool
 balanceConstraint v c p = do
-    partitioning <- view parts <$> ask
+    partitioning <- asks $ view parts
     let k = M.length partitioning
         wavg = (fromIntegral (length v) % fromIntegral k) * (1 + balanceFactor)
 
@@ -132,7 +131,7 @@ balanceConstraint v c p = do
 
 connectivityConstraint :: V -> Int -> Int -> KGGGP s Bool
 connectivityConstraint v c p = do
-    partitioning <- view parts <$> ask
+    partitioning <- asks $ view parts
     nodes <- elems <$> read partitioning p
     pure $ not $ S.null $ intersection (v!c) (foldMap (v!) nodes)
 
@@ -144,11 +143,11 @@ kgggp (v, e) fixed = do
 
     let k = length fixed
 
-    partitioning <- view parts <$> ask
+    partitioning <- asks $ view parts
     for_ [0 .. k - 1] $ \ q -> do
         write partitioning q $ fixed ! q
 
-    free <- view freeCells <$> ask
+    free <- asks $ view freeCells
     st $ writeSTRef free $ fromDistinctAscList [0 .. length v - 1] \\ fold fixed
 
 
@@ -263,8 +262,8 @@ newGains :: V -> String -> Int -> ST s (Gain s Int)
 newGains v name k = do
 
     maxg    <- (,) <$> newSTRef k <*> thaw (replicate k mempty)
-    nodes   <- sequence $ replicate k $ thaw $ 0 <$ v
-    buckets <- sequence $ replicate k new
+    nodes   <- replicateM k $ thaw $ 0 <$ v
+    buckets <- replicateM k new
 
     pure $ Gain name maxg nodes buckets
 

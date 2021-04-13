@@ -4,13 +4,13 @@
 {-# LANGUAGE CPP #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
-{-# LANGUAGE BangPatterns #-}
 
 module LSC.Trace where
 
 import Control.Monad.ST
 import Control.Monad.State as Lazy
 import Control.Monad.State.Strict as Strict
+import Data.Functor.Identity
 #ifdef DEBUG
 import Control.Monad.ST.Unsafe
 import System.IO.Unsafe
@@ -18,52 +18,54 @@ import System.IO
 #endif
 
 
-class Trace m a where
+class Monad m => Trace a m where
+
     trace :: a -> m a
+    trace = pure
     -- pointfree usage of `trace :: a -> a -> a`:
     -- - `trace <$> id <*> id`
     --
 
 
 #ifdef DEBUG
-instance Show a => Trace IO a where
+
+instance Show a => Trace a ((->) b) where
+    trace = const . unsafePerformIO . trace
+    {-# NOINLINE trace #-}
+
+instance Show a => Trace a Identity where
+    trace m = pure $ trace m m
+    {-# NOINLINE trace #-}
+
+instance Show a => Trace a IO where
     trace m = m <$ hPutStrLn stderr (show m)
     {-# NOINLINE trace #-}
 
-instance Show a => Trace (ST s) a where
+instance Show a => Trace a (ST s) where
     trace = unsafeIOToST . trace
     {-# NOINLINE trace #-}
 
-instance (Show a, Monad m) => Trace (Lazy.StateT s m) a where
-    trace m = trace m m `seq` pure m
+instance Trace a m => Trace a (Lazy.StateT s m) where
+    trace = lift . trace
     {-# NOINLINE trace #-}
 
-instance (Show a, Monad m) => Trace (Strict.StateT s m) a where
-    trace m = trace m m `seq` pure m
+instance Trace a m => Trace a (Strict.StateT s m) where
+    trace = lift . trace
     {-# NOINLINE trace #-}
 
-instance Show a => Trace ((->) b) a where
-    trace = const . unsafePerformIO . trace
-    {-# NOINLINE trace #-}
 #else
-instance Show a => Trace IO a where
-    trace = pure
-    {-# INLINE trace #-}
 
-instance Show a => Trace (ST s) a where
-    trace = pure
-    {-# INLINE trace #-}
+instance Show a => Trace a ((->) b)
 
-instance (Show a, Monad m) => Trace (Lazy.StateT s m) a where
-    trace = pure
-    {-# INLINE trace #-}
+instance Show a => Trace a Identity
 
-instance (Show a, Monad m) => Trace (Strict.StateT s m) a where
-    trace = pure
-    {-# INLINE trace #-}
+instance Show a => Trace a IO
 
-instance Show a => Trace ((->) b) a where
-    trace = pure
-    {-# INLINE trace #-}
+instance Show a => Trace a (ST s)
+
+instance Trace a m => Trace a (Lazy.StateT s m)
+
+instance Trace a m => Trace a (Strict.StateT s m)
+
 #endif
 

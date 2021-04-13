@@ -3,7 +3,6 @@
 
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE BangPatterns #-}
-{-# LANGUAGE DeriveFunctor #-}
 
 module LSC.GlobalRouting
   ( determineFeedthroughs, globalDetermineFeedthroughs
@@ -18,7 +17,6 @@ import Control.Monad.Loops
 import Control.Monad.ST
 import Data.Array ((//))
 import Data.Bifoldable
-import Data.Copointed
 import Data.Foldable
 import Data.Graph hiding (Vertex, Edge, vertices, edges, components)
 import qualified Data.Graph as Graph
@@ -36,12 +34,10 @@ import Data.Vector
   , fromListN
   , unsafeThaw, unsafeIndex, unsafeUpd
   , accum, accumulate
-  , generate, replicate
+  , generate
   )
 import qualified Data.Vector as Vector
 import Data.Vector.Mutable (modify)
-
-import Prelude hiding (replicate)
 
 import LSC.BinarySearch
 import LSC.Cartesian
@@ -76,14 +72,12 @@ data Vertex a = Vertex
   , abscissa  :: Int
   , net       :: Net
   , cell      :: Gate
-  , payload   :: a
-  } deriving Functor
-
-instance Copointed Vertex where copoint = payload
+  , point     :: a
+  }
 
 
 channel :: Vertex Int -> Int
-channel u | even $ copoint u = pred $ ordinate u
+channel u | even $ point u = pred $ ordinate u
 channel u = succ $ ordinate u
 
 
@@ -100,10 +94,10 @@ edgeDisjoint g n i j = do
 
 
 
-determineFeedthroughs :: NetGraph -> LSC NetGraph
+determineFeedthroughs :: NetGraph -> LSC IO NetGraph
 determineFeedthroughs top = do
     info ["Determine feedthroughs"]
-    liftST . globalDetermineFeedthroughs $ top
+    determinate $ globalDetermineFeedthroughs top
 
 
 -- | O(n^2) in the number of pins
@@ -159,11 +153,11 @@ globalDetermineFeedthroughs top = do
 
         modifySTRef edges $ Seq.deleteAt pos
 
-        cyclic <- copoint u `equivalent` copoint v
+        cyclic <- point u `equivalent` point v
 
         unless cyclic
           $ if ordinate v - ordinate u <= 1 -- ordinate u <= ordinate v
-            then copoint u `union` copoint v
+            then point u `union` point v
             else do
 
                 intersections <- sequence $ generate (ordinate v - ordinate u - 1) $ \ i ->
@@ -174,8 +168,8 @@ globalDetermineFeedthroughs top = do
 
                 sequence_
                   $ Vector.zipWith union
-                    (copoint . snd <$> intersections)
-                    (copoint . fst <$> Vector.tail intersections)
+                    (point . snd <$> intersections)
+                    (point . fst <$> Vector.tail intersections)
                     -- the chain of feedthroughs is interconnected
 
                 -- connect feedthroughs to every pin in the net
@@ -201,19 +195,20 @@ globalDetermineFeedthroughs top = do
     intersections <- readSTRef feedthroughs
 
     let gate :: Vertex a -> Gate
-        gate u = cell u & space %~ relocateL (abscissa u) . relocateB (ss ! ordinate u ^. b)
+        gate u = cell u & geometry %~ relocateL (abscissa u) . relocateB (ss ! ordinate u ^. b)
 
-    pure $ top &~ do
+    pure
+      $ top &~ do
         gates <>= foldMap (gate . fst <$>) intersections
         gates  %= imap (set number)
 
 
 
 
-determineNetSegments :: NetGraph -> LSC NetGraph
+determineNetSegments :: NetGraph -> LSC IO NetGraph
 determineNetSegments top = do
     info ["Determine net segments"]
-    result <- liftST . globalDetermineNetSegments $ top
+    result <- determinate $ globalDetermineNetSegments top
     debugChannelDensities result
     pure result
 
@@ -251,7 +246,7 @@ globalDetermineNetSegments top = do
 
     densities <- unsafeThaw
       . fmap SegmentTree.fromList
-      . accum (flip (:)) (replicate (length rs + 1) [])
+      . accum (flip (:)) (Vector.replicate (length rs + 1) [])
       . map (liftA2 (,) (channel . fst) (bimap abscissa abscissa))
       . filter (not . isBuiltIn)
       . fold
@@ -268,29 +263,30 @@ globalDetermineNetSegments top = do
             (-1, undefined) <$> readSTRef cycles
             -- find the maximum weighted edge
 
-        let n = u ^. to net . identifier
+        let n = net u ^. identifier
 
         Just unburdened <- fmap (delete (u, v)) . preview (ix n) <$> readSTRef edges
 
-        modifySTRef edges  $ HashMap.insert n $ unburdened
+        modifySTRef edges  $ HashMap.insert n unburdened
         modifySTRef cycles $ HashMap.insert n $ edgesInSomeCycle (vertices ^. ix n) unburdened
 
         modify densities (pull (abscissa u, abscissa v)) (channel u)
 
     components <- readSTRef edges
 
-    let locate u | even $ copoint u = (abscissa u, ss ! ordinate u ^. b)
+    let locate u | even $ point u = (abscissa u, ss ! ordinate u ^. b)
         locate u = (abscissa u, ss ! succ (ordinate u) ^. b)
 
     let draw :: Identifier -> Net -> Net
         draw i
-          = (<>~) netSegments
+          = (netSegments <>~)
           . map (view line . bimap locate locate)
           . filter (not . isBuiltIn)
-          . foldMap (upward $ vertices ^. ix i)
+          . foldMap (vertices ^. ix i . to upward)
           $ components ^? ix i
 
-    pure $ top &~ do
+    pure
+      $ top &~ do
         nets %= imap draw
 
 
@@ -308,7 +304,7 @@ simplifiedNetConnection
 buildGraph :: [Edge] -> Graph
 buildGraph
   = liftA2 buildG ((,) <$> minimum . map fst <*> maximum . map snd) ((++) <$> id <*> map swap)
-  . fmap (bimap copoint copoint)
+  . fmap (bimap point point)
 
 
 
@@ -320,7 +316,7 @@ edgesInSomeCycle xs g =
   , v <- g ^. ix u
   , u < v
   , not $ isBuiltIn (xs ! u, xs ! v)
-  , elem v s
+  , v `elem` s
   ] where cyclic (Node s@(_ : _ : _ : _) ss) = s : (cyclic =<< ss)
           cyclic (Node _                 ss) =      cyclic =<< ss
 
@@ -333,23 +329,23 @@ upward xs g = [ (xs ! u, xs ! v) | (u, v) <- Graph.edges g, u < v ]
 
 delete :: Edge -> Graph -> Graph
 delete (u, v) g = g //
-  [ (copoint u, filter (/= copoint v) $ g ^. ix (copoint u))
-  , (copoint v, filter (/= copoint u) $ g ^. ix (copoint v))
+  [ (point u, filter (/= point v) $ g ^. ix (point u))
+  , (point v, filter (/= point u) $ g ^. ix (point v))
   ]
 
 
 
 
-determineRowSpacing :: NetGraph -> LSC NetGraph
+determineRowSpacing :: NetGraph -> LSC IO NetGraph
 determineRowSpacing top
   | all (views netSegments null) (view nets top)
   = do
     info ["Determine row spacing"]
-    pure . oneRowSpacing $ top
+    pure $ oneRowSpacing top
 determineRowSpacing top
   = do
     info ["Determine row spacing"]
-    liftST . densityRowSpacing $ top
+    determinate $ densityRowSpacing top
 
 
 
@@ -364,15 +360,15 @@ oneRowSpacing top
 
   where
 
-    riffle xs = take k (repeat []) ++ intersperse [] xs ++ repeat []
+    riffle xs = replicate k [] ++ intersperse [] xs ++ repeat []
       where k = div (top ^. supercell . rows . to length - 2 * length xs) 2
 
     relocated
-      = zipWith (map . over space . relocateB) (top ^. supercell . rows . to keys)
+      = zipWith (map . over geometry . relocateB) (top ^. supercell . rows . to keys)
       . riffle
       . filter (not . null)
       . toList
-      . foldl' (\ a g -> adjust (g :) (g ^. space . b) a) ([] <$ top ^. supercell . rows)
+      . foldl' (\ a g -> adjust (g :) (g ^. geometry . b) a) ([] <$ top ^. supercell . rows)
       . Vector.filter (not . view fixed)
       $ top ^. gates
 
@@ -384,7 +380,7 @@ densityRowSpacing top = do
 
 
 
-debugChannelDensities :: NetGraph -> LSC ()
+debugChannelDensities :: NetGraph -> LSC IO ()
 debugChannelDensities top = do
 
     debug
@@ -413,7 +409,7 @@ debugChannelDensities top = do
       = fmap (const [])
       $ IntMap.filter id
       $ foldl'
-        (\ a g -> adjust (\ !h -> h || not (g ^. fixed)) (g ^. space . f) a)
+        (\ a g -> adjust (\ !h -> h || not (g ^. fixed)) (g ^. geometry . f) a)
         (False <$ top ^. supercell . rows)
         (top ^. gates)
 

@@ -5,7 +5,7 @@
 {-# LANGUAGE TypeApplications #-}
 
 module Spec.LSC.Model
-  ( maxRowWidth
+  ( maxRowWidth, sizeOfNetGraph
   , Given(..)
   ) where
 
@@ -64,7 +64,8 @@ newtype Given a = Given { say :: a }
 
 instance Arbitrary (Given NetGraph) where
     arbitrary = do
-        gs <- replicateM sizeOfNetGraph $ resize sizeOfNetGraph arbitrary 
+        n <- getSize
+        gs <- replicateM n $ resize n arbitrary 
         rs <- replicateM maxRowCount $ resize maxRowWidth arbitrary
         pure
           $ Given
@@ -108,7 +109,7 @@ instance Arbitrary (Given Gate) where
         pure
           $ Given
           $ def &~ do
-            space .= rect x y (x + w) (y + maxCellHeight)
+            geometry .= rect x y (x + w) (y + maxCellHeight)
             wires .= HashMap.fromList v
 
 

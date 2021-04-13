@@ -57,7 +57,7 @@ hpwl :: Net -> Int
 hpwl
   = liftA2 (+) width height
   . getBoundingBox
-  . foldMap' (implode . view space)
+  . foldMap' (implode . view geometry)
   . view members
 
 
@@ -66,9 +66,9 @@ hpwlDelta :: Foldable f => NetGraph -> f Gate -> Int
 hpwlDelta top gs = sum
   [ width after - width before + height after - height before
   | net <- hyperedges top gs
-  , let before = foldMap' (implode . view space)
+  , let before = foldMap' (implode . view geometry)
                           (view members net)
-  , let after  = foldMap' (\ g -> maybe (g ^. space . to implode) (implode . view space)
+  , let after  = foldMap' (\ g -> maybe (g ^. geometry . to implode) (implode . view geometry)
                                 $ find (\ h -> g ^. number == h ^. number) gs)
                           (view members net)
   ]
@@ -83,7 +83,7 @@ optimalRegion f
 optimalRegion f
   = rect x1 y1 x2 y2
   where
-    boxes = foldr ((:) . foldMap' (implode . view space)) [] f
+    boxes = foldr ((:) . foldMap' (implode . view geometry)) [] f
     [x1, x2] = medianElements $ sort $ foldMap abscissae boxes
     [y1, y2] = medianElements $ sort $ foldMap ordinates boxes
 {-# INLINABLE optimalRegion #-}
@@ -113,8 +113,8 @@ adjacentByPin top g
 
 verticesByRow :: NetGraph -> Net -> [[(Gate, Pin)]]
 verticesByRow top
-  = groupOn (view (_1 . space . b))
-  . sortOn (view (_1 . space . b))
+  = groupOn (view (_1 . geometry . b))
+  . sortOn (view (_1 . geometry . b))
   . verticesOf top
 
 
@@ -124,7 +124,7 @@ verticesByColumn top net =
     | c <- foldMap (columns (row ^. l) (row ^. granularity)) (p ^. geometry)
     ]
   | (g, p) <- verticesOf top net
-  , row <- toList $ top ^. supercell . rows ^? ix (g ^. space . b)
+  , row <- toList $ top ^. supercell . rows ^? ix (g ^. geometry . b)
   ]
 
 
@@ -188,26 +188,32 @@ significantHpwl = Comparison $ \ m n ->
 getSegments :: Vector Gate -> [Vector Gate]
 getSegments
   = map V.fromList
-  . foldMap (wordsBy (view fixed))
-  . map (sortOn (view space))
-  . groupOn (view (space . b))
-  . sortOn (view (space . b))
+  . foldMap (wordsBy (view fixed) . sortOn (view geometry))
+  . groupOn (view (geometry . b))
+  . sortOn (view (geometry . b))
   . toList
 
 
 
 getRows :: Vector Gate -> [Vector Gate]
 getRows
-  = map V.fromList
-  . map (sortOn (view space))
-  . groupOn (view (space . b))
-  . sortOn (view (space . b))
+  = map (V.fromList . sortOn (view geometry))
+  . groupOn (view (geometry . b))
+  . sortOn (view (geometry . b))
   . toList
 
 
 
 getRow :: NetGraph -> Gate -> Maybe Row
-getRow top g = top ^. supercell . rows ^? ix (g ^. space . b)
+getRow top g = top ^. supercell . rows ^? ix (g ^. geometry . b)
+
+
+
+logicBlocks :: Vector Gate -> Vector Gate
+logicBlocks
+  = imap (set number)
+  . V.filter (views feedthrough not)
+  . V.filter (views fixed not)
 
 
 
@@ -217,7 +223,7 @@ inlineGeometry top
   = rebuildHyperedges
   $ top &~ do
     gates .= set number `imap` V.concat
-      [ s ^. gates <&> over space (inline (g ^. space))
+      [ s ^. gates <&> over geometry (inline (g ^. geometry))
       | g <- toList $ top ^. gates
       , s <- toList $ top ^. subcells ^? views identifier ix g
       ]
@@ -230,7 +236,7 @@ assignCellsToRows top
     | top ^. supercell . rows . to null
     = top
 assignCellsToRows top
-    = top & gates %~ fmap (over space $ relocateB =<< closest)
+    = top & gates %~ fmap (over geometry $ relocateB =<< closest)
     where
       rs = top ^. supercell . rows
       closest s
@@ -241,7 +247,7 @@ assignCellsToRows top
 
 assignCellsToColumns :: NetGraph -> NetGraph
 assignCellsToColumns top
-    = top & gates %~ fmap (over space $ relocateL =<< closest)
+    = top & gates %~ fmap (over geometry $ relocateL =<< closest)
     where
       rs = top ^. supercell . rows <&> \ s -> (s ^. l, s ^. granularity)
       closest s
@@ -281,7 +287,7 @@ region :: (Int -> Int) -> (Int -> Int) -> NetGraph -> NetGraph
 region f g top = top &~ do
     supercell %= (over pins . fmap . over geometry . fmap) (bimap f g)
     supercell %= (over tracks . fmap) (bimap (over stabs (S.map f)) (over stabs (S.map g)))
-    gates %= (fmap . over space) (bimap f g)
+    gates %= (fmap . over geometry) (bimap f g)
     nets %= (fmap . over contacts . fmap . fmap . over geometry . fmap) (bimap f g)
     nets %= (fmap . over netSegments . fmap) (bimap f g)
 
@@ -291,7 +297,7 @@ netGraphArea :: NetGraph -> Component' l Int
 netGraphArea top
   = castLayer
   $ getBoundingBox
-  $ foldMap' (BoundingBox . view space) (view gates top) <> foldMap' BoundingBox (outerRim top)
+  $ foldMap' (BoundingBox . view geometry) (view gates top) <> foldMap' BoundingBox (outerRim top)
 
 
 
@@ -316,13 +322,13 @@ feedthroughGate n = def &~ do
 
 
 gateWidth, gateHeight :: Gate -> Int
-gateWidth  = width  . view space
-gateHeight = height . view space
+gateWidth  = width  . view geometry
+gateHeight = height . view geometry
 
 
 
 gateOverlap :: Gate -> Gate -> Bool
-gateOverlap x y = areaOverlap (x ^. space) (y ^. space)
+gateOverlap x y = areaOverlap (x ^. geometry) (y ^. geometry)
 
 
 

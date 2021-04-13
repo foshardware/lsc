@@ -23,7 +23,8 @@ import Spec.LSC.FastDP
 import Spec.LSC.FM
 import Spec.LSC.GlobalRouting
 import Spec.LSC.KGGGP
-import Spec.LSC.Legalize
+import Spec.LSC.Legalization
+import Spec.LSC.Mincut
 import Spec.LSC.Polygon
 import Spec.LSC.SegmentTree
 import Spec.LSC.UnionFind
@@ -51,7 +52,7 @@ main = do
 
 
 lsc :: TestArgs -> TestTree
-lsc opts = testGroup versionString $
+lsc opts = testGroup (versionString ++ ", tree " ++ commitString) $
   [ bsearch
   , deque
   , polygons
@@ -59,7 +60,8 @@ lsc opts = testGroup versionString $
   , unionFind
   , entropy
   , gggp
-  , fm
+  , fms
+  , mincuts
   , legalize
   , fastdp
   , globalRouting

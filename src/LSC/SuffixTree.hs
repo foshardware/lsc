@@ -1,14 +1,13 @@
 -- Copyright 2018 - Andreas Westerwick <westerwick@pconas.de>
 -- SPDX-License-Identifier: GPL-3.0-or-later
 
-{-# LANGUAGE ParallelListComp #-}
-
 module LSC.SuffixTree where
 
 import Control.Monad.ST
 import Data.Foldable hiding (concat)
 import Data.Function (on)
 import Data.List (sortBy)
+import Data.Maybe
 import Data.STRef
 import qualified Data.IntSet as Set
 import Data.Vector
@@ -130,7 +129,7 @@ findmaxr suffixTree goedel ml = do
     let i = _I! t
 
     p' <- maybe 0 succ . Set.lookupLT i <$> readSTRef _S
-    n' <- maybe n   id . Set.lookupGT i <$> readSTRef _S
+    n' <- fromMaybe n  . Set.lookupGT i <$> readSTRef _S
 
     modifySTRef _S $ Set.insert i
 
@@ -177,10 +176,7 @@ radixSortBy f v = runST $ do
 
 
 suffixArraySortBy :: (a -> a -> Ordering) -> Vector a -> Vector a
-suffixArraySortBy f v = runST $ do
-  m <- thaw v
-  Intro.sortBy f m
-  unsafeFreeze m 
+suffixArraySortBy = introSortBy
 
 
 introSortBy :: (a -> a -> Ordering) -> Vector a -> Vector a

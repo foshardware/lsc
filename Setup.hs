@@ -10,27 +10,34 @@ import Data.FileEmbed
 
 import Distribution.Simple
 
+import Language.Haskell.TH.Syntax
+
 import System.IO
 import System.Environment
+import System.Exit
 import System.Process
 
 
 
 status :: FilePath
-status = $(strToExp =<< makeRelativeToProject ".status")
+status = $(LitE . StringL <$> makeRelativeToProject ".status")
 
 
 
 main :: IO ()
 main = do
-  checkGitTree
+
+  checkWorkTree
+  hPutStr stderr "Work tree: "
+  hPutStrLn stderr =<< readFile status
+
   defaultMain
 
 
 
-checkGitTree :: IO ()
-checkGitTree = do
-  writeFile status "cabal build"
+checkWorkTree :: IO ()
+checkWorkTree = do
+  writeFile status "not found"
   git ["status", "--short"] $ \ files -> do
     if null files
     then git ["rev-parse", "HEAD"] $ \ commit -> do

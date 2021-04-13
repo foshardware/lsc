@@ -14,6 +14,7 @@ import Control.Lens
 import Data.Default
 import Data.Foldable
 import Data.HashMap.Lazy as HashMap
+import Data.Maybe
 
 import Language.LEF.Parser (parseLEF)
 import Language.LEF.Syntax
@@ -36,8 +37,8 @@ fromLEF (LEF options _ _ _ _ _ macros) = do
       [ HashMap.singleton name $ def &~ do
         pins .= HashMap.fromList (macroPins tech macroOptions)
         dims .= dimensions tech macroOptions
-        vdd  .= maybe def id (macroVdd tech macroOptions)
-        gnd  .= maybe def id (macroGnd tech macroOptions)
+        vdd  .= fromMaybe def (macroVdd tech macroOptions)
+        gnd  .= fromMaybe def (macroGnd tech macroOptions)
       | Macro name macroOptions _ <- macros
       ]
   stdCells <>= view stdCells tech
@@ -59,8 +60,8 @@ macroGnd _ _ = Nothing
 
 macroPins :: Technology -> [MacroOption] -> [(Identifier, Pin)]
 macroPins tech (MacroPin ident options _ : rest)
-  | not $ MacroPinUse Power `elem` options
-  , not $ MacroPinUse Ground `elem` options
+  | MacroPinUse Power `notElem` options
+  , MacroPinUse Ground `notElem` options
   = (ident, def & identifier .~ ident & dir .~ direction options & geometry .~ macroPorts tech options)
   : macroPins tech rest
 macroPins tech (_ : rest) = macroPins tech rest

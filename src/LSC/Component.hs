@@ -7,21 +7,19 @@
 {-# LANGUAGE Rank2Types #-}
 {-# LANGUAGE DeriveAnyClass #-}
 {-# LANGUAGE DeriveGeneric #-}
-{-# LANGUAGE DeriveFunctor #-}
-{-# LANGUAGE DeriveFoldable #-}
+{-# LANGUAGE DeriveTraversable #-}
 
 module LSC.Component where
 
 import Control.DeepSeq
 import Control.Lens
-import Data.Bifunctor
 import Data.Bifunctor.TH
 import Data.IntSet (IntSet, fromList, toList, union, intersection)
 import Data.Semigroup
 
 import Data.Aeson (FromJSON, ToJSON)
 
-import GHC.Generics
+import GHC.Generics hiding (from, to)
 
 import LSC.Cartesian
 
@@ -125,18 +123,21 @@ data Component l x y = Component
   , _r :: !x
   , _t :: !y
   , _z :: !IntSet
-  , _orientation :: !Orientation
+  , _transformation :: !Orientation
   } deriving
   ( Eq, Ord
-  , Functor, Foldable
+  , Functor
+  , Foldable
+  , Traversable
   , Generic
   , NFData
   , FromJSON, ToJSON
   , Show
   )
 
-$(deriveBifunctor  ''Component)
-$(deriveBifoldable ''Component)
+$(deriveBifunctor    ''Component)
+$(deriveBifoldable   ''Component)
+$(deriveBitraversable ''Component)
 
 type Component' l a = Component l a a
 
@@ -159,10 +160,11 @@ instance (Integral x, Integral y) => Cartesian (Component l) x y where
 
 
 newtype BoundingBox l x y = BoundingBox { getBoundingBox :: Component l x y }
-  deriving (Eq, Functor, Foldable)
+  deriving (Eq, Functor, Foldable, Traversable)
 
-$(deriveBifunctor  ''BoundingBox)
-$(deriveBifoldable ''BoundingBox)
+$(deriveBifunctor     ''BoundingBox)
+$(deriveBifoldable    ''BoundingBox)
+$(deriveBitraversable ''BoundingBox)
 
 type BoundingBox' l a = BoundingBox l a a
 
@@ -182,7 +184,7 @@ instance (Integral x, Integral y) => Cartesian (BoundingBox l) x y where
 
 instance (Ord x, Ord y) => Semigroup (BoundingBox l x y) where
     BoundingBox (Component l1 b1 r1 t1 ls1 o) <> BoundingBox (Component l2 b2 r2 t2 ls2 _)
-      = BoundingBox (Component (min l1 l2) (min b1 b2) (max r1 r2) (max t1 t2) (union ls1 ls2) o)
+      = BoundingBox (Component (min l1 l2) (min b1 b2) (max r1 r2) (max t1 t2) (ls1 `union` ls2) o)
     stimes = stimesIdempotent
 
 instance (Ord x, Ord y, Bounded x, Bounded y) => Monoid (BoundingBox l x y) where
@@ -191,10 +193,11 @@ instance (Ord x, Ord y, Bounded x, Bounded y) => Monoid (BoundingBox l x y) wher
 
 
 newtype Overlap l x y = Overlap { getOverlap :: Component l x y }
-  deriving (Eq, Functor, Foldable)
+  deriving (Eq, Functor, Foldable, Traversable)
 
-$(deriveBifunctor  ''Overlap)
-$(deriveBifoldable ''Overlap)
+$(deriveBifunctor     ''Overlap)
+$(deriveBifoldable    ''Overlap)
+$(deriveBitraversable ''Overlap)
 
 type Overlap' l a = Overlap l a a
 
@@ -219,14 +222,14 @@ makeFieldsNoPrefix ''Component
 
 layers :: Enum l => Lens' a IntSet -> Lens' a [l]
 layers f = lens
-    (map toEnum . toList . view f)
-    (flip $ set f . fromList . map fromEnum)
+    (map (view enum) . toList . view f)
+    (flip $ set f . fromList . map (view (from enum)))
 {-# INLINABLE layers #-}
 
 
 inline :: Cartesian f x y => Component l x y -> f x y -> f x y
-inline a = case a ^. orientation of
-    FN -> moveX (a ^. l + a ^. r) . first negate . bimap (+ a ^. l) (+ a ^. b)
+inline a = case a ^. transformation of
+    FN -> moveX (a ^. l + a ^. r) . bimap (negate . (+ a ^. l)) (+ a ^. b)
     _  -> bimap (+ a ^. l) (+ a ^. b)
 {-# INLINABLE inline #-}
 

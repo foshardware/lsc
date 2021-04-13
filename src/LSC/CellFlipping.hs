@@ -6,7 +6,6 @@ module LSC.CellFlipping where
 import Control.Applicative
 import Control.Lens hiding (_10, _11)
 import Control.Monad
-import Control.Monad.IO.Class
 import Control.Monad.ST
 import Control.Monad.State
 
@@ -20,6 +19,7 @@ import Data.Set (Set, insert, member, notMember)
 import Data.STRef
 import Data.Text (unpack)
 import Data.Vector ((!), slice, filter, zipWith, accum, replicate)
+import qualified Data.Vector as V
 
 import Prelude hiding (filter, zipWith, replicate)
 
@@ -37,7 +37,7 @@ import LSC.Transformer
 
 
 
-type Program = LP PseudoBool Rational
+type Program = LP PseudoBool Coefficient
 
 
 data PseudoBool
@@ -92,7 +92,7 @@ quadraticFormula _ beta
 
 
 
-halfRoof :: Quadratic PseudoBool Int -> LinFunc PseudoBool Rational
+halfRoof :: Quadratic PseudoBool Int -> Linear PseudoBool Coefficient
 halfRoof (Degree0 _b)
   = mempty
 halfRoof (Degree1 i _b0 b1)
@@ -110,7 +110,7 @@ halfRoof (Degree2 i j _b00 b10 b01 b11)
 
 
 
-cellFlipping :: NetGraph -> LSC NetGraph
+cellFlipping :: NetGraph -> LSC IO NetGraph
 cellFlipping top = do
 
     info ["Cell flipping"]
@@ -120,9 +120,9 @@ cellFlipping top = do
 
     let program = obtainProgram top
 
-    liftIO $ debugLP program $ top ^. identifier . to unpack ++ "_cell_flipping.lp"
+    indeterminate $ debugLP program $ top ^. identifier . to unpack ++ "_cell_flipping.lp"
 
-    result <- liftIO $ getSolutionVector program
+    result <- indeterminate $ getSolutionVector program
 
     case result of
 
@@ -139,7 +139,7 @@ cellFlipping top = do
               [ show i ++ " - " ++ g ^. identifier . to unpack ++ ": " ++ show o
               | g <- toList $ top ^. gates
               , let i = g ^. number
-              , let o = solution ^. ix i <> g ^. space . orientation
+              , let o = solution ^. ix i <> g ^. geometry . transformation
               , solution ^. ix i /= N
               ]
 
@@ -150,7 +150,7 @@ cellFlipping top = do
 
             pure
               $ top &~ do
-                gates %= zipWith (over space . (<>~) orientation) solution
+                gates %= zipWith (over geometry . (transformation <>~)) solution
 
 
 
@@ -201,7 +201,7 @@ obtainProgram top
 
   where
 
-    _A = liftA2 constructSegmentTree (endpoints . bifold) fst <$> zipWith (,) alphas alphas'
+    _A = liftA2 constructSegmentTree (endpoints . bifold) fst <$> V.zip alphas alphas'
 
     _J = zipWith (foldl (\ s (i, c) -> adjust i (c:) s))
          (skeleton . endpoints <$> zipWith (++) alphas alphas')
@@ -239,12 +239,11 @@ obtainProgram top
     cells
       = map getDistinct
       . unstableUnique
-      . map (liftA2 distinct (view number) id)
-      . map gate
+      . map (liftA2 distinct (view number) id . gate)
       . foldMap biList
         <$> channels
 
-    ranges = map ((,) <$> succ . view (space . l) <*> pred . view (space . r)) <$> cells
+    ranges = map ((,) <$> succ . view (geometry . l) <*> pred . view (geometry . r)) <$> cells
 
 
     channels
@@ -268,7 +267,7 @@ computeAlpha g p
   = (alpha, alpha')
   where
     alpha = centerX $ coarseBoundingBox $ p ^. geometry <&> containingBox
-    alpha' = g ^. space . l + g ^. space . r - alpha
+    alpha' = g ^. geometry . l + g ^. geometry . r - alpha
 
 
 

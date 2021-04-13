@@ -66,14 +66,19 @@ The latest haddock documentation is available on [github pages](https://foshardw
 `stack exec -- lsc-doc`  
 
 
+## Linting
+
+`stack exec -- hlint src`  
+
+
 ## Stacktraces
 
-`stack build --profile && stack exec --profile -- lsc +RTS -xc -RTS`  
+`stack build --profile --flag=lsc:profile && stack exec --profile -- lsc +RTS -xc -RTS`  
 
 
 ## Profiling
 
-`stack build --profile && stack exec --profile -- lsc +RTS -p -hc -RTS`  
+`stack build --profile --flag=lsc:profile && stack exec --profile -- lsc +RTS -p -hc -RTS`  
 
 
 ## Debug build
@@ -128,7 +133,7 @@ Annotations:
 
 - :whale: Cong, Preas (1992): A new algorithm for standard cell global routing [doi:10.1016/0167-9260(92)90010-v](https://doi.org/10.1016/0167-9260%2892%2990010-v)
 
-### LSC.Legalize
+### LSC.Legalization
 
 - :tiger: Kahng, Markov, Reda (2004): On Legalization of Row-Based Placements [doi:10.1145/988952.989004](https://doi.org/10.1145/988952.989004)
 
@@ -170,3 +175,5 @@ Annotations:
 - Polygon
   - improve ptr data structure
 
+- Tests
+  - concurrent reading from stdin

@@ -5,8 +5,8 @@
 {-# LANGUAGE TupleSections #-}
 
 module Spec.LSC.FM
-    ( fm
-    ) where
+  ( fms
+  ) where
 
 import Control.Lens
 import Control.Monad
@@ -30,12 +30,13 @@ import LSC.BLIF
 import LSC.Entropy
 import LSC.FM
 import LSC.Model
+import LSC.Transformer
 
 
 
 
-fm :: TestTree
-fm = testGroup "FM"
+fms :: TestTree
+fms = testGroup "FM"
   [ testCase "Input routine" fmInputRoutine
   , testCase "Deterministic" fmDeterministic
   , testCase "Balance criterion" fmBalanceCriterion
@@ -61,7 +62,8 @@ fmRealWorld = testGroup "Real world instances"
 fmMulti :: Int -> (V, E) -> IO ()
 fmMulti cut h = do
   let predicate p = cutSize h p <= cut
-  p <- iterateUntil predicate $ nonDeterministic Nothing $ runFMWithGen
+  p <- iterateUntil predicate
+    $ nonDeterministically Nothing . evalFM
     $ fmMultiLevel h coarseningThreshold matchingRatio
   assertBool "unexpected cut size" $ cutSize h p <= cut
 
@@ -70,9 +72,9 @@ fmMulti cut h = do
 fmMatch :: IO ()
 fmMatch = do
   (v, e) <- arbitraryHypergraph 10000
-  clustering <- nonDeterministic Nothing $ runFMWithGen $ do
-      u <- st . randomPermutation (length v) =<< prng
-      st $ match (v, e) matchingRatio u
+  clustering <- nonDeterministically Nothing . evalFM $ do
+      u <- perturbation $ length v
+      cursor $ match (v, e) matchingRatio u
 
   assertEqual "length does not match" (length v) (sum $ size <$> clustering)
   assertBool "elements do not match" $ fold clustering == fromAscList [0 .. length v - 1]
@@ -84,8 +86,8 @@ fmRebalance :: IO ()
 fmRebalance = do
   let v = 10000
   pivot <- generate $ choose (0, v)
-  q <- nonDeterministic Nothing $ runFMWithGen $ do
-    u <- st . randomPermutation v =<< prng
+  q <- nonDeterministically Nothing . evalFM $ do
+    u <- perturbation v
     rebalance $ Bisect
       (fromList [u!i | i <- [0 .. pivot-1]])
       (fromList [u!i | i <- [pivot .. v-1]])
@@ -102,17 +104,17 @@ fmInputRoutine = void $ arbitraryHypergraph 10000
 fmBalanceCriterion :: IO ()
 fmBalanceCriterion = do
 
-  assertBool "t1" $ balanced 420 0 $ bisect [1 .. 210] [211 .. 420]
-  assertBool "t2" $ not $ balanced 420 0 $ bisect [1 .. 105] [106 .. 420]
-  assertBool "t3" $ not $ balanced 420 0 $ bisect [1 .. 319] [320 .. 420]
+  assertBool "t1" $ balanced 0 $ bisect [1 .. 210] [211 .. 420]
+  assertBool "t2" $ not $ balanced 0 $ bisect [1 .. 105] [106 .. 420]
+  assertBool "t3" $ not $ balanced 0 $ bisect [1 .. 319] [320 .. 420]
 
-  assertBool "t4" $ balanced 42 0 $ bisect [1 .. 20] [21 .. 42]
-  assertBool "t5" $ not $ balanced 42 0 $ bisect [1 .. 10] [11 .. 42]
-  assertBool "t6" $ not $ balanced 42 0 $ bisect [1 .. 31] [32 .. 42]
+  assertBool "t4" $ balanced 0 $ bisect [1 .. 20] [21 .. 42]
+  assertBool "t5" $ not $ balanced 0 $ bisect [1 .. 10] [11 .. 42]
+  assertBool "t6" $ not $ balanced 0 $ bisect [1 .. 31] [32 .. 42]
 
   where
 
-    balanced v = flip $ balanceCriterion v
+    balanced = flip balanceCriterion
     bisect p q = Bisect (fromAscList p) (fromAscList q)
 
 
@@ -120,7 +122,7 @@ fmBalanceCriterion = do
 fmDeterministic :: IO ()
 fmDeterministic = do
   h <- stToIO queue_1Hypergraph
-  p <- stToIO $ evalFM $ bipartition h $ bipartitionEven h
+  p <- stToIO $ deterministically . evalFM $ bipartition h $ bipartitionEven h
   assertEqual "cut size" 9 $ cutSize h p
 
 

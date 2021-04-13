@@ -5,6 +5,7 @@
 
 module Spec.LSC.BinarySearch where
 
+import Control.Monad
 import Data.Foldable
 import Data.List (sort)
 
@@ -29,10 +30,11 @@ medians :: TestTree
 medians = testGroup "Median"
   [ testCase "Random input"
       $ do
-        rng <- create
         med <- generate $ choose (1, 100000)
-        assertEqual "even median" (med - 1) . median . sort . toList =<< randomPermutation (2 * med) rng
-        assertEqual "odd median" med . median . sort . toList =<< randomPermutation (2 * med + 1) rng
+        assertEqual "even median" (med - 1) . median . sort . toList
+          <=< nonDeterministically @IO Nothing $ randomPermutation (2 * med)
+        assertEqual "odd median" med . median . sort . toList
+          <=< nonDeterministically @IO Nothing $ randomPermutation (2 * med + 1)
   , testCase "Large input" $ assertEqual "is median" 5000000 $ median [0..10000000 :: Int]
   ]
 

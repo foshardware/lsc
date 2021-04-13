@@ -26,6 +26,7 @@ custom-setup
     , base >=4.9
     , file-embed
     , process
+    , template-haskell
 
 flag debug
   manual: False
@@ -35,9 +36,14 @@ flag glpk
   manual: False
   default: False
 
+flag profile
+  manual: False
+  default: False
+
 library
   exposed-modules:
       LSC
+      LSC.Arrow
       LSC.BinarySearch
       LSC.BLIF
       LSC.Cartesian
@@ -52,13 +58,12 @@ library
       LSC.FM
       LSC.GlobalRouting
       LSC.HigherOrder
-      LSC.Improve
       LSC.Integer
       LSC.KGGGP
       LSC.Layout
       LSC.LEF
-      LSC.Legalize
-      LSC.Logger
+      LSC.Legalization
+      LSC.Log
       LSC.Mincut
       LSC.Model
       LSC.NetGraph
@@ -106,6 +111,7 @@ library
     , firrtl
     , foldl
     , foldl-statistics
+    , free
     , haddock-api
     , hashable
     , hashtables
@@ -121,10 +127,11 @@ library
     , parallel
     , parsec
     , parsec-numbers
-    , pointed
     , pretty-terminal
     , primitive
     , process
+    , profunctors
+    , scientific
     , silently
     , split
     , tasty
@@ -142,7 +149,7 @@ library
     build-depends:
         glpk-hs
   if flag(debug)
-    ghc-options: -g -dcore-lint -ddump-simpl -fforce-recomp -debug
+    ghc-options: -g -dcore-lint -ddump-simpl -debug
     cpp-options: -DDEBUG
   default-language: Haskell2010
 
@@ -180,6 +187,7 @@ executable lsc
     , firrtl
     , foldl
     , foldl-statistics
+    , free
     , haddock-api
     , hashable
     , hashtables
@@ -196,10 +204,11 @@ executable lsc
     , parallel
     , parsec
     , parsec-numbers
-    , pointed
     , pretty-terminal
     , primitive
     , process
+    , profunctors
+    , scientific
     , silently
     , split
     , tasty
@@ -218,12 +227,12 @@ executable lsc
   default-language: Haskell2010
 
 executable lsc-doc
-  main-is: Evid.hs
+  main-is: Evidence.hs
   other-modules:
       Paths_lsc
   hs-source-dirs:
       doc
-  ghc-options: -Wall -threaded -rtsopts -dynamic
+  ghc-options: -Wall -rtsopts
   build-depends:
       SafeSemaphore
     , aeson
@@ -251,6 +260,7 @@ executable lsc-doc
     , firrtl
     , foldl
     , foldl-statistics
+    , free
     , haddock-api
     , hashable
     , hashtables
@@ -267,10 +277,11 @@ executable lsc-doc
     , parallel
     , parsec
     , parsec-numbers
-    , pointed
     , pretty-terminal
     , primitive
     , process
+    , profunctors
+    , scientific
     , silently
     , split
     , tasty
@@ -283,6 +294,10 @@ executable lsc-doc
     , vector
     , vector-algorithms
     , verilog
+  if flag(profile)
+    ghc-options: -threaded
+  else
+    ghc-options: -dynamic -threaded
   default-language: Haskell2010
 
 test-suite lsc-test
@@ -297,7 +312,8 @@ test-suite lsc-test
       Spec.LSC.FM
       Spec.LSC.GlobalRouting
       Spec.LSC.KGGGP
-      Spec.LSC.Legalize
+      Spec.LSC.Legalization
+      Spec.LSC.Mincut
       Spec.LSC.Model
       Spec.LSC.NetGraph
       Spec.LSC.Polygon
@@ -334,6 +350,7 @@ test-suite lsc-test
     , firrtl
     , foldl
     , foldl-statistics
+    , free
     , haddock-api
     , hashable
     , hashtables
@@ -350,10 +367,11 @@ test-suite lsc-test
     , parallel
     , parsec
     , parsec-numbers
-    , pointed
     , pretty-terminal
     , primitive
     , process
+    , profunctors
+    , scientific
     , silently
     , split
     , tasty

@@ -8,13 +8,13 @@ module LSC.Rent where
 import Control.Lens
 import Data.Foldable
 import qualified Data.HashMap.Lazy as HashMap
-import Data.IntSet (size, singleton, delete, union, isSubsetOf)
+import Data.IntSet (IntSet, size, singleton, isSubsetOf)
 import qualified Data.IntSet as Set
-import Data.Vector ((!), accum)
+import Data.Vector (Vector, (!), accum)
 import qualified Data.Vector as Vector
 
-import qualified Control.Foldl as F
-import Control.Foldl.Statistics
+import qualified Control.Foldl as L
+import Control.Foldl.Statistics (lrrSlope, fastLinearReg)
 
 import LSC.Component
 import LSC.Model
@@ -23,33 +23,69 @@ import LSC.Quadtree
 
 
 
-rentExponent :: NetGraph -> Double
-rentExponent top
+type Edges = IntSet
+
+type Block = (IntSet, IntSet)
+
+
+rentExponent :: [Block] -> Double
+rentExponent
   = lrrSlope
-  . F.fold fastLinearReg
-  . fmap (bimap logPlot logPlot)
+  . L.fold fastLinearReg
+  . map (bimap (log . fromIntegral . size) (log . fromIntegral . size))
   . filter (not . Set.null . snd)
-  . fmap complete
+
+
+
+spatialRentExponent :: NetGraph -> Double
+spatialRentExponent whole
+  = rentExponent
+  . tail
+  . map (mergeBlock edges)
   . datapoints id
   . constructQuadtree (top ^. supercell . geometry . to coarseBoundingBox . to hypothenuse)
   . toList
-  . imap (\ i xs -> (view gates top ! i ^. space, (singleton i, delete i xs)))
-  . accum union (mempty <$ top ^. gates)
-  $ [ (k, singleton i)
-    | (i, n) <- [0 ..] `zip` views nets toList top
-    , k <- views contacts HashMap.keys n
-    , k >= 0
-    ]
+  . imap (\ i xs -> (view gates top ! i ^. geometry, xs))
+  $ vertices
+  where
+    (vertices, edges) = blockGraph top
+    top = rebuildHyperedges $ over gates logicBlocks whole
+
+
+
+
+blockGraph :: NetGraph -> (Vector Block, Vector Edges)
+blockGraph top = (vertices, edges)
 
   where
 
-    logPlot = log . fromIntegral . (* 2) . size
-
-    complete (gs, ns)
-      | size gs < 2
-      = (gs, ns)
-    complete (gs, ns)
-      = (gs, Set.filter (\ i -> not $ view (ix i) edges `isSubsetOf` gs) ns)
-
     edges = views contacts (Set.fromList . HashMap.keys) <$> views nets (Vector.fromList . toList) top
+
+    vertices
+      = imap (\ i xs -> (singleton i, xs))
+      . accum (<>) (mempty <$ top ^. gates)
+      $ [ (k, singleton i)
+        | (i, n) <- [0 ..] `zip` views nets toList top
+        , k <- views contacts HashMap.keys n
+        , k >= 0
+        ]
+
+
+
+proportion :: Foldable f => (Vector Block, Vector Edges) -> f Gate -> Block
+proportion (vertices, edges) = mergeBlock edges . foldMap (getBlock vertices)
+{-# INLINABLE proportion #-}
+
+
+getBlock :: Vector Block -> Gate -> Block
+getBlock = flip $ view . ix . view number
+
+
+mergeBlock :: Vector Edges -> Block -> Block
+mergeBlock _ (gs, ns)
+  | size gs <= 1
+  = (gs, ns)
+mergeBlock e (gs, ns)
+  = (gs, Set.filter (\ i -> not $ view (ix i) e `isSubsetOf` gs) ns)
+
 

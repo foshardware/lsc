@@ -29,21 +29,16 @@ sourceExtensions =
   ]
 
 
-workTreeExceptions :: [String]
-workTreeExceptions =
-  [ ""
-  , "cabal build"
-  , "dirty"
-  ]
-
-
 
 main :: IO ()
 main
   = do
 
-    when (commitString `elem` workTreeExceptions)
-      $ die $ "commit string is <" ++ commitString ++">, do you have outstanding changes?"
+    when (commitString == "dirty1")
+      $ die $ "Work tree is dirty, commit your changes first."
+
+    when (commitString `elem` ["", "not found"])
+      $ die $ "Work tree absent."
 
     paths <- getFilesRecursive "src"
 

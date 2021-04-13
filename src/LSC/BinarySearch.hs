@@ -61,8 +61,8 @@ median
 
 medianElements :: [a] -> [a]
 medianElements zs = go zs zs
-  where go (x : _)         (_ : []) = [x]
-        go (x : y : _) (_ : _ : []) = [x, y]
-        go (_ : xs)    (_ : _ : ys) = go xs ys
+  where go (x : _)        [_] = [x]
+        go (x : y : _) [_, _] = [x, y]
+        go (_ : xs) (_ : _ : ys) = go xs ys
         go _ _ = error "medianElements: empty list"
 

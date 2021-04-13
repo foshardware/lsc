@@ -63,12 +63,12 @@ fromDEF (DEF options _ area rs ts _ _ cs ps ns _)
 
     edges = HashMap.fromList [ (n ^. identifier, n) | n <- fromNet gate <$> toList ns ]
 
-    gate i = maybe def id $ byIdentifier ^? ix i
+    gate i = fromMaybe def $ byIdentifier ^? ix i
     byIdentifier = HashMap.fromList [ (i, g) | (DEF.Component i _ _, g) <- toList $ V.zip cs nodes ]
 
 
 
-fromNet :: (Ident -> Gate) -> DEF.Net -> LSC.Net
+fromNet :: (Identifier -> Gate) -> DEF.Net -> LSC.Net
 fromNet gate (DEF.Net i cs _)
   = LSC.Net i
     mempty
@@ -147,7 +147,7 @@ fromRow :: DEF.Row -> LSC.Row
 fromRow (DEF.Row _ i x y o ss _ w _)
   = LSC.Row i (-1)
     (fromIntegral x) (fromIntegral y)
-    (fromOrientation o) (fromIntegral ss) (fromIntegral w)
+    (fromIntegral ss) (fromIntegral w) (fromOrientation o)
 
 
 
@@ -155,12 +155,12 @@ fromComponent :: DEF.Component -> Gate
 fromComponent (DEF.Component _ j placed@(Just (Fixed _ _)))
   = def &~ do
     identifier .= j
-    space .= maybe (rect 0 0 0 0) fromPlaced placed
+    geometry .= maybe (rect 0 0 0 0) fromPlaced placed
     fixed .= True
 fromComponent (DEF.Component _ j placed)
   = def &~ do
     identifier .= j
-    space .= maybe (rect 0 0 0 0) fromPlaced placed
+    geometry .= maybe (rect 0 0 0 0) fromPlaced placed
 
 
 
@@ -173,7 +173,7 @@ fromPlaced _ = rect 0 0 0 0
 
 
 
-fromOrientation :: Identifier -> Orientation
+fromOrientation :: DEF.Orientation -> LSC.Orientation
 fromOrientation  "N" = N
 fromOrientation  "S" = S
 fromOrientation  "W" = W
@@ -220,7 +220,7 @@ toRow x
     (enumeratedRow (x ^. number))
     (view identifier x)
     (fromIntegral $ view l x) (fromIntegral $ view b x)
-    (toOrientation $ view orientation x)
+    (toOrientation $ view transformation x)
     (fromIntegral $ view cardinality x) 1
     (fromIntegral $ view granularity x) 0
 
@@ -270,14 +270,14 @@ toComponent g
   = DEF.Component
     (enumeratedGate g)
     (g ^. identifier)
-    (Just $ place $ g ^. space)
+    (Just $ place $ g ^. geometry)
   where
     place :: Component' LSC.Layer Int -> DEF.Placed
     place x
       | g ^. fixed
-      = Fixed (fromIntegral (x ^. l), fromIntegral (x ^. b)) (toOrientation (x ^. orientation))
+      = Fixed (fromIntegral (x ^. l), fromIntegral (x ^. b)) (toOrientation (x ^. transformation))
     place x
-      = Placed (fromIntegral (x ^. l), fromIntegral (x ^. b)) (toOrientation (x ^. orientation))
+      = Placed (fromIntegral (x ^. l), fromIntegral (x ^. b)) (toOrientation (x ^. transformation))
 
 
 
@@ -302,12 +302,12 @@ toPin pin
                  | p <- polygon =<< pin ^. geometry
                  ])
     (listToMaybe [ Fixed (fromIntegral $ p^.l, fromIntegral $ p^.b)
-                         (toOrientation $ p ^. orientation)
+                         (toOrientation $ p ^. transformation)
                  | p <- polygon =<< pin ^. geometry
                  ])
 
 
-toOrientation :: Orientation -> Identifier
+toOrientation :: LSC.Orientation -> DEF.Orientation
 toOrientation N = "N"
 toOrientation S = "S"
 toOrientation W = "W"

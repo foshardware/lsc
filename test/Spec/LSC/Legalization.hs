@@ -1,10 +1,10 @@
 -- Copyright 2018 - Andreas Westerwick <westerwick@pconas.de>
 -- SPDX-License-Identifier: GPL-3.0-or-later
 
-module Spec.LSC.Legalize
-    ( legalize
-    , referenceRowLegalization
-    ) where
+module Spec.LSC.Legalization
+  ( legalize
+  , referenceRowLegalization
+  ) where
 
 import Control.Applicative
 import Control.Lens
@@ -21,7 +21,7 @@ import Test.Tasty.QuickCheck
 
 import LSC.Cartesian
 import LSC.Component
-import LSC.Legalize
+import LSC.Legalization
 import LSC.Model
 import LSC.NetGraph
 
@@ -37,7 +37,7 @@ legalize = testGroup "Legalize"
       $ replicate 20
       $ do
 
-        Given top <- generate arbitrary
+        Given top <- generate $ resize sizeOfNetGraph arbitrary
 
         jug <- stToIO $ views gates getRows <$> rowJuggling 1 top
 
@@ -58,7 +58,7 @@ legalize = testGroup "Legalize"
       $ replicate 10
       $ do
 
-        Given top <- generate arbitrary
+        Given top <- generate $ resize sizeOfNetGraph arbitrary
 
         jug <- stToIO $ rowJuggling 1 top
 
@@ -77,7 +77,7 @@ legalize = testGroup "Legalize"
           $ sum . fmap gateWidth <$> grp
 
         assertBool "unsorted"
-          $ all (all (\ (g, h) -> g ^. space . l <= h ^. space . l) . liftA2 V.zip id V.tail)
+          $ all (all (\ (g, h) -> g ^. geometry . l <= h ^. geometry . l) . liftA2 V.zip id V.tail)
           $ grp
 
         assertBool "overlaps"
@@ -87,7 +87,7 @@ legalize = testGroup "Legalize"
   , testCase "Reference implementation"
       $ do
 
-        Given top <- generate arbitrary
+        Given top <- generate $ resize sizeOfNetGraph arbitrary
 
         jug <- stToIO $ rowJuggling 1 top
 
@@ -96,7 +96,7 @@ legalize = testGroup "Legalize"
         ref <- stToIO $ referenceRowLegalization jug `mapM` views gates getRows jug
 
         assertBool "equivalent"
-          $ fmap (view space <$>) ref == fmap (view space <$>) grp
+          $ fmap (view geometry <$>) ref == fmap (view geometry <$>) grp
   ]
 
 
@@ -105,13 +105,13 @@ referenceRowLegalization :: NetGraph -> Vector Gate -> ST s (Vector Gate)
 referenceRowLegalization   _ gs | null gs = pure gs
 referenceRowLegalization top gs = do
 
-    let row = top ^. supercell . rows ^? ix (V.head gs ^. space . b)
+    let row = top ^. supercell . rows ^? ix (V.head gs ^. geometry . b)
 
     let res = maybe 1 (view granularity) row
         off = maybe 0 (subtract res . view l) row `div` res
 
-    let w = (`div` res) . width . view space <$> gs
-        x = subtract off . (`div` res) . view (space . l) <$> gs
+    let w = (`div` res) . width . view geometry <$> gs
+        x = subtract off . (`div` res) . view (geometry . l) <$> gs
 
     let n = maybe 1 (succ . view cardinality) row
         m = length gs
@@ -140,7 +140,7 @@ referenceRowLegalization top gs = do
     shortestPath <- topologicalShortestPath minPerb graph target
 
     pure $ unsafeUpd gs
-      [ (i, gs ! i & space %~ relocateL ((pos + off) * res))
+      [ (i, gs ! i & geometry %~ relocateL ((pos + off) * res))
       | (i, pos) <- tail . map head . groupBy (on (==) fst) . map site $ shortestPath
       ]
 

@@ -18,7 +18,7 @@ import LSC.Transformer
 
 
 
-gateGeometry :: NetGraph -> LSC NetGraph
+gateGeometry :: NetGraph -> LSC Identity NetGraph
 gateGeometry top = do
     tech <- technology
     assume ("invalid scale factor: " ++ views scaleFactor show tech)
@@ -36,14 +36,14 @@ rebuildGates cells top
     fh = maximum $ cells <&> snd . view dims
     fw = maximum $ top ^. supercell . rows <&> view granularity
 
-    expand g | g ^. feedthrough = g & space %~ \ x -> x & r .~ x^.l + fw & t .~ x^.b + fh
-    expand g = g & space %~ maybe id drag (cells ^? views identifier ix g . dims)
+    expand g | g ^. feedthrough = g & geometry %~ \ x -> x & r .~ x^.l + fw & t .~ x^.b + fh
+    expand g = g & geometry %~ maybe id drag (cells ^? views identifier ix g . dims)
 
     drag (w, h) p = p & r .~ view l p + w & t .~ view b p + h
 
 
 
-pinGeometry :: NetGraph -> LSC NetGraph
+pinGeometry :: NetGraph -> LSC Identity NetGraph
 pinGeometry top = do
     tech <- technology
     assume ("invalid scale factor: " ++ views scaleFactor show tech)
@@ -60,11 +60,11 @@ rebuildPins cells top
 
     align g p
       | g ^. feedthrough
-      = p & geometry .~ pure (g ^. space . to simplePolygon)
+      = p & geometry .~ pure (g ^. geometry . to simplePolygon)
     align g p
       = maybe p (absolute g) $ cells ^? views identifier ix g . pins . views identifier ix p
 
     absolute g
       = over geometry . fmap
-      $ inline (g ^. space)
+      $ inline (g ^. geometry)
 

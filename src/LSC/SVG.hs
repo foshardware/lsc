@@ -5,9 +5,7 @@
 
 module LSC.SVG where
 
-import Control.Applicative
 import Control.Lens
-
 import Data.Foldable
 import Data.Hashable
 import Data.IntSet (elems)
@@ -83,13 +81,15 @@ plot scale
   | scale <= 0
   = error $ "plot: invalid scaling factor " ++ show scale
 plot scale
-  = svgDoc . region pixelated pixelated . liftA2 id quadrantI id
+  = svgDoc
+  . region pixelated pixelated
+  . (quadrantI <*> id)
   where
     pixelated
       = round . (/ scale)
       . fromIntegral . (* pixelsPerMicron)
     quadrantI
-      = liftA2 region ((+) . abs . min 0 . view l) ((+) . abs . min 0 . view b)
+      = (region <$> (+) . abs . min 0 . view l <*> (+) . abs . min 0 . view b)
       . netGraphArea
 
 
@@ -97,8 +97,8 @@ plot scale
 svgDoc :: NetGraph -> Svg
 svgDoc top = S.docTypeSvg
   ! A.version "1.1"
-  ! A.width  (toValue $ area ^. r)
-  ! A.height (toValue $ area ^. t)
+  ! A.width  (views r toValue area)
+  ! A.height (views t toValue area)
   $ do
     track area `mapM_` view (supercell . tracks) top
     place `mapM_` view gates top
@@ -111,16 +111,15 @@ svgDoc top = S.docTypeSvg
 
 
 place :: Gate -> Svg
-place g = do
+place gate = do
 
-    let a = g ^. space
+    let area = gate ^. geometry
 
-    let d = rotation $ a ^. orientation
-        (x, y) = label a
+    let (x, y) = label area
+        d = area ^. transformation . to rotate
+        k = height area `div` 9
 
-    let k = height a `div` 9
-
-    drawA ("black", gateColor g) a
+    drawA ("black", gateColor gate) area
 
     S.text_
       ! A.x (toValue x)
@@ -128,26 +127,26 @@ place g = do
       ! A.fontSize (toValue k)
       ! A.fontFamily "monospace"
       ! A.transform (toValue $ "rotate(" <> decimal d <> " " <> decimal x <> "," <> decimal y <> ")")
-      $ toSvg $ views number decimal g <> ": " <> views identifier (forShort 8) g
+      $ toSvg $ views number decimal gate <> ": " <> views identifier (forShort 8) gate
 
 
 label :: Area -> (Int, Int)
-label a = case a ^. orientation of
-    FN -> (a ^. r - height a `div` 32, a ^. t - height a `div` 24)
-    _  -> (a ^. l + height a `div` 32, a ^. b + height a `div` 24)
+label area = case area ^. transformation of
+    FN -> (area ^. r - height area `div` 32, area ^. t - height area `div` 24)
+    _  -> (area ^. l + height area `div` 32, area ^. b + height area `div` 24)
 
 
-rotation :: Orientation -> Int
-rotation FN = 270
-rotation  _ = 90
+rotate :: Orientation -> Int
+rotate FN = 270
+rotate  _ = 90
 
 
 
 route :: Net -> Svg
-route n
-  | views geometry null n
+route net
+  | views geometry null net
   = do
-    drawL (views identifier identColor n) `mapM_` view netSegments n
+    drawL (views identifier identColor net) `mapM_` view netSegments net
 
 route _
   = do
@@ -156,12 +155,12 @@ route _
 
 
 track :: Area -> Either Track Track -> Svg
-track a (Right x)
+track area (Right x)
   = for_ (x ^. stabs . to elems)
-  $ drawL (x ^. layers z . to layerColor) . vertical (a ^. t)
-track a (Left y)
+  $ drawL (x ^. layers z . to layerColor) . vertical (area ^. t)
+track area (Left y)
   = for_ (y ^. stabs . to elems)
-  $ drawL (y ^. layers z . to layerColor) . horizontal (a ^. r)
+  $ drawL (y ^. layers z . to layerColor) . horizontal (area ^. r)
 
 
 horizontal, vertical :: Int -> Int -> Marker
@@ -190,11 +189,11 @@ drawP p = S.polygon
 
 
 drawA :: Args -> Area -> Svg
-drawA (border, background) a = S.rect
-  ! A.x (toValue $ a ^. l)
-  ! A.y (toValue $ a ^. b)
-  ! A.width (toValue $ width a)
-  ! A.height (toValue $ height a)
+drawA (border, background) area = S.rect
+  ! A.x (views l toValue area)
+  ! A.y (views b toValue area)
+  ! A.width (toValue $ width area)
+  ! A.height (toValue $ height area)
   ! A.stroke border
   ! A.fill background
 

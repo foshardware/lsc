@@ -6,12 +6,10 @@
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE DeriveAnyClass #-}
 {-# LANGUAGE DeriveGeneric #-}
-{-# LANGUAGE DeriveFunctor #-}
-{-# LANGUAGE DeriveFoldable #-}
+{-# LANGUAGE DeriveTraversable #-}
 
 module LSC.Cartesian where
 
-import Control.Applicative
 import Control.DeepSeq
 import Control.Lens
 
@@ -46,17 +44,17 @@ class (Bifunctor f, Bifoldable f, Integral x, Integral y) => Cartesian f x y whe
     center = (,) <$> centerX <*> centerY
 
     centerX :: f x y -> x
-    centerX = (`div` 2) . liftA2 (+) minX maxX
+    centerX = (`div` 2) . ((+) <$> minX <*> maxX)
 
     centerY :: f x y -> y
-    centerY = (`div` 2) . liftA2 (+) minY maxY
+    centerY = (`div` 2) . ((+) <$> minY <*> maxY)
 
 
     relocateX :: x -> f x y -> f x y
-    relocateX x = first (+ x) . liftA2 (first . subtract) centerX id
+    relocateX x = first (+ x) . (first . subtract <$> centerX <*> id)
 
     relocateY :: y -> f x y -> f x y
-    relocateY y = second (+ y) . liftA2 (second . subtract) centerY id
+    relocateY y = second (+ y) . (second . subtract <$> centerY <*> id)
 
 
     minX, maxX :: f x y -> x
@@ -81,41 +79,41 @@ class (Bifunctor f, Bifoldable f, Integral x, Integral y) => Cartesian f x y whe
 
 
     relocateL, relocateR :: x -> f x y -> f x y
-    relocateL x = first (+ x) . liftA2 (first . subtract) minX id
-    relocateR x = first (+ x) . liftA2 (first . subtract) maxX id
+    relocateL x = first (+ x) . (first . subtract <$> minX <*> id)
+    relocateR x = first (+ x) . (first . subtract <$> maxX <*> id)
 
     relocateB, relocateT :: y -> f x y -> f x y
-    relocateB y = second (+ y) . liftA2 (second . subtract) minY id
-    relocateT y = second (+ y) . liftA2 (second . subtract) maxY id
+    relocateB y = second (+ y) . (second . subtract <$> minY <*> id)
+    relocateT y = second (+ y) . (second . subtract <$> maxY <*> id)
 
 
     abscissae :: f x y -> [x]
-    abscissae = bifoldr (:) (flip const) []
+    abscissae = bifoldr (:) (const id) []
 
     ordinates :: f x y -> [y]
-    ordinates = bifoldr (flip const) (:) []
+    ordinates = bifoldr (const id) (:) []
 
+
+
+instance (Integral x, Integral y) => Cartesian (,) x y
 
 
 data Line x y = Line (x, y) (x, y) deriving
   ( Eq, Ord
-  , Functor, Foldable
+  , Functor
+  , Foldable
+  , Traversable
   , Generic
   , NFData
   , FromJSON, ToJSON
   , Show
   )
 
-$(deriveBifunctor  ''Line)
-$(deriveBifoldable ''Line)
+$(deriveBifunctor     ''Line)
+$(deriveBifoldable    ''Line)
+$(deriveBitraversable ''Line)
 
 type Line' a = Line a a
-
-line :: Iso' ((x, y), (x, y)) (Line x y)
-line = iso
-  (\ ((x1, y1), (x2, y2)) -> (Line (x1, y1) (x2, y2)))
-  (\ (Line (x1, y1) (x2, y2)) -> ((x1, y1), (x2, y2)))
-
 
 instance (Integral x, Integral y) => Cartesian Line x y where
 
@@ -127,6 +125,9 @@ instance (Integral x, Integral y) => Cartesian Line x y where
 
 
 
-instance (Integral x, Integral y) => Cartesian (,) x y
+line :: Iso ((a, b), (a, b)) ((x, y), (x, y)) (Line a b) (Line x y)
+line = iso
+  (\ ((x1, y1), (x2, y2)) ->  Line (x1, y1) (x2, y2) )
+  (\ (Line (x1, y1) (x2, y2)) -> ((x1, y1), (x2, y2)))
 
 

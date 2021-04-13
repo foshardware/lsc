@@ -23,6 +23,7 @@ import Data.Default
 import Data.HashMap.Lazy (HashMap, unionWith)
 import Data.IntMap (IntMap)
 import Data.IntSet (IntSet)
+import Data.Scientific
 import Data.Semigroup
 import Data.Text (Text)
 import qualified Data.Text.Lazy as Lazy
@@ -35,7 +36,7 @@ import System.IO
 
 import LSC.Cartesian
 import LSC.Component
-import LSC.Logger
+import LSC.Log
 import LSC.Polygon
 
 
@@ -119,7 +120,6 @@ instance Monoid Net where
   mempty = Net "" mempty mempty mempty mempty
 
 
-
 type Number = Int
 
 type Identifier = Text
@@ -135,7 +135,7 @@ base16Identifier
 
 data Gate = Gate
   { _identifier  :: Identifier
-  , _space       :: Component' Layer Int
+  , _geometry    :: Component' Layer Int
                     -- | Key: Pin, Value: Net
   , _wires       :: HashMap Identifier Identifier
   , _number      :: Number
@@ -146,7 +146,7 @@ data Gate = Gate
 instance Default Gate where
   def = Gate
       { _identifier  = mempty
-      , _space       = rect 0 0 0 0
+      , _geometry    = rect 0 0 0 0
       , _wires       = mempty
       , _number      = -1
       , _fixed       = False
@@ -166,9 +166,9 @@ data Row = Row
   , _number      :: Number 
   , _l           :: Int
   , _b           :: Int
-  , _orientation :: Orientation
   , _cardinality :: Int
   , _granularity :: Int
+  , _transformation :: Orientation
   } deriving (Generic, NFData, FromJSON, ToJSON, Show)
 
 instance Default Row where
@@ -177,9 +177,9 @@ instance Default Row where
         , _number      = -1
         , _l           = 0
         , _b           = 0
-        , _orientation = mempty
         , _cardinality = 0
         , _granularity = 1
+        , _transformation = mempty
         }
 
 
@@ -190,6 +190,7 @@ data AbstractCell = AbstractCell
   , _vdd       :: Pin
   , _gnd       :: Pin
   , _pins      :: HashMap Identifier Pin
+  , _pstar     :: Maybe Double
   } deriving (Generic, NFData, FromJSON, ToJSON, Show)
 
 instance Default AbstractCell where
@@ -200,6 +201,7 @@ instance Default AbstractCell where
       , _vdd      = def
       , _gnd      = def
       , _pins     = mempty
+      , _pstar    = Nothing
       }
 
 
@@ -243,7 +245,7 @@ instance Default Pin where
 
 
 data Technology = Technology
-  { _scaleFactor    :: Double
+  { _scaleFactor    :: Scientific
   , _stdCells       :: HashMap Identifier Cell
   } deriving (Generic, NFData, FromJSON, ToJSON, Show)
 
@@ -260,30 +262,31 @@ type Workers = MSem Word
 
 createWorkers :: Word -> IO (Maybe Workers)
 createWorkers 0 = pure Nothing
-createWorkers 1 = pure Nothing
 createWorkers n = Just <$> MSem.new n
 
 rtsWorkers :: IO (Maybe Workers)
-rtsWorkers = createWorkers . fromIntegral . max 0 =<< getNumCapabilities
+rtsWorkers = createWorkers . fromIntegral . max 1 =<< getNumCapabilities
 
 
 data CompilerOpts = CompilerOpts
-  { _rowCapacity   :: Double
+  { _rowCapacity   :: Double 
   , _logLevel      :: LogLevel
-  , _enableVisuals :: Bool
+  , _visuals       :: Bool
   , _iterations    :: Word
   , _workers       :: Maybe Workers
-  , _seedHandle    :: Maybe Handle
+  , _entropy       :: Maybe Handle
+  , _pstar         :: Bool
   }
 
 instance Default CompilerOpts where
   def = CompilerOpts
       { _rowCapacity   = 1
       , _logLevel      = Warning
-      , _enableVisuals = False
+      , _visuals       = False
       , _iterations    = 1
       , _workers       = Nothing
-      , _seedHandle    = Nothing
+      , _entropy       = Nothing
+      , _pstar         = False
       }
 
 
@@ -310,4 +313,14 @@ makeFieldsNoPrefix ''Net
 makeFieldsNoPrefix ''CompilerOpts
 
 makeFieldsNoPrefix ''Technology
+
+
+
+instance Plated RTL where
+  plate f g = set subcircuits <$> views subcircuits (traverse f) g <*> pure g
+
+
+instance Plated NetGraph where
+  plate f g = set subcells <$> views subcells (traverse f) g <*> pure g
+
 

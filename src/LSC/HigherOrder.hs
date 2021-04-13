@@ -18,8 +18,8 @@ module LSC.HigherOrder
   , module Data.Foldable
   ) where
 
-import Control.Applicative (liftA2)
-import Control.Monad (join, (<=<), when, unless)
+import Control.Applicative (liftA2, (<|>))
+import Control.Monad (join, (<=<), (>=>), when, unless, void)
 import Data.Foldable
 
 

@@ -14,6 +14,9 @@ flags:
   glpk:
     default: false
     manual: false
+  profile:
+    default: false
+    manual: false
   debug:
     default: false
     manual: false
@@ -25,6 +28,7 @@ custom-setup:
   dependencies:
   - base >= 4.9
   - file-embed
+  - template-haskell
   - Cabal
   - process
 
@@ -52,6 +56,7 @@ dependencies:
 - file-embed
 - filepath
 - firrtl
+- free
 - haddock-api
 - hashable
 - hashtables
@@ -67,11 +72,11 @@ dependencies:
 - parallel
 - parsec
 - parsec-numbers
-- pointed
 - pretty-terminal
 - primitive
-- process
+- profunctors
 - SafeSemaphore
+- scientific
 - silently
 - split
 - foldl
@@ -105,7 +110,6 @@ library:
     - -g
     - -dcore-lint
     - -ddump-simpl
-    - -fforce-recomp
     - -debug
 
 executables:
@@ -131,15 +135,22 @@ executables:
       - -debug
 
   lsc-doc:
-    main:                Evid.hs
+    main:                Evidence.hs
     source-dirs:         doc
     dependencies:
     - lsc
     ghc-options:
     - -Wall
-    - -threaded
     - -rtsopts
-    - -dynamic
+    when:
+    - condition: flag(profile)
+      then:
+        ghc-options:
+        - -threaded
+      else:
+        ghc-options:
+        - -dynamic
+        - -threaded
 
 tests:
   lsc-test:

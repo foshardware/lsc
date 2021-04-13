@@ -1,6 +1,8 @@
 -- Copyright 2018 - Andreas Westerwick <westerwick@pconas.de>
 -- SPDX-License-Identifier: GPL-3.0-or-later
 
+{-# LANGUAGE TypeApplications #-}
+
 module Spec.LSC.Entropy
     ( entropy
     ) where
@@ -27,7 +29,7 @@ testRandomPermutation :: IO ()
 testRandomPermutation = do
   n <- generate $ choose (1000, 10000)
   v <- pure $ V.generate n id
-  u <- randomPermutation n =<< create
+  u <- nonDeterministically @IO Nothing $ randomPermutation n
   a <- V.thaw u
   V.sort a
   w <- V.freeze a

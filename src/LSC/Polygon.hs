@@ -4,11 +4,9 @@
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE FlexibleInstances #-}
-{-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE FunctionalDependencies #-}
 {-# LANGUAGE DeriveGeneric #-}
-{-# LANGUAGE DeriveFunctor #-}
-{-# LANGUAGE DeriveFoldable #-}
+{-# LANGUAGE DeriveTraversable #-}
 {-# LANGUAGE DeriveAnyClass #-}
 
 module LSC.Polygon
@@ -45,14 +43,16 @@ data Polygon l x y = Polygon
   , _path :: Vector (x, y)
   } deriving
   ( Generic
-  , Functor, Foldable
+  , Functor
+  , Foldable, Traversable
   , NFData
   , FromJSON, ToJSON
   , Show
   )
 
-$(deriveBifunctor  ''Polygon)
-$(deriveBifoldable ''Polygon)
+$(deriveBifunctor     ''Polygon)
+$(deriveBifoldable    ''Polygon)
+$(deriveBitraversable ''Polygon)
 
 instance (Integral x, Integral y) => Cartesian (Polygon l) x y
 

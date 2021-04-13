@@ -4,12 +4,12 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE TemplateHaskell #-}
-{-# LANGUAGE DeriveFunctor #-}
-{-# LANGUAGE DeriveFoldable #-}
+{-# LANGUAGE DeriveTraversable #-}
 
 module LSC.Quadtree where
 
 import Data.Bifunctor.TH
+import Data.Matrix (Matrix, nrows, ncols, getElem)
 import Data.List (partition)
 
 import LSC.Cartesian
@@ -23,10 +23,11 @@ threshold = 2
 data Quadtree a f x y
   = Leaf [(f x y, a)]
   | Quad (Line x y) (Quadtree a f x y) (Quadtree a f x y) (Quadtree a f x y) (Quadtree a f x y)
-  deriving (Functor, Foldable, Show)
+  deriving (Functor, Foldable, Traversable, Show)
 
-$(deriveBifunctor  ''Quadtree)
-$(deriveBifoldable ''Quadtree)
+$(deriveBifunctor     ''Quadtree)
+$(deriveBifoldable    ''Quadtree)
+$(deriveBitraversable ''Quadtree)
 
 type Quadtree' a f x = Quadtree a f x x
 
@@ -72,4 +73,41 @@ datapoints f = go
         p3@(m3 : _) = go q3
         p4@(m4 : _) = go q4
 {-# INLINABLE datapoints #-}
+
+
+fromMatrix :: Matrix a -> Quadtree a (,) Int Int
+fromMatrix m = go (Line (1, 1) (ncols m, nrows m))
+  where
+    go (Line (x1, y1) (x2, y2))
+      | x2 - x1 <= 0 || y2 - y1 <= 0
+      = Leaf []
+    go (Line (x1, y1) (x2, y2))
+      | 1 <- x2 - x1
+      , 1 <- y2 - y1
+      = Quad (Line (x1, y1) (x2, y2))
+        (Leaf [((x2, y2), getElem y2 x2 m)])
+        (Leaf [((x1, y2), getElem y2 x1 m)])
+        (Leaf [((x1, y1), getElem y1 x1 m)])
+        (Leaf [((x2, y1), getElem y1 x2 m)])
+    go (Line (x1, y1) (x2, y2))
+      | 1 <- x2 - x1
+      = Quad (Line (x1, y1) (x2, y2))
+        (Leaf [])
+        (Leaf [((x1, y2), getElem y2 x1 m)])
+        (Leaf [((x1, y1), getElem y1 x1 m)])
+        (Leaf [])
+    go (Line (x1, y1) (x2, y2))
+      | 1 <- y2 - y1
+      = Quad (Line (x1, y1) (x2, y2))
+        (Leaf [])
+        (Leaf [])
+        (Leaf [((x1, y1), getElem y1 x1 m)])
+        (Leaf [((x2, y1), getElem y1 x2 m)])
+    go f
+      = Quad f (go f1) (go f2) (go f3) (go f4)
+      where
+        f1 = Line (centerX f, centerY f) (maxX f, maxY f)
+        f2 = Line (minX f, centerY f) (centerX f, maxY f)
+        f3 = Line (minX f, minY f) (centerX f, centerY f)
+        f4 = Line (centerX f, minY f) (maxX f, centerY f)
 

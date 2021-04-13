@@ -308,8 +308,5 @@ showTree node = unlines [""] ++ go "    " node
 
     go s (Interval density delete (a, b) left right) = unlines
       [ "[" ++ show a ++ "," ++ show b ++ "] " ++ show density ++ "/" ++ show delete
-      ] ++ concat 
-      [ s ++ go (s ++ "|   ") left
-      , s ++ go (s ++ "    ") right
-      ]
+      ] ++ ((s ++ go (s ++ "|   ") left) ++ (s ++ go (s ++ "    ") right))
 

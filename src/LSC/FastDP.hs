@@ -16,12 +16,12 @@ import qualified Data.HashMap.Lazy as HashMap
 import Data.IntMap (adjust, lookupLT, lookupGT)
 import Data.List (sort, permutations)
 import Data.Maybe
+import Data.Scientific
 import Data.STRef
 import Data.Vector (Vector, (!), unsafeFreeze, unsafeThaw, fromListN, update)
 import qualified Data.Vector as Vector
-import Data.Vector.Mutable (new, read, write, copy)
+import Data.Vector.Mutable (new, read, write, copy, slice)
 import qualified Data.Vector.Unboxed.Mutable as T
-import Data.Vector.Mutable (slice)
 import Prelude hiding (read, lookup)
 
 import LSC.BinarySearch
@@ -47,27 +47,27 @@ wt2 = 5
 -- | Choose the first swap that yields some benefit or the best possible
 -- swap when `sufficientBenefit` or the former is Nothing
 --
-sufficientBenefit :: Maybe Double
+sufficientBenefit :: Maybe Scientific
 sufficientBenefit = Nothing
 
 
 
-globalSwap :: NetGraph -> LSC NetGraph
+globalSwap :: NetGraph -> LSC IO NetGraph
 globalSwap top = do
     info ["Global swap"]
     sc <- view scaleFactor <$> technology
-    liftST . swapRoutine sc False $ top
+    determinate $ swapRoutine sc False top
 
 
-verticalSwap :: NetGraph -> LSC NetGraph
+verticalSwap :: NetGraph -> LSC IO NetGraph
 verticalSwap top = do 
     info ["Vertical swap"]
     sc <- view scaleFactor <$> technology
-    liftST . swapRoutine sc True $ top
+    determinate $ swapRoutine sc True top
 
 
 
-swapRoutine :: Double -> Bool -> NetGraph -> ST s NetGraph
+swapRoutine :: Scientific -> Bool -> NetGraph -> ST s NetGraph
 swapRoutine _ _ top
   | views gates length top < 3
   = pure top
@@ -110,8 +110,8 @@ swapRoutine sc vertical top
 
                   let adjacentH = adjacentByPin top h
 
-                  let i = g & space %~ relocateX (h ^. space . to centerX) . relocateB (h ^. space . b)
-                      j = h & space %~ relocateX (g ^. space . to centerX) . relocateB (g ^. space . b)
+                  let i = g & geometry %~ relocateX (h ^. geometry . to centerX) . relocateB (h ^. geometry . b)
+                      j = h & geometry %~ relocateX (g ^. geometry . to centerX) . relocateB (g ^. geometry . b)
 
                   write v (g ^. number) i
                   write v (h ^. number) j
@@ -125,7 +125,7 @@ swapRoutine sc vertical top
 
               (_, _, Left a) -> do
 
-                  let i = g & space %~ relocateX (centerX a) . relocateB (a ^. b)
+                  let i = g & geometry %~ relocateX (centerX a) . relocateB (a ^. b)
 
                   write v (g ^. number) i
 
@@ -157,10 +157,10 @@ type Benefit = Int
 benefit :: NetGraph -> Gate -> Penalty -> Either Area Gate -> Benefit
 benefit top g penalty (Right h)
   = negate . (+ penalty)
-  $ hpwlDelta top [g & space .~ view space h, h & space .~ view space g]
+  $ hpwlDelta top [g & geometry .~ view geometry h, h & geometry .~ view geometry g]
 benefit top g penalty (Left a)
   = negate . (+ penalty)
-  $ hpwlDelta top [g & space .~ a]
+  $ hpwlDelta top [g & geometry .~ a]
 
 
 
@@ -177,7 +177,7 @@ findSwaps vertical i a layout =
 
 verticalSwapSegments :: Gate -> Layout -> [(Segment, Segment)]
 verticalSwapSegments g
-  = map (liftA2 (,) (cutSegment (g ^. space . l, g ^. space . r)) id)
+  = map (liftA2 (,) (cutSegment (g ^. geometry . l, g ^. geometry . r)) id)
   . fmap snd
   . liftA2 (++) (toList . lookupLT (ordinate g)) (toList . lookupGT (ordinate g))
 
@@ -205,8 +205,8 @@ penaltyForCell _ i segj j
   = fromIntegral ((gateWidth i - gateWidth j) - (s2 + s3)) * wt1
   + fromIntegral ((gateWidth i - gateWidth j) - (s1 + s2 + s3 + s4)) * wt2
   where
-    ls = spaces  leftNext 3 segj (j ^. space)
-    rs = spaces rightNext 3 segj (j ^. space)
+    ls = spaces  leftNext 3 segj (j ^. geometry)
+    rs = spaces rightNext 3 segj (j ^. geometry)
     s1 = maybe 0 width $ listToMaybe $ drop 1 ls
     s2 = maybe 0 width $ listToMaybe ls
     s3 = maybe 0 width $ listToMaybe rs
@@ -217,7 +217,7 @@ penaltyForCell segi i segj j
 
 
 
-localReordering :: NetGraph -> LSC NetGraph
+localReordering :: NetGraph -> LSC IO NetGraph
 localReordering top = do
 
     info ["Local reordering"]
@@ -225,7 +225,7 @@ localReordering top = do
     assume "localReorder: gate vector indices do not match gate numbers"
         $ and $ imap (==) $ view number <$> view gates top
 
-    segments <- liftST
+    segments <- determinate
         $ sequence
         $ localReorderSegment 3 top <$> views gates getSegments top
 
@@ -240,7 +240,7 @@ localReorderSegment m top segment = do
     let n = m `min` length segment
 
     assume "localReorderSegment: segment is unsorted!"
-        $ all (\ (g, h) -> g ^. space . l <= h ^. space . l) $ Vector.zip segment (Vector.tail segment)
+        $ all (\ (g, h) -> g ^. geometry . l <= h ^. geometry . l) $ Vector.zip segment (Vector.tail segment)
 
     v <- Vector.thaw segment
 
@@ -248,14 +248,14 @@ localReorderSegment m top segment = do
 
         u <- Vector.freeze $ slice pos n v
 
-        let leftBoundary  = Vector.head u ^. space . l
-            rightBoundary = Vector.last u ^. space . r
+        let leftBoundary  = Vector.head u ^. geometry . l
+            rightBoundary = Vector.last u ^. geometry . r
             windowWidth = rightBoundary - leftBoundary
 
         let reorder :: Int -> Gate -> Gate
-            reorder i | i == pred n = space %~ relocateR rightBoundary
-            reorder 0 = space %~ relocateL leftBoundary
-            reorder i = space %~ relocateX (leftBoundary + div (i * windowWidth) (pred n))
+            reorder i | i == pred n = geometry %~ relocateR rightBoundary
+            reorder 0 = geometry %~ relocateL leftBoundary
+            reorder i = geometry %~ relocateX (leftBoundary + div (i * windowWidth) (pred n))
 
         let options = zipWith reorder [ 0 .. ] <$> permutations (toList u)
 
@@ -268,7 +268,7 @@ localReorderSegment m top segment = do
 
 
 
-singleSegmentClustering :: NetGraph -> LSC NetGraph
+singleSegmentClustering :: NetGraph -> LSC IO NetGraph
 singleSegmentClustering top = do
 
     info ["Single segment clustering"]
@@ -276,7 +276,7 @@ singleSegmentClustering top = do
     assume "singleSegmentClustering: gate vector indices do not match gate numbers"
         $ and $ imap (==) $ view number <$> view gates top
 
-    segments <- liftST
+    segments <- determinate
         $ sequence
         $ clusterSegment top <$> views gates getSegments top
 
@@ -292,11 +292,11 @@ clusterSegment _ segment
 clusterSegment top segment = do
 
     assume "clusterSegment: segment is unsorted!"
-        $ all (\ (g, h) -> g ^. space . l <= h ^. space . l) $ Vector.zip segment (Vector.tail segment)
+        $ all (\ (g, h) -> g ^. geometry . l <= h ^. geometry . l) $ Vector.zip segment (Vector.tail segment)
 
     let n = length segment
 
-    let area = coarseBoundingBox $ view space <$> segment
+    let area = coarseBoundingBox $ view geometry <$> segment
 
     let order i
             = preview (ix i)
@@ -383,7 +383,7 @@ clusterIndex _ _
 -- assumes gates in clusters in left-to-right order
 --
 centerCluster :: (Int, Cluster) -> Gate -> Gate
-centerCluster (pos, c) g = g & space %~ relocateL (pos - div w 2 + x)
+centerCluster (pos, c) g = g & geometry %~ relocateL (pos - div w 2 + x)
     where
         w = sum $ gateWidth <$> c
         x = sum $ gateWidth <$> takeWhile (\ h -> g ^. number /= h ^. number) c
@@ -415,18 +415,18 @@ generateBoundsList top segment order c
     $ filter (/= mempty)
       [ foldMap' implode
         [ case compare <$> order i <*> order (head c ^. number) of
-            Just LT -> Vector.head segment ^. space
-            Just  _ -> Vector.last segment ^. space
-            Nothing -> view gates top ! i ^. space
+            Just LT -> Vector.head segment ^. geometry
+            Just  _ -> Vector.last segment ^. geometry
+            Nothing -> view gates top ! i ^. geometry
         | i <- views contacts HashMap.keys net
         , i >= 0
-        , not $ elem i $ view number <$> c
+        , notElem i $ view number <$> c
         ]
       | net <- hyperedges top c
       ]
 
     where
 
-      selfContained [] = BoundingBox . view space <$> c
+      selfContained [] = BoundingBox . view geometry <$> c
       selfContained xs = xs
 

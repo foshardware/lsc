@@ -1,15 +1,31 @@
 -- Copyright 2018 - Andreas Westerwick <westerwick@pconas.de>
 -- SPDX-License-Identifier: GPL-3.0-or-later
 
-module LSC.Logger where
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE FlexibleContexts #-}
+
+module LSC.Log where
 
 import Control.Concurrent
+import Control.Exception
 import Data.Time.Format
 import Data.Time.LocalTime
 import System.Console.Concurrent
 import System.Console.Pretty
 import System.IO
 
+
+
+class Monad m => Log w m where
+  enter :: LogLevel -> w -> m ()
+
+
+instance Log Entry IO where
+  enter = logStderr
+
+
+type Entry = [String]
 
 
 data LogLevel
@@ -39,11 +55,21 @@ levelString = show
 
 
 
+logSomeException :: Log Entry m => SomeException -> m () 
+logSomeException
+  = enter Error
+  . reverse . dropWhile null
+  . reverse . dropWhile null
+  . lines
+  . show
+
+
+
 withStderrLog :: IO a -> IO a
 withStderrLog = withConcurrentOutput
 
 
-logStderr :: LogLevel -> [String] -> IO ()
+logStderr :: LogLevel -> Entry -> IO ()
 logStderr k (x : xs) = do
 
     time <- timestamp

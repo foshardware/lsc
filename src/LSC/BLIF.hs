@@ -1,9 +1,6 @@
 -- Copyright 2018 - Andreas Westerwick <westerwick@pconas.de>
 -- SPDX-License-Identifier: GPL-3.0-or-later
 
-{-# LANGUAGE ParallelListComp #-}
-{-# LANGUAGE TupleSections #-}
-
 module LSC.BLIF
   ( module Language.BLIF.Syntax
   , module Language.BLIF.Parser

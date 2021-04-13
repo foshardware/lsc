@@ -28,7 +28,7 @@ import Test.Tasty.QuickCheck
 import LSC.Component
 import LSC.FastDP
 import LSC.Layout
-import LSC.Legalize
+import LSC.Legalization
 import LSC.Model
 import LSC.NetGraph
 
@@ -112,44 +112,44 @@ layoutIsos = testGroup "NetGraph isomorphism"
   [ testCase "to . from"
       $ do
 
-        FastDP top <- generate arbitrary
+        FastDP top <- generate $ resize sizeOfNetGraph arbitrary
         let FastDP nxt = FastDP top ^. layout . from layout
 
         assertEqual "gates lost"
           (top ^. gates . to length)
           (nxt ^. gates . to length)
         assertEqual "gate information lost"
-          (hypothenuse $ boundingBox $ view space <$> top ^. gates)
-          (hypothenuse $ boundingBox $ view space <$> nxt ^. gates)
+          (hypothenuse $ boundingBox $ view geometry <$> top ^. gates)
+          (hypothenuse $ boundingBox $ view geometry <$> nxt ^. gates)
         assertBool "gate information lost" $
-             (view space <$> top ^. gates)
-          == (view space <$> nxt ^. gates)
+             (view geometry <$> top ^. gates)
+          == (view geometry <$> nxt ^. gates)
 
         assertEqual "nets lost"
           (top ^. nets . to length)
           (nxt ^. nets . to length)
         assertEqual "net information lost"
-          (hypothenuse $ coarseBoundingBox $ view space <$> foldMap (view members) (top ^. nets))
-          (hypothenuse $ coarseBoundingBox $ view space <$> foldMap (view members) (nxt ^. nets))
+          (hypothenuse $ coarseBoundingBox $ view geometry <$> foldMap (view members) (top ^. nets))
+          (hypothenuse $ coarseBoundingBox $ view geometry <$> foldMap (view members) (nxt ^. nets))
         assertBool "net information lost" $
-             (coarseBoundingBox $ view space <$> foldMap (view members) (top ^. nets))
-          == (coarseBoundingBox $ view space <$> foldMap (view members) (nxt ^. nets))
+             (coarseBoundingBox $ view geometry <$> foldMap (view members) (top ^. nets))
+          == (coarseBoundingBox $ view geometry <$> foldMap (view members) (nxt ^. nets))
 
   , testCase "from . to"
       $ do
 
-        FastDP lay <- generate arbitrary
+        FastDP lay <- generate $ resize sizeOfNetGraph arbitrary
         let FastDP nxt = FastDP lay ^. from layout . layout
 
         assertEqual "gates lost"
           (sum $ length . rights . toList <$> lay)
           (sum $ length . rights . toList <$> nxt)
         assertEqual "information lost"
-          (hypothenuse $ boundingBox $ either id (view space) <$> fold lay)
-          (hypothenuse $ boundingBox $ either id (view space) <$> fold nxt)
+          (hypothenuse $ boundingBox $ either id (view geometry) <$> fold lay)
+          (hypothenuse $ boundingBox $ either id (view geometry) <$> fold nxt)
         assertBool "information lost" $
-             (fmap (fmap (view space)) <$> lay)
-          == (fmap (fmap (view space)) <$> nxt)
+             (fmap (fmap (view geometry)) <$> lay)
+          == (fmap (fmap (view geometry)) <$> nxt)
   ]
 
 
@@ -162,7 +162,7 @@ segmentIterators = testGroup "Segment iterators"
       $ replicate 20
       $ do
 
-        FastDP seg <- generate arbitrary
+        FastDP seg <- generate $ resize sizeOfNetGraph arbitrary
 
         let n = fst . findMax $ seg
 
@@ -175,14 +175,14 @@ segmentIterators = testGroup "Segment iterators"
           (either (const (-1)) (view number) <$> ys)
           (either (const (-1)) (view number) <$> xs)
         assertBool "occupied area"
-          $ map (view space <$>) xs == map (view space <$>) ys
+          $ map (view geometry <$>) xs == map (view geometry <$>) ys
 
   , testCase "To the right"
       $ sequence_
       $ replicate 20
       $ do
 
-        FastDP seg <- generate arbitrary
+        FastDP seg <- generate $ resize sizeOfNetGraph arbitrary
 
         let n = fst . findMax $ seg
 
@@ -195,14 +195,14 @@ segmentIterators = testGroup "Segment iterators"
           (either (const (-1)) (view number) <$> ys)
           (either (const (-1)) (view number) <$> xs)
         assertBool "occupied area"
-          $ map (view space <$>) xs == map (view space <$>) ys
+          $ map (view geometry <$>) xs == map (view geometry <$>) ys
 
   , testCase "Spaces"
       $ sequence_
       $ replicate 20
       $ do
 
-        FastDP seg <- generate arbitrary
+        FastDP seg <- generate $ resize sizeOfNetGraph arbitrary
         let n = fst . findMax $ seg
 
         k <- generate $ choose (0, n)
@@ -232,7 +232,7 @@ intersperseSpaces = testGroup "Intersperse spaces"
       $ replicate 10
       $ do
 
-        FastDP lay <- generate arbitrary
+        FastDP lay <- generate $ resize sizeOfNetGraph arbitrary
 
         let nxt = fmap (intersperseSpace . IntMap.filter isRight) lay :: Layout
 
@@ -247,7 +247,7 @@ intersperseSpaces = testGroup "Intersperse spaces"
           | segment <- toList nxt
           , (g, g') <- toList segment `zip` tail (toList segment)
           , a <- lefts [g, g']
-          , h <- view space <$> rights [g, g']
+          , h <- view geometry <$> rights [g, g']
           ]
   ]
 
@@ -261,14 +261,14 @@ cutLayouts = testGroup "Cut layout"
       $ replicate 10
       $ do
 
-        FastDP lay <- generate arbitrary
+        FastDP lay <- generate $ resize sizeOfNetGraph arbitrary
         let n = fst . findMax $ lay
 
         j <- generate $ choose (0, n)
         k <- generate $ choose (0, n)
 
         let cut = cutLayout (min j k, max j k) lay :: Layout
-        let area = boundingBox $ either id (view space) <$> fold cut
+        let area = boundingBox $ either id (view geometry) <$> fold cut
 
         assertBool "top"     $ max j k >= area ^. t
         assertBool "bottom"  $ min j k <= area ^. b
@@ -278,14 +278,14 @@ cutLayouts = testGroup "Cut layout"
       $ replicate 40
       $ do
 
-        FastDP seg <- generate arbitrary
+        FastDP seg <- generate $ resize sizeOfNetGraph arbitrary
         let n = fst . findMax $ seg
 
         j <- generate $ choose (0, n)
         k <- generate $ choose (0, n)
 
         let cut = cutLayout (min j k, max j k) seg :: Segment
-        let area = boundingBox $ either id (view space) <$> cut
+        let area = boundingBox $ either id (view geometry) <$> cut
 
         assertBool "left"  $ min j k <= area ^. l
         assertBool "right" $ max j k >= area ^. r
@@ -299,7 +299,7 @@ localReorders = testGroup "Local reorder segment"
 
   [ testCase "Order 1"
       $ do
-        FastDP top <- generate arbitrary
+        FastDP top <- generate $ resize sizeOfNetGraph arbitrary
         reordered <- stToIO $ localReorderSegment 1 top `mapM` views gates getSegments top
         assertBool "not identical" $ reordered == views gates getSegments top
   ]
